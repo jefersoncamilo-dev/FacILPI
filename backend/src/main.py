@@ -229,8 +229,13 @@ app.include_router(uploads_router, prefix="/api")
 async def root():
     return {"message": "FáciLPI API — veja /docs e /api/health"}
 
+# J: Alembic é única fonte oficial; create_all desabilitado por padrão
+ALLOW_CREATE_ALL = os.getenv("ALLOW_CREATE_ALL", "false").lower() == "true"
+
 @app.on_event("startup")
 async def on_startup():
-    # Create tables if not exists (when alembic not yet run). Use async engine.
+    if not ALLOW_CREATE_ALL:
+        return
+    # Permitido apenas em testes descartáveis explicitamente configurados
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

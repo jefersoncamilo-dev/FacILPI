@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, date
-from sqlalchemy import String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint, CheckConstraint, Index
+from sqlalchemy import String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint, CheckConstraint, Index, ForeignKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import Uuid
@@ -50,14 +50,17 @@ class Instituicao(Base):
     licenca_sanitaria: Mapped[str] = mapped_column(String(100), nullable=True)
     validade_licenca: Mapped[date] = mapped_column(Date, nullable=True)
     fuso_horario: Mapped[str] = mapped_column(String(64), default="America/Sao_Paulo")
-    situacao: Mapped[str] = mapped_column(String(50), default="rascunho")
+    situacao: Mapped[str] = mapped_column(String(50), default="ILPI_RASCUNHO", server_default="ILPI_RASCUNHO")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class Residente(Base):
     __tablename__ = "residentes"
-    __table_args__ = (UniqueConstraint("cpf", "instituicao_id", name="uq_residente_cpf_inst"),)
+    __table_args__ = (
+        UniqueConstraint("cpf", "instituicao_id", name="uq_residente_cpf_inst"),
+        UniqueConstraint("id", "instituicao_id", name="uq_residentes_id_ilpi"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     instituicao_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -83,6 +86,11 @@ class Familiar(Base):
     __tablename__ = "familiares"
     __table_args__ = (
         Index("ix_familiares_ilpi_id", "ilpi_id"),
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_familiares_residente_ilpi",
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
@@ -115,6 +123,13 @@ class Documento(Base):
 
 class QuartoLeito(Base):
     __tablename__ = "quartos_leitos"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["residente_atual_id", "instituicao_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_quartos_residente_ilpi",
+        ),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     instituicao_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
     unidade: Mapped[str] = mapped_column(String(100), nullable=True)
@@ -132,6 +147,11 @@ class Avaliacao(Base):
     __tablename__ = "avaliacoes"
     __table_args__ = (
         Index("ix_avaliacoes_ilpi_id", "ilpi_id"),
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_avaliacoes_residente_ilpi",
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
@@ -151,6 +171,11 @@ class PlanoCuidados(Base):
     __tablename__ = "planos_cuidados"
     __table_args__ = (
         Index("ix_planos_cuidados_ilpi_id", "ilpi_id"),
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_planos_residente_ilpi",
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
@@ -171,6 +196,11 @@ class Tarefa(Base):
     __tablename__ = "tarefas"
     __table_args__ = (
         Index("ix_tarefas_ilpi_id", "ilpi_id"),
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_tarefas_residente_ilpi",
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
@@ -206,6 +236,11 @@ class Prescricao(Base):
     __tablename__ = "prescricoes"
     __table_args__ = (
         Index("ix_prescricoes_ilpi_id", "ilpi_id"),
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_prescricoes_residente_ilpi",
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
@@ -227,6 +262,11 @@ class SinalVital(Base):
     __tablename__ = "sinais_vitais"
     __table_args__ = (
         Index("ix_sinais_vitais_ilpi_id", "ilpi_id"),
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_sinais_residente_ilpi",
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
@@ -248,6 +288,11 @@ class Intercorrencia(Base):
     __tablename__ = "intercorrencias"
     __table_args__ = (
         Index("ix_intercorrencias_ilpi_id", "ilpi_id"),
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_intercorrencias_residente_ilpi",
+        ),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
