@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, date
-from sqlalchemy import String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint
+from sqlalchemy import String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint, CheckConstraint, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import Uuid
@@ -29,6 +29,13 @@ class User(Base):
 
 class Instituicao(Base):
     __tablename__ = "instituicoes"
+    __table_args__ = (
+        CheckConstraint(
+            "situacao IN ('ativa','rascunho','ILPI_RASCUNHO','ONBOARDING_IN_PROGRESS','READY_FOR_ACTIVATION','ACTIVE','SUSPENSA','INATIVA','suspensa','inativa')",
+            name="ck_instituicoes_situacao",
+        ),
+        CheckConstraint("capacidade IS NULL OR capacidade > 0", name="ck_instituicoes_capacidade_pos"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     razao_social: Mapped[str] = mapped_column(String(255), nullable=False)
     nome_fantasia: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -43,7 +50,7 @@ class Instituicao(Base):
     licenca_sanitaria: Mapped[str] = mapped_column(String(100), nullable=True)
     validade_licenca: Mapped[date] = mapped_column(Date, nullable=True)
     fuso_horario: Mapped[str] = mapped_column(String(64), default="America/Sao_Paulo")
-    situacao: Mapped[str] = mapped_column(String(50), default="ativa")
+    situacao: Mapped[str] = mapped_column(String(50), default="rascunho")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -74,8 +81,12 @@ class Residente(Base):
 
 class Familiar(Base):
     __tablename__ = "familiares"
+    __table_args__ = (
+        Index("ix_familiares_ilpi_id", "ilpi_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     nome: Mapped[str] = mapped_column(String(255), nullable=False)
     cpf: Mapped[str] = mapped_column(String(14), nullable=True)
     parentesco: Mapped[str] = mapped_column(String(50), nullable=True)
@@ -119,8 +130,12 @@ class QuartoLeito(Base):
 
 class Avaliacao(Base):
     __tablename__ = "avaliacoes"
+    __table_args__ = (
+        Index("ix_avaliacoes_ilpi_id", "ilpi_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     tipo: Mapped[str] = mapped_column(String(50), nullable=False)  # Katz, Lawton, etc
     instrumento: Mapped[str] = mapped_column(String(100), nullable=True)
     profissional: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -134,8 +149,12 @@ class Avaliacao(Base):
 
 class PlanoCuidados(Base):
     __tablename__ = "planos_cuidados"
+    __table_args__ = (
+        Index("ix_planos_cuidados_ilpi_id", "ilpi_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     versao: Mapped[int] = mapped_column(Integer, default=1)
     objetivos: Mapped[str] = mapped_column(Text, nullable=True)
     data_inicial: Mapped[date] = mapped_column(Date, nullable=False)
@@ -150,8 +169,12 @@ class PlanoCuidados(Base):
 
 class Tarefa(Base):
     __tablename__ = "tarefas"
+    __table_args__ = (
+        Index("ix_tarefas_ilpi_id", "ilpi_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=True)
     descricao: Mapped[str] = mapped_column(String(500), nullable=False)
     horario_previsto: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -181,8 +204,12 @@ class Medicamento(Base):
 
 class Prescricao(Base):
     __tablename__ = "prescricoes"
+    __table_args__ = (
+        Index("ix_prescricoes_ilpi_id", "ilpi_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     medicamento_id: Mapped[str] = mapped_column(String(36), ForeignKey("medicamentos.id"), nullable=False)
     prescritor: Mapped[str] = mapped_column(String(255), nullable=False)
     dose: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -198,8 +225,12 @@ class Prescricao(Base):
 
 class SinalVital(Base):
     __tablename__ = "sinais_vitais"
+    __table_args__ = (
+        Index("ix_sinais_vitais_ilpi_id", "ilpi_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     temperatura: Mapped[float] = mapped_column(Float, nullable=True)
     pressao_sistolica: Mapped[int] = mapped_column(Integer, nullable=True)
     pressao_diastolica: Mapped[int] = mapped_column(Integer, nullable=True)
@@ -215,8 +246,12 @@ class SinalVital(Base):
 
 class Intercorrencia(Base):
     __tablename__ = "intercorrencias"
+    __table_args__ = (
+        Index("ix_intercorrencias_ilpi_id", "ilpi_id"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     tipo: Mapped[str] = mapped_column(String(100), nullable=False)
     gravidade: Mapped[str] = mapped_column(String(50), nullable=True)
     situacao: Mapped[str] = mapped_column(String(50), default="Aberta")
@@ -243,4 +278,170 @@ class Alerta(Base):
     prazo: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     situacao: Mapped[str] = mapped_column(String(50), default="Ativo")
     resolucao: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ===== FASE 1 — Novos modelos multi-tenant / auditoria / tokens =====
+
+class BootstrapState(Base):
+    __tablename__ = "bootstrap_state"
+    __table_args__ = (
+        CheckConstraint(
+            "estado IN ('UNINITIALIZED','PLATFORM_BOOTSTRAPPED','FIRST_PASSWORD_CHANGED')",
+            name="ck_bootstrap_estado",
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    estado: Mapped[str] = mapped_column(String(40), nullable=False, default="UNINITIALIZED")
+    platform_bootstrapped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    first_password_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    atualizado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Perfil(Base):
+    __tablename__ = "perfis"
+    __table_args__ = (
+        UniqueConstraint("chave", "ilpi_id", name="uq_perfil_chave_ilpi"),
+        CheckConstraint("escopo IN ('global','ilpi')", name="ck_perfil_escopo"),
+        CheckConstraint("situacao IN ('ativo','inativo')", name="ck_perfil_situacao"),
+        Index("ix_perfis_ilpi_id", "ilpi_id"),
+        Index("ix_perfis_chave", "chave"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
+    nome: Mapped[str] = mapped_column(String(100), nullable=False)
+    chave: Mapped[str] = mapped_column(String(100), nullable=False)
+    descricao: Mapped[str] = mapped_column(Text, nullable=True)
+    escopo: Mapped[str] = mapped_column(String(10), nullable=False, default="ilpi")
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Permissao(Base):
+    __tablename__ = "permissoes"
+    __table_args__ = (
+        UniqueConstraint("chave", name="uq_permissao_chave"),
+        UniqueConstraint("modulo", "acao", name="uq_permissao_modulo_acao"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    modulo: Mapped[str] = mapped_column(String(100), nullable=False)
+    acao: Mapped[str] = mapped_column(String(100), nullable=False)
+    chave: Mapped[str] = mapped_column(String(200), nullable=False)
+    descricao: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PerfilPermissao(Base):
+    __tablename__ = "perfil_permissoes"
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfis.id", ondelete="CASCADE"), primary_key=True)
+    permissao_id: Mapped[str] = mapped_column(String(36), ForeignKey("permissoes.id", ondelete="CASCADE"), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Funcionario(Base):
+    __tablename__ = "funcionarios"
+    __table_args__ = (
+        UniqueConstraint("cpf", "ilpi_id", name="uq_funcionario_cpf_ilpi"),
+        UniqueConstraint("ilpi_id", "usuario_id", name="uq_funcionario_ilpi_usuario"),
+        CheckConstraint("situacao IN ('ativo','afastado','inativo')", name="ck_funcionario_situacao"),
+        Index("ix_funcionarios_ilpi_id", "ilpi_id"),
+        Index("ix_funcionarios_usuario_id", "usuario_id"),
+        Index("ix_funcionarios_cpf", "cpf"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    cpf: Mapped[str] = mapped_column(String(14), nullable=True)
+    telefone: Mapped[str] = mapped_column(String(20), nullable=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=True)
+    cargo: Mapped[str] = mapped_column(String(100), nullable=True)
+    profissao: Mapped[str] = mapped_column(String(100), nullable=True)
+    conselho_profissional: Mapped[str] = mapped_column(String(50), nullable=True)
+    numero_conselho: Mapped[str] = mapped_column(String(50), nullable=True)
+    uf_conselho: Mapped[str] = mapped_column(String(2), nullable=True)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class UsuarioIlpiPerfil(Base):
+    __tablename__ = "usuario_ilpi_perfis"
+    __table_args__ = (
+        UniqueConstraint("usuario_id", "ilpi_id", "perfil_id", name="uq_usuario_ilpi_perfil"),
+        CheckConstraint("situacao IN ('ativo','inativo')", name="ck_usuario_ilpi_perfil_situacao"),
+        Index("ix_usuario_ilpi_perfis_usuario", "usuario_id"),
+        Index("ix_usuario_ilpi_perfis_ilpi", "ilpi_id"),
+        Index("ix_usuario_ilpi_perfis_perfil", "perfil_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="CASCADE"), nullable=True, index=True)
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfis.id", ondelete="CASCADE"), nullable=False, index=True)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
+    data_inicial: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    data_final: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class Auditoria(Base):
+    __tablename__ = "auditoria"
+    __table_args__ = (
+        Index("ix_auditoria_ilpi_entidade", "ilpi_id", "entidade"),
+        Index("ix_auditoria_created_at", "created_at"),
+        Index("ix_auditoria_usuario", "usuario_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
+    usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True, index=True)
+    acao: Mapped[str] = mapped_column(String(100), nullable=False)
+    entidade: Mapped[str] = mapped_column(String(100), nullable=True)
+    registro_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    valores_anteriores: Mapped[str] = mapped_column(Text, nullable=True)  # JSON string, Text para compat SQLite/PG
+    valores_posteriores: Mapped[str] = mapped_column(Text, nullable=True)
+    ip: Mapped[str] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_refresh_token_hash"),
+        UniqueConstraint("jti", name="uq_refresh_jti"),
+        Index("ix_refresh_user_family", "user_id", "token_family"),
+        Index("ix_refresh_expires", "expires_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    jti: Mapped[str] = mapped_column(String(36), nullable=False)
+    token_family: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
+    perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfis.id"), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_by: Mapped[str] = mapped_column(String(36), ForeignKey("refresh_tokens.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ip: Mapped[str] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str] = mapped_column(Text, nullable=True)
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+    __table_args__ = (
+        UniqueConstraint("token_hash", name="uq_password_reset_token_hash"),
+        Index("ix_pwd_reset_user", "user_id"),
+        Index("ix_pwd_reset_expires", "expires_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
