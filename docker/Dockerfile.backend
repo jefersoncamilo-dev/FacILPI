@@ -1,0 +1,30 @@
+FROM python:3.11-slim
+
+# Instalar wget para healthcheck e dependências
+RUN apt-get update && apt-get install -y --no-install-recommends wget curl && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Criar diretório de storage antes de qualquer operação que use o banco
+RUN mkdir -p /storage
+
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY backend/ ./
+
+# Copia pasta storage vazia se existir (não obrigatório)
+# Garante que alembic.ini usa URL correta via env
+ENV DATABASE_URL=sqlite+aiosqlite:////storage/app.db
+ENV STORAGE_PATH=/storage
+ENV PORT=8000
+ENV JWT_SECRET=change-me-in-production-please-min-32-chars
+
+# Expõe porta do backend (não 80)
+EXPOSE 8000
+
+# Healthcheck interno será feito pelo compose via wget, mas também define aqui para standalone
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 --start-period=10s \
+  CMD wget -qO- http://localhost:8000/api/health || exit 1
+
+CMD ["sh", "-c", "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"]

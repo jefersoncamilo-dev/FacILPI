@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+h1,h2,h3 { font-family: 'Manrope', 'Inter', sans-serif; }
+
+@layer components {
+  .card { @apply bg-surface rounded-card shadow-card p-5 border border-slate-100; }
+  .btn-primary { @apply bg-primary text-white rounded-xl px-5 py-3 font-semibold hover:bg-primaryDeep transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2; }
+  .btn-secondary { @apply bg-white text-primary border border-primaryLight rounded-xl px-5 py-3 font-medium hover:bg-primaryLight transition min-h-[44px]; }
+  .input { @apply w-full rounded-xl border border-slate-200 px-4 py-3 text-[16px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white; }
+  .badge-success { @apply bg-emerald-50 text-success border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
+  .badge-warning { @apply bg-amber-50 text-warning border border-amber-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
+  .badge-danger { @apply bg-red-50 text-danger border border-red-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
+}

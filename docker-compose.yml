@@ -1,0 +1,42 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: facilpi-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:////storage/app.db
+      # Para Supabase/Postgres, descomente e ajuste:
+      # - DATABASE_URL=postgresql+asyncpg://user:password@host:5432/database?pgbouncer=true
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me-min-32-chars-please}
+      - JWT_ALGORITHM=HS256
+      - JWT_EXPIRY=3600
+      - PORT=8000
+      - STORAGE_PATH=/storage
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - RATE_LIMIT_AUTH=10
+    volumes:
+      - ./storage:/storage
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000/api}
+    container_name: facilpi-frontend
+    ports:
+      - "8080:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped

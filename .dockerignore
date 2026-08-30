@@ -1,0 +1,11 @@
+storage/*
+!storage/.gitignore
+node_modules
+dist
+__pycache__
+*.pyc
+.venv
+venv
+.env
+.git
+.gitignore

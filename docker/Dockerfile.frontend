@@ -1,0 +1,20 @@
+# Stage 1 — build
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend/ ./
+# VITE_API_BASE_URL será injetado no build; permite override via ARG
+ARG VITE_API_BASE_URL=http://localhost:8000/api
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+RUN npm run build
+
+# Stage 2 — serve com nginx
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+# Configuração nginx para SPA (fallback para index.html) e escuta em 8080
+RUN printf 'server {\n  listen 8080;\n  server_name _;\n  root /usr/share/nginx/html;\n  index index.html;\n  location / {\n    try_files $uri $uri/ /index.html;\n  }\n  # opcional: proxy /api para backend se quiser, mas frontend chama backend direto via VITE_API_BASE_URL\n}\n' > /etc/nginx/conf.d/default.conf
+EXPOSE 8080
+# nginx health: verifica se serve index
+HEALTHCHECK --interval=15s --timeout=3s --retries=3 CMD wget -qO- http://localhost:8080/ || exit 1
+CMD ["nginx", "-g", "daemon off;"]
