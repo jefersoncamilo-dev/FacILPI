@@ -5,12 +5,12 @@ Não cria admin@ilpi.com, não executa bootstrap, não altera placeholders.
 """
 import sqlite3
 import pathlib
+import shutil
 import uuid
 
-# DB path usado pelo alembic/migrate (backend/storage/app.db) e também storage/app.db (copia)
+# O banco oficial deve ser somente leitura durante os testes estruturais.
 DB_CANDIDATES = [
     pathlib.Path("storage/app.db"),
-    pathlib.Path("backend/storage/app.db"),
     pathlib.Path("../storage/app.db"),
 ]
 
@@ -26,10 +26,16 @@ def _find_db():
 
 DB_PATH = _find_db()
 
-def _connect():
-    con = sqlite3.connect(DB_PATH)
+def _connect(db_path=DB_PATH):
+    con = sqlite3.connect(str(db_path))
     con.execute("PRAGMA foreign_keys=ON")
     return con
+
+
+def _disposable_db(tmp_path):
+    destination = tmp_path / "fase1-structure.db"
+    shutil.copy2(DB_PATH, destination)
+    return destination
 
 def test_bootstrap_initial_state():
     """C1: estado inicial deve ser UNINITIALIZED, singleton fixo, sem PLATFORM_BOOTSTRAPPED"""
@@ -77,9 +83,9 @@ def test_backfill_deterministico_no_orfaos():
         assert cur.fetchall() == [], f"órfãos encontrados em {tbl}"
     con.close()
 
-def test_funcionario_cpf_unico_por_ilpi():
+def test_funcionario_cpf_unico_por_ilpi(tmp_path):
     """C6/C5: CPF único por ILPI, pode repetir em ILPIs diferentes"""
-    con = _connect()
+    con = _connect(_disposable_db(tmp_path))
     cur = con.cursor()
     # cria duas ILPIs de teste (String 36)
     ilpi_a = str(uuid.uuid4())
@@ -110,9 +116,9 @@ def test_funcionario_cpf_unico_por_ilpi():
     con.commit()
     con.close()
 
-def test_funcionario_usuario_unico_por_ilpi_permitido_multi_ilpi():
+def test_funcionario_usuario_unico_por_ilpi_permitido_multi_ilpi(tmp_path):
     """UNIQUE(ilpi_id, usuario_id) quando preenchido — mesmo usuario em ILPIs diferentes OK, mesma ILPI duplicado falha"""
-    con = _connect()
+    con = _connect(_disposable_db(tmp_path))
     cur = con.cursor()
     ilpi_a = str(uuid.uuid4())
     ilpi_b = str(uuid.uuid4())
@@ -221,8 +227,8 @@ def test_migration_sem_forbidden_pg_constructs():
     # Verifica que não há CREATE TABLE IF NOT EXISTS
     assert "IF NOT EXISTS" not in text or text.count("IF NOT EXISTS") < 2
 
-def test_usuario_ilpi_perfil_unique():
-    con = _connect()
+def test_usuario_ilpi_perfil_unique(tmp_path):
+    con = _connect(_disposable_db(tmp_path))
     cur = con.cursor()
     ilpi = str(uuid.uuid4())
     user = str(uuid.uuid4())
