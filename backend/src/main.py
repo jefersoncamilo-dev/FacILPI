@@ -11,6 +11,13 @@ from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
 from .application.auth import hash_password, verify_password, create_access_token, get_current_user, check_rate_limit
+from .application.security import (
+    ILPI_SCOPE,
+    SecurityContext,
+    block_pending_permission_catalog,
+    ensure_same_tenant,
+    require_permission,
+)
 
 # Ensure storage dir exists for uploads
 STORAGE_PATH = os.getenv("STORAGE_PATH", "./storage")
@@ -43,25 +50,17 @@ async def health():
 # ===== Auth routes (rate-limited, no auth for register/token) =====
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
-@auth_router.post("/register", response_model=s.UserResponse, status_code=201)
-async def register(payload: s.UserRegister, request: Request, db: AsyncSession = Depends(get_db)):
-    # rate limit by IP
+@auth_router.post("/register", status_code=410)
+async def register(request: Request):
     client_ip = request.client.host if request.client else "unknown"
     check_rate_limit(f"register:{client_ip}")
-    # check duplicate
-    existing = await db.execute(select(m.User).where(m.User.email == payload.email.lower().strip()))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="E-mail já cadastrado")
-    user = m.User(
-        nome=payload.nome.strip(),
-        email=payload.email.lower().strip(),
-        password_hash=hash_password(payload.password),
-        ativo=True,
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "PUBLIC_REGISTER_DISABLED",
+            "message": "Cadastro público desativado",
+        },
     )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
 
 @auth_router.post("/token", response_model=s.TokenResponse)
 async def token(payload: s.UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
@@ -87,21 +86,51 @@ async def update_password(payload: s.PasswordUpdate, db: AsyncSession = Depends(
     return {"mensagem": "Senha alterada com sucesso"}
 
 # ===== Protected CRUD helpers =====
-def make_crud_router(model, create_schema, update_schema, response_schema, prefix: str, tags: list):
+def make_crud_router(
+    model,
+    create_schema,
+    update_schema,
+    response_schema,
+    prefix: str,
+    tags: list,
+    *,
+    permissions: dict[str, str] | None = None,
+    fail_closed: bool = False,
+    tenant_resource: str | None = None,
+):
     router = APIRouter(prefix=prefix, tags=tags)
 
+    def guard(action: str):
+        if fail_closed:
+            return block_pending_permission_catalog
+        if permissions is not None:
+            return require_permission(permissions[action])
+        return get_current_user
+
+    def scoped_query(query, context):
+        if (
+            tenant_resource == "instituicao"
+            and isinstance(context, SecurityContext)
+            and context.scope == ILPI_SCOPE
+        ):
+            return query.where(model.id == context.ilpi_id)
+        return query
+
+    def ensure_resource_scope(context, item_id: str) -> None:
+        if tenant_resource == "instituicao" and isinstance(context, SecurityContext):
+            ensure_same_tenant(context, item_id)
+
     @router.get("/", response_model=list[response_schema])
-    async def list_items(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
-        result = await db.execute(select(model).offset(skip).limit(limit).order_by(model.created_at.desc() if hasattr(model, "created_at") else model.id))
+    async def list_items(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), context = Depends(guard("list"))):
+        query = scoped_query(select(model), context)
+        order = model.created_at.desc() if hasattr(model, "created_at") else model.id
+        result = await db.execute(query.order_by(order).offset(skip).limit(limit))
         items = result.scalars().all()
         return items
 
     @router.post("/", response_model=response_schema, status_code=201)
-    async def create_item(payload: create_schema, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
+    async def create_item(payload: create_schema, db: AsyncSession = Depends(get_db), context = Depends(guard("create"))):
         data = payload.model_dump(exclude_unset=True)
-        # derive instituicao/autor from session if present — here we trust payload but strip instituicao injection for demo
-        # In production, override instituicao_id with user context when applicable
-        # duplicate checks example for Instituicao CNPJ, Residente CPF
         if model == m.Instituicao and data.get("cnpj"):
             existing = await db.execute(select(m.Instituicao).where(m.Instituicao.cnpj == data["cnpj"]))
             if existing.scalar_one_or_none():
@@ -121,7 +150,8 @@ def make_crud_router(model, create_schema, update_schema, response_schema, prefi
         return obj
 
     @router.get("/{item_id}", response_model=response_schema)
-    async def get_item(item_id: str, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
+    async def get_item(item_id: str, db: AsyncSession = Depends(get_db), context = Depends(guard("get"))):
+        ensure_resource_scope(context, item_id)
         result = await db.execute(select(model).where(model.id == item_id))
         obj = result.scalar_one_or_none()
         if not obj:
@@ -129,7 +159,8 @@ def make_crud_router(model, create_schema, update_schema, response_schema, prefi
         return obj
 
     @router.put("/{item_id}", response_model=response_schema)
-    async def update_item(item_id: str, payload: update_schema, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
+    async def update_item(item_id: str, payload: update_schema, db: AsyncSession = Depends(get_db), context = Depends(guard("update"))):
+        ensure_resource_scope(context, item_id)
         result = await db.execute(select(model).where(model.id == item_id))
         obj = result.scalar_one_or_none()
         if not obj:
@@ -146,12 +177,12 @@ def make_crud_router(model, create_schema, update_schema, response_schema, prefi
         return obj
 
     @router.delete("/{item_id}", status_code=204)
-    async def delete_item(item_id: str, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
+    async def delete_item(item_id: str, db: AsyncSession = Depends(get_db), context = Depends(guard("delete"))):
+        ensure_resource_scope(context, item_id)
         result = await db.execute(select(model).where(model.id == item_id))
         obj = result.scalar_one_or_none()
         if not obj:
             raise HTTPException(status_code=404, detail="Não encontrado")
-        # For clinical records, we soft-prevent delete if needed: here allow but log
         await db.delete(obj)
         await db.commit()
         return None
@@ -159,12 +190,27 @@ def make_crud_router(model, create_schema, update_schema, response_schema, prefi
     return router
 
 # Create routers for each entity
-instituicoes_router = make_crud_router(m.Instituicao, s.InstituicaoCreate, s.InstituicaoUpdate, s.InstituicaoResponse, "/instituicoes", ["instituicoes"])
-residentes_router = make_crud_router(m.Residente, s.ResidenteCreate, s.ResidenteUpdate, s.ResidenteResponse, "/residentes", ["residentes"])
-familiares_router = make_crud_router(m.Familiar, s.FamiliarCreate, s.FamiliarCreate, s.FamiliarResponse, "/familiares", ["familiares"])
-medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"])
-prescricoes_router = make_crud_router(m.Prescricao, s.PrescricaoCreate, s.PrescricaoCreate, s.PrescricaoResponse, "/prescricoes", ["prescricoes"])
-tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"])
+instituicoes_router = make_crud_router(
+    m.Instituicao,
+    s.InstituicaoCreate,
+    s.InstituicaoUpdate,
+    s.InstituicaoResponse,
+    "/instituicoes",
+    ["instituicoes"],
+    permissions={
+        "list": "ilpis:ler",
+        "create": "ilpis:criar",
+        "get": "ilpis:ler",
+        "update": "ilpis:atualizar",
+        "delete": "ilpis:inativar",
+    },
+    tenant_resource="instituicao",
+)
+residentes_router = make_crud_router(m.Residente, s.ResidenteCreate, s.ResidenteUpdate, s.ResidenteResponse, "/residentes", ["residentes"], fail_closed=True)
+familiares_router = make_crud_router(m.Familiar, s.FamiliarCreate, s.FamiliarCreate, s.FamiliarResponse, "/familiares", ["familiares"], fail_closed=True)
+medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"], fail_closed=True)
+prescricoes_router = make_crud_router(m.Prescricao, s.PrescricaoCreate, s.PrescricaoCreate, s.PrescricaoResponse, "/prescricoes", ["prescricoes"], fail_closed=True)
+tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
 # Additional entities: avaliacoes, sinais, intercorrencias, alertas
 # For brevity create direct routers via make_crud
 
@@ -174,27 +220,27 @@ from pydantic import BaseModel
 
 avaliacoes_router = APIRouter(prefix="/avaliacoes", tags=["avaliacoes"])
 @avaliacoes_router.get("/", response_model=list[dict])
-async def list_avaliacoes(db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
+async def list_avaliacoes(db: AsyncSession = Depends(get_db), _blocked: None = Depends(block_pending_permission_catalog)):
     result = await db.execute(select(m.Avaliacao).order_by(m.Avaliacao.data.desc()))
     return [{"id": r.id, "residente_id": r.residente_id, "tipo": r.tipo, "pontuacao": r.pontuacao, "classificacao": r.classificacao, "data": r.data.isoformat() if r.data else None} for r in result.scalars().all()]
 
 @avaliacoes_router.post("/", status_code=201)
-async def create_avaliacao(payload: dict, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
+async def create_avaliacao(payload: dict, db: AsyncSession = Depends(get_db), _blocked: None = Depends(block_pending_permission_catalog)):
     obj = m.Avaliacao(**payload)
     db.add(obj)
     await db.commit()
     await db.refresh(obj)
     return {"id": obj.id, "residente_id": obj.residente_id, "tipo": obj.tipo, "pontuacao": obj.pontuacao}
 
-sinais_router = make_crud_router(m.SinalVital, s.SinalVitalCreate, s.SinalVitalCreate, s.SinalVitalResponse, "/sinais-vitais", ["sinais-vitais"])
-intercorrencias_router = make_crud_router(m.Intercorrencia, s.IntercorrenciaCreate, s.IntercorrenciaCreate, s.IntercorrenciaResponse, "/intercorrencias", ["intercorrencias"])
-alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"])
+sinais_router = make_crud_router(m.SinalVital, s.SinalVitalCreate, s.SinalVitalCreate, s.SinalVitalResponse, "/sinais-vitais", ["sinais-vitais"], fail_closed=True)
+intercorrencias_router = make_crud_router(m.Intercorrencia, s.IntercorrenciaCreate, s.IntercorrenciaCreate, s.IntercorrenciaResponse, "/intercorrencias", ["intercorrencias"], fail_closed=True)
+alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"], fail_closed=True)
 
 # Upload handler generic: storage/<entity_id>/
 uploads_router = APIRouter(prefix="/uploads", tags=["uploads"])
 
 @uploads_router.post("/{entity_id}")
-async def upload_file(entity_id: str, file: UploadFile = File(...), current_user: m.User = Depends(get_current_user)):
+async def upload_file(entity_id: str, file: UploadFile = File(...), _blocked: None = Depends(block_pending_permission_catalog)):
     # Validate file type/size (simple)
     allowed = {"image/jpeg","image/png","image/webp","application/pdf","text/plain"}
     if file.content_type not in allowed:

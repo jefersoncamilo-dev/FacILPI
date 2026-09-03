@@ -43,6 +43,7 @@ ILPI_CONTEXT_REQUIRED = "ILPI_CONTEXT_REQUIRED"
 PROFILE_SELECTION_REQUIRED = "PROFILE_SELECTION_REQUIRED"
 PERMISSION_DENIED = "PERMISSION_DENIED"
 RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
+PERMISSION_CATALOG_PENDING = "PERMISSION_CATALOG_PENDING"
 
 # These values are the scope metadata of migration 004.  The database model
 # intentionally stores the permission key, not this catalog annotation.
@@ -548,6 +549,17 @@ def require_permission(permission_key: str):
     return permission_guard
 
 
+async def block_pending_permission_catalog(
+    current_user: User = Depends(get_current_user),
+) -> None:
+    _deny(
+        code=PERMISSION_CATALOG_PENDING,
+        http_status=status.HTTP_403_FORBIDDEN,
+        message="Catálogo de permissões pendente",
+        user_id=current_user.id,
+    )
+
+
 def _resource_tenant(resource: Any) -> str | None:
     if resource is None or isinstance(resource, str):
         return resource
@@ -618,6 +630,7 @@ __all__ = [
     "PROFILE_SELECTION_REQUIRED",
     "PERMISSION_DENIED",
     "RESOURCE_NOT_FOUND",
+    "PERMISSION_CATALOG_PENDING",
     "SecurityContext",
     "load_security_context",
     "build_security_context",
@@ -625,6 +638,7 @@ __all__ = [
     "require_global_scope",
     "require_ilpi_context",
     "require_permission",
+    "block_pending_permission_catalog",
     "ensure_same_tenant",
     "validate_tenant",
     "require_same_tenant",
