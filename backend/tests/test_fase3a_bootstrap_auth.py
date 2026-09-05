@@ -131,7 +131,7 @@ def fase3a_db(request: pytest.FixtureRequest, tmp_path: pathlib.Path) -> pathlib
         path = tmp_path / "fase3a.db"
         _run_migration(path, "upgrade", "004_catalogo_permissoes_rbac")
         asyncio.run(_insert_legacy_users(path))
-        _run_migration(path, "upgrade", "head")
+        _run_migration(path, "upgrade", "005_fase3a_bootstrap_auth")
         return path
 
     url = os.environ["FASE3A_TEST_POSTGRES_URL"]
@@ -139,7 +139,7 @@ def fase3a_db(request: pytest.FixtureRequest, tmp_path: pathlib.Path) -> pathlib
         asyncio.run(_reset_postgres(url))
         _run_migration(url, "upgrade", "004_catalogo_permissoes_rbac")
         asyncio.run(_insert_legacy_users(url))
-        _run_migration(url, "upgrade", "head")
+        _run_migration(url, "upgrade", "005_fase3a_bootstrap_auth")
     except Exception as error:
         pytest.skip(f"PostgreSQL descartável indisponível: {error}")
     return url

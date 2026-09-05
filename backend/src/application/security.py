@@ -71,6 +71,20 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "perfis:atribuir_permissao",
         "configuracoes:ler",
         "configuracoes:atualizar",
+        "residentes:ler",
+        "residentes:criar",
+        "residentes:atualizar",
+        "residentes:inativar",
+        "familiares:ler",
+        "familiares:criar",
+        "familiares:atualizar",
+        "familiares:inativar",
+        "tarefas:ler",
+        "tarefas:criar",
+        "tarefas:atualizar",
+        "tarefas:inativar",
+        "sinais_vitais:ler",
+        "sinais_vitais:criar",
     }
 )
 _CLINICAL_MODULES = frozenset(
