@@ -207,7 +207,13 @@ async def _create_ilpi_user(
     profile_key: str = "cuidador",
     exige_troca_senha: bool = False,
 ) -> m.User:
-    """ILPI user with profile + link + active Funcionario (required for ILPI context)."""
+    """ILPI user with profile + link + active Funcionario (required for ILPI context).
+
+    Rows are flushed in FK dependency order (roots, then profile, then
+    link/employee) because PostgreSQL enforces FK constraints immediately
+    while the models declare no ORM relationships for the unit of work to
+    sort by.
+    """
     user = _new_user(exige_troca_senha=exige_troca_senha)
     profile = m.Perfil(
         id=_new_id(),
@@ -217,6 +223,10 @@ async def _create_ilpi_user(
         escopo="ilpi",
         situacao="ativo",
     )
+    db.add_all([institution, user])
+    await db.flush()
+    db.add(profile)
+    await db.flush()
     employee = m.Funcionario(
         id=_new_id(),
         ilpi_id=institution.id,
@@ -226,15 +236,7 @@ async def _create_ilpi_user(
         cargo="Cuidador",
         situacao="ativo",
     )
-    db.add_all(
-        [
-            institution,
-            user,
-            profile,
-            employee,
-            _new_link(user.id, profile.id, institution.id),
-        ]
-    )
+    db.add_all([employee, _new_link(user.id, profile.id, institution.id)])
     await db.flush()
     await _grant_permissions(db, profile.id, permissions)
     return user
@@ -250,7 +252,9 @@ async def _create_platform_user(db: AsyncSession) -> m.User:
             )
         )
     ).scalar_one()
-    db.add_all([user, _new_link(user.id, profile.id, None)])
+    db.add(user)
+    await db.flush()
+    db.add(_new_link(user.id, profile.id, None))
     await db.flush()
     return user
 

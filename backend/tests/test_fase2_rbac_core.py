@@ -50,6 +50,7 @@ from src.application.security import (  # noqa: E402
     require_permission,
 )
 from src.infrastructure.models import (  # noqa: E402
+    Funcionario,
     Instituicao,
     Perfil,
     PerfilPermissao,
@@ -204,6 +205,18 @@ async def _institution_context_fixture(
     ilpi_id: str | None = None,
     profile_key: str | None = None,
 ) -> tuple[User, Instituicao, Perfil, UsuarioIlpiPerfil]:
+    """Institutional fixture with an active Funcionario (Fase 3B requirement).
+
+    A valid ILPI security context requires an active operational link
+    (Funcionario) between the user and the tenant; without it
+    load_security_context denies with AUTH_CONTEXT_REQUIRED before any
+    permission guard is reached.
+
+    Rows are flushed in FK dependency order (roots, then profile, then
+    link/employee) because PostgreSQL enforces FK constraints immediately
+    while the models declare no ORM relationships for the unit of work to
+    sort by.
+    """
     user = user or _new_user(active=active_user)
     institution = _new_institution(ilpi_id)
     profile = _new_profile(
@@ -211,13 +224,25 @@ async def _institution_context_fixture(
         active=active_profile,
         key=profile_key,
     )
+    db.add_all([user, institution])
+    await db.flush()
+    db.add(profile)
+    await db.flush()
     link = _new_link(
         user.id,
         profile.id,
         institution.id,
         active=active_link,
     )
-    db.add_all([user, institution, profile, link])
+    employee = Funcionario(
+        id=_new_id(),
+        ilpi_id=institution.id,
+        usuario_id=user.id,
+        nome=user.nome,
+        email=user.email,
+        situacao="ativo",
+    )
+    db.add_all([link, employee])
     await db.flush()
     return user, institution, profile, link
 
@@ -438,10 +463,13 @@ def test_missing_permission_denies_by_default(rbac_db: pathlib.Path):
 def test_wildcard_never_authorizes(rbac_db: pathlib.Path):
     async def scenario(db: AsyncSession):
         user, institution, profile, _link = await _institution_context_fixture(db)
+        # A literal "*" key on a catalog-free (modulo, acao) pair: linking it
+        # must never grant anything, and must not collide with migration 006,
+        # which owns ("residentes", "ler").
         wildcard = Permissao(
             id=_new_id(),
-            modulo="residentes",
-            acao="ler",
+            modulo="wildcard_modulo",
+            acao="sondar",
             chave="*",
             descricao="Wildcard fixture",
         )
@@ -545,15 +573,13 @@ def test_payload_tenant_cannot_change_session_tenant(rbac_db: pathlib.Path):
 def test_platform_superuser_does_not_get_clinical_permission(rbac_db: pathlib.Path):
     async def scenario(db: AsyncSession):
         user, profile, _link = await _platform_context_fixture(db)
-        clinical = Permissao(
-            id=_new_id(),
-            modulo="residentes",
-            acao="ler",
-            chave="residentes:ler",
-            descricao="Clinical fixture",
-        )
-        db.add(clinical)
-        await db.flush()
+        # Use the official catalog permission owned by migration 006 instead
+        # of inserting a duplicate (modulo, acao) pair: even with an explicit
+        # clinical grant on the disposable database, the architectural
+        # global/clinical rule must deny.
+        clinical = (
+            await db.execute(select(Permissao).where(Permissao.chave == "residentes:ler"))
+        ).scalar_one()
         db.add(PerfilPermissao(perfil_id=profile.id, permissao_id=clinical.id))
         await db.commit()
         context = await load_security_context(db, user, scope="global")
