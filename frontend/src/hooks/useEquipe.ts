@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { equipeApi } from '../services/equipe'
+import { CONTEXT_CHANGED_EVENT } from '../types/context'
 import type {
   Funcionario, FuncionarioCreate, FuncionarioUpdate,
   User, UsuarioAdminCreate, UsuarioAdminUpdate,
@@ -139,8 +140,7 @@ export function useEquipe() {
     await equipeApi.updatePermissoes(perfilId, permissoesChave)
   }, [])
 
-  const filteredFuncionarios = funcionarios.filter(f => {
-    const matchesSituacao = !situacaoFilter || f.situacao === situacaoFilter
+  const filteredFuncionarios = funcionarios.filter(f => {    const matchesSituacao = !situacaoFilter || f.situacao === situacaoFilter
     const matchesSearch = !searchQuery ||
       f.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (f.cpf || '').includes(searchQuery) ||
@@ -154,6 +154,18 @@ export function useEquipe() {
       u.nome.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email.toLowerCase().includes(searchQuery.toLowerCase())
   })
+
+  // Recarrega os dados tenant-scoped sempre que o contexto ativo trocar.
+  useEffect(() => {
+    const onContextChanged = () => {
+      setError(null)
+      void loadFuncionarios()
+      void loadUsuarios()
+      void loadPerfis()
+    }
+    window.addEventListener(CONTEXT_CHANGED_EVENT, onContextChanged)
+    return () => window.removeEventListener(CONTEXT_CHANGED_EVENT, onContextChanged)
+  }, [loadFuncionarios, loadUsuarios, loadPerfis])
 
   return {
     funcionarios, usuarios, perfis, permissoes,

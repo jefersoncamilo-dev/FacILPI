@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import { Layout } from './components/Layout'
 import { PrivateRoute } from './components/PrivateRoute'
 import { Login } from './pages/Login'
+import { PrimeiroAcesso } from './pages/PrimeiroAcesso'
 import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { Residentes } from './pages/Residentes'
@@ -20,6 +21,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/primeiro-acesso" element={<PrivateRoute><PrimeiroAcesso /></PrivateRoute>} />
           <Route path="/register" element={<Register />} />
           <Route path="/" element={<Protected><Dashboard /></Protected>} />
           <Route path="/plantao" element={<Protected><MeuPlantao /></Protected>} />

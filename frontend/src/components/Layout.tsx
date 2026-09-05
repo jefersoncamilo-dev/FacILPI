@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { Modal } from './Modal'
+import { ContextSwitcher } from './ContextSwitcher'
 
 const menu = [
   { to: '/', label: 'Início', icon: '🏠' },
@@ -68,7 +69,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </NavLink>
           ))}
         </nav>
-        <div className="p-4 border-t">
+        <div className="p-4 border-t space-y-3">
+          <ContextSwitcher />
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-primaryLight flex items-center justify-center text-primary font-semibold">{user?.nome?.[0]?.toUpperCase() || 'U'}</div>
             <div className="flex-1 min-w-0">
@@ -103,6 +105,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="p-4 border-b flex items-center justify-between">
                 <span className="font-bold">Menu</span>
                 <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-full hover:bg-slate-100">×</button>
+              </div>
+              <div className="p-3 border-b">
+                <ContextSwitcher />
               </div>
               <nav className="p-3 space-y-1">
                 {menu.map(m => (
