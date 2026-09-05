@@ -1,11 +1,19 @@
-"""Disposable-database tests for Phase F5A-2A: Residentes RBAC + tenant isolation.
+"""Disposable-database tests for Phase F5A-2B: Familiares RBAC + tenant isolation.
 
 Covers:
-- GET /api/residentes/      -> residentes:ler   (tenant-filtered list)
-- GET /api/residentes/{id}  -> residentes:ler   (404 cross-tenant, no leak)
-- POST /api/residentes/     -> residentes:criar (tenant from session, hostile body ignored)
-- PUT /api/residentes/{id}  -> residentes:atualizar (no tenant move)
-- DELETE /api/residentes/.. -> BLOCKED_FOR_F5B_LOGICAL_DELETE (fail-closed, physical delete never runs)
+- GET /api/familiares/      -> familiares:ler   (tenant-filtered list)
+- GET /api/familiares/{id}  -> familiares:ler   (404 cross-tenant, no leak)
+- POST /api/familiares/     -> familiares:criar (tenant from session, hostile
+  body ignored, parent Residente validated in the session ILPI before INSERT)
+- PUT /api/familiares/{id}  -> familiares:atualizar (no tenant move,
+  residente_id immutable by official decision)
+- DELETE /api/familiares/.. -> BLOCKED_FOR_F5B_LOGICAL_DELETE (fail-closed,
+  physical delete never runs; familiares:inativar does NOT authorize it)
+
+Official decisions encoded here:
+- residente_id is IMMUTABLE on PUT (silently ignored, link preserved).
+- FamiliarResponse intentionally exposes no ilpi_id; tenant assertions for
+  hostile payloads (09/14) read the disposable database directly.
 
 All databases are disposable (tmp sqlite / disposable postgres). The official
 database (storage/app.db) is never written.
@@ -20,7 +28,7 @@ import subprocess
 import sys
 import uuid
 from collections.abc import AsyncIterator
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -112,9 +120,9 @@ def _database_backends() -> list[str]:
 
 
 @pytest.fixture(params=_database_backends(), ids=lambda backend: backend)
-def residentes_db(request: pytest.FixtureRequest, tmp_path: pathlib.Path) -> pathlib.Path | str:
+def familiares_db(request: pytest.FixtureRequest, tmp_path: pathlib.Path) -> pathlib.Path | str:
     if request.param == "sqlite":
-        path = tmp_path / "fase5a2a-residentes.db"
+        path = tmp_path / "fase5a2b-familiares.db"
         _run_migration(path)
         return path
 
@@ -160,15 +168,15 @@ def _new_user(*, exige_troca_senha: bool = False) -> m.User:
     user_id = _new_id()
     return m.User(
         id=user_id,
-        nome="Usuario Fase 5A-2A",
-        email=f"fase5a2a-{user_id}@example.com",
+        nome="Usuario Fase 5A-2B",
+        email=f"fase5a2b-{user_id}@example.com",
         password_hash="fixture-password-hash",
         ativo=True,
         exige_troca_senha=exige_troca_senha,
     )
 
 
-def _new_institution(name: str = "ILPI Fase 5A-2A") -> m.Instituicao:
+def _new_institution(name: str = "ILPI Fase 5A-2B") -> m.Instituicao:
     return m.Instituicao(
         id=_new_id(),
         razao_social=name,
@@ -218,7 +226,7 @@ async def _create_ilpi_user(
     profile = m.Perfil(
         id=_new_id(),
         ilpi_id=institution.id,
-        nome="Perfil Fixture 5A-2A",
+        nome="Perfil Fixture 5A-2B",
         chave=profile_key,
         escopo="ilpi",
         situacao="ativo",
@@ -280,249 +288,297 @@ async def _count(db: AsyncSession, model) -> int:
     return (await db.execute(select(func.count()).select_from(model))).scalar_one()
 
 
-def _residente_payload(nome: str = "Residente Fixture") -> dict:
-    return {"nome": nome, "data_nascimento": "1940-05-01"}
+async def _familiar_row(db: AsyncSession, familiar_id: str) -> m.Familiar | None:
+    # Fresh read: populate_existing refreshes the identity-mapped row that
+    # the API mutated via another session (expire_all would expire unrelated
+    # fixtures and break async lazy-load).
+    result = await db.execute(
+        select(m.Familiar)
+        .where(m.Familiar.id == familiar_id)
+        .execution_options(populate_existing=True)
+    )
+    return result.scalar_one_or_none()
 
 
-def test_residentes_rbac_tenant_endpoints(residentes_db):
+def _familiar_payload(residente_id: str, nome: str = "Familiar Fixture") -> dict:
+    return {"residente_id": residente_id, "nome": nome}
+
+
+def test_familiares_rbac_tenant_endpoints(familiares_db):
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
-        ilpi_a = _new_institution("ILPI A 5A-2A")
-        ilpi_b = _new_institution("ILPI B 5A-2A")
+        ilpi_a = _new_institution("ILPI A 5A-2B")
+        ilpi_b = _new_institution("ILPI B 5A-2B")
+        db.add_all([ilpi_a, ilpi_b])
+        await db.flush()
+        # Parent residentes, one per tenant (FK roots for the composite
+        # (residente_id, ilpi_id) constraint; flushed before children).
+        res_a = m.Residente(
+            id=_new_id(),
+            instituicao_id=ilpi_a.id,
+            nome="Residente A 5A-2B",
+            data_nascimento=date(1940, 5, 1),
+        )
+        res_b = m.Residente(
+            id=_new_id(),
+            instituicao_id=ilpi_b.id,
+            nome="Residente B 5A-2B",
+            data_nascimento=date(1938, 3, 2),
+        )
+        db.add_all([res_a, res_b])
+        await db.flush()
+
         platform_user = await _create_platform_user(db)
         reader = await _create_ilpi_user(
-            db, ilpi_a, permissions={"residentes:ler"}, profile_key="leitor"
+            db, ilpi_a, permissions={"familiares:ler"}, profile_key="leitor_fam"
         )
         writer = await _create_ilpi_user(
             db,
             ilpi_a,
-            permissions={"residentes:ler", "residentes:criar", "residentes:atualizar"},
-            profile_key="cuidador",
+            permissions={"familiares:ler", "familiares:criar", "familiares:atualizar"},
+            profile_key="cuidador_fam",
         )
         no_permission = await _create_ilpi_user(
-            db, ilpi_a, permissions=set(), profile_key="sem_permissao"
+            db, ilpi_a, permissions=set(), profile_key="sem_permissao_fam"
+        )
+        inativar_only = await _create_ilpi_user(
+            db,
+            ilpi_a,
+            permissions={"familiares:ler", "familiares:inativar"},
+            profile_key="inativador_fam",
         )
         other_tenant = await _create_ilpi_user(
             db,
             ilpi_b,
-            permissions={"residentes:ler", "residentes:criar", "residentes:atualizar"},
-            profile_key="cuidador_b",
+            permissions={"familiares:ler", "familiares:criar", "familiares:atualizar"},
+            profile_key="cuidador_fam_b",
         )
         pending_first_access = await _create_ilpi_user(
             db,
             ilpi_a,
-            permissions={"residentes:ler", "residentes:criar", "residentes:atualizar"},
-            profile_key="primeiro_acesso",
+            permissions={"familiares:ler", "familiares:criar", "familiares:atualizar"},
+            profile_key="primeiro_acesso_fam",
             exige_troca_senha=True,
         )
-        db.add(ilpi_b)
         await db.commit()
 
         headers_reader = _auth_headers(reader, scope="ilpi", ilpi_id=ilpi_a.id)
         headers_writer = _auth_headers(writer, scope="ilpi", ilpi_id=ilpi_a.id)
         headers_none = _auth_headers(no_permission, scope="ilpi", ilpi_id=ilpi_a.id)
+        headers_inativar = _auth_headers(inativar_only, scope="ilpi", ilpi_id=ilpi_a.id)
         headers_b = _auth_headers(other_tenant, scope="ilpi", ilpi_id=ilpi_b.id)
         headers_pending = _auth_headers(pending_first_access, scope="ilpi", ilpi_id=ilpi_a.id)
         headers_global = _auth_headers(platform_user, scope="global")
 
-        # 19. Health continua pública.
-        health = await client.get("/api/health")
-        assert health.status_code == 200
-
-        # 01. GET LIST sem token -> 401 AUTHENTICATION_REQUIRED.
-        no_token = await client.get("/api/residentes/")
-        assert no_token.status_code == 401
-        assert _detail_code(no_token) == AUTHENTICATION_REQUIRED
-
-        # 02. GET LIST contexto global -> 403 PERMISSION_DENIED.
-        global_list = await client.get("/api/residentes/", headers=headers_global)
-        assert global_list.status_code == 403
-        assert _detail_code(global_list) == PERMISSION_DENIED
-
-        # 03. GET LIST ILPI sem residentes:ler -> 403 PERMISSION_DENIED.
-        denied = await client.get("/api/residentes/", headers=headers_none)
-        assert denied.status_code == 403
-        assert _detail_code(denied) == PERMISSION_DENIED
-
-        # Seed: um residente em cada ILPI (viaSesion A e sessão B).
+        # Seed: um familiar em cada ILPI.
         created_a1 = await client.post(
-            "/api/residentes/", headers=headers_writer, json=_residente_payload("Residente A1")
+            "/api/familiares/", headers=headers_writer, json=_familiar_payload(res_a.id, "Familiar A1")
         )
         assert created_a1.status_code == 201, created_a1.text
         a1_id = created_a1.json()["id"]
-        assert created_a1.json()["instituicao_id"] == ilpi_a.id
+        assert created_a1.json()["residente_id"] == res_a.id
 
         created_b1 = await client.post(
-            "/api/residentes/", headers=headers_b, json=_residente_payload("Residente B1")
+            "/api/familiares/", headers=headers_b, json=_familiar_payload(res_b.id, "Familiar B1")
         )
         assert created_b1.status_code == 201, created_b1.text
         b1_id = created_b1.json()["id"]
-        assert created_b1.json()["instituicao_id"] == ilpi_b.id
 
-        # 04. GET LIST ILPI com residentes:ler -> 200.
-        listed = await client.get("/api/residentes/", headers=headers_reader)
-        assert listed.status_code == 200
+        # 01. sem token -> 401.
+        no_token = await client.get("/api/familiares/")
+        assert no_token.status_code == 401
+        assert _detail_code(no_token) == AUTHENTICATION_REQUIRED
 
-        # 05. Isolamento de listagem: A vê só A1+A2... (A1 + criado abaixo), nunca B1.
+        # 02. usuário com familiares:ler lista a própria ILPI -> 200.
+        listed = await client.get("/api/familiares/", headers=headers_reader)
+        assert listed.status_code == 200, listed.text
+
+        # 03. sem familiares:ler -> 403 PERMISSION_DENIED.
+        denied = await client.get("/api/familiares/", headers=headers_none)
+        assert denied.status_code == 403
+        assert _detail_code(denied) == PERMISSION_DENIED
+
+        # 04. listagem A não contém B (isolamento).
         ids_a = {item["id"] for item in listed.json()}
         assert a1_id in ids_a
         assert b1_id not in ids_a
-        assert all(item["instituicao_id"] == ilpi_a.id for item in listed.json())
-
-        listed_b = await client.get("/api/residentes/", headers=headers_b)
+        listed_b = await client.get("/api/familiares/", headers=headers_b)
         assert listed_b.status_code == 200
         ids_b = {item["id"] for item in listed_b.json()}
         assert b1_id in ids_b
         assert a1_id not in ids_b
 
-        # 06. GET ID mesmo tenant -> 200.
-        got = await client.get(f"/api/residentes/{a1_id}", headers=headers_reader)
+        # 05. GET próprio -> 200.
+        got = await client.get(f"/api/familiares/{a1_id}", headers=headers_reader)
         assert got.status_code == 200
         assert got.json()["id"] == a1_id
 
-        # 07. GET ID cross-tenant -> 404 RESOURCE_NOT_FOUND (sem vazar existência).
-        cross = await client.get(f"/api/residentes/{b1_id}", headers=headers_reader)
+        # 06. GET cross-tenant -> 404 RESOURCE_NOT_FOUND (sem leak).
+        cross = await client.get(f"/api/familiares/{b1_id}", headers=headers_reader)
         assert cross.status_code == 404
         assert _detail_code(cross) == RESOURCE_NOT_FOUND
 
-        # 08. GET ID inexistente -> 404 RESOURCE_NOT_FOUND.
-        missing = await client.get(f"/api/residentes/{_new_id()}", headers=headers_reader)
-        assert missing.status_code == 404
-        assert _detail_code(missing) == RESOURCE_NOT_FOUND
-
-        # 09. CREATE com residentes:criar -> 201 no tenant da sessão.
+        # 07. POST com familiares:criar -> 201.
         created_a2 = await client.post(
-            "/api/residentes/", headers=headers_writer, json=_residente_payload("Residente A2")
+            "/api/familiares/", headers=headers_writer, json=_familiar_payload(res_a.id, "Familiar A2")
         )
         assert created_a2.status_code == 201, created_a2.text
-        assert created_a2.json()["instituicao_id"] == ilpi_a.id
         a2_id = created_a2.json()["id"]
+        row_a2 = await _familiar_row(db, a2_id)
+        assert row_a2 is not None and row_a2.ilpi_id == ilpi_a.id
 
-        # 10. CREATE sem residentes:criar -> 403 PERMISSION_DENIED (nada persistido).
-        before = await _count(db, m.Residente)
+        # 08. POST sem permissão -> 403 PERMISSION_DENIED (nada persistido).
+        before = await _count(db, m.Familiar)
         forbidden_create = await client.post(
-            "/api/residentes/", headers=headers_none, json=_residente_payload("Nao Criar")
+            "/api/familiares/", headers=headers_none, json=_familiar_payload(res_a.id, "Nao Criar")
         )
         assert forbidden_create.status_code == 403
         assert _detail_code(forbidden_create) == PERMISSION_DENIED
-        assert await _count(db, m.Residente) == before
+        assert await _count(db, m.Familiar) == before
 
-        # 11. CREATE com payload hostil (instituicao_id de outra ILPI) -> persiste na ILPI da sessão.
+        # 09. POST com ilpi_id/instituicao_id hostil -> tenant final continua A.
         hostile = await client.post(
-            "/api/residentes/",
+            "/api/familiares/",
             headers=headers_writer,
-            json={**_residente_payload("Residente Hostil"), "instituicao_id": ilpi_b.id},
+            json={**_familiar_payload(res_a.id, "Familiar Hostil"), "ilpi_id": ilpi_b.id, "instituicao_id": ilpi_b.id},
         )
         assert hostile.status_code == 201, hostile.text
-        assert hostile.json()["instituicao_id"] == ilpi_a.id
         hostile_id = hostile.json()["id"]
-        hostile_b = await client.get(f"/api/residentes/{hostile_id}", headers=headers_b)
-        assert hostile_b.status_code == 404
-        assert _detail_code(hostile_b) == RESOURCE_NOT_FOUND
+        hostile_row = await _familiar_row(db, hostile_id)
+        assert hostile_row is not None
+        assert hostile_row.ilpi_id == ilpi_a.id
+        hostile_cross = await client.get(f"/api/familiares/{hostile_id}", headers=headers_b)
+        assert hostile_cross.status_code == 404
+        assert _detail_code(hostile_cross) == RESOURCE_NOT_FOUND
 
-        # 12. UPDATE com residentes:atualizar no mesmo tenant -> 200.
+        # 10. POST com residente da outra ILPI -> 404 fail-closed (nada persistido).
+        before_parent = await _count(db, m.Familiar)
+        cross_parent = await client.post(
+            "/api/familiares/", headers=headers_writer, json=_familiar_payload(res_b.id, "Vinculo Cross")
+        )
+        assert cross_parent.status_code == 404
+        assert _detail_code(cross_parent) == RESOURCE_NOT_FOUND
+        assert await _count(db, m.Familiar) == before_parent
+
+        # 11. PUT com familiares:atualizar -> 200.
         updated = await client.put(
-            f"/api/residentes/{a2_id}",
+            f"/api/familiares/{a2_id}",
             headers=headers_writer,
-            json={"nome": "Residente A2 Atualizado"},
+            json={"nome": "Familiar A2 Atualizado"},
         )
         assert updated.status_code == 200, updated.text
-        assert updated.json()["nome"] == "Residente A2 Atualizado"
-        assert updated.json()["instituicao_id"] == ilpi_a.id
+        assert updated.json()["nome"] == "Familiar A2 Atualizado"
 
-        # 13. UPDATE sem residentes:atualizar -> 403 PERMISSION_DENIED.
+        # 12. PUT sem permissão -> 403 PERMISSION_DENIED.
         forbidden_update = await client.put(
-            f"/api/residentes/{a2_id}",
+            f"/api/familiares/{a2_id}",
             headers=headers_none,
             json={"nome": "Nao Atualizar"},
         )
         assert forbidden_update.status_code == 403
         assert _detail_code(forbidden_update) == PERMISSION_DENIED
 
-        # 14. UPDATE cross-tenant -> 404 RESOURCE_NOT_FOUND.
+        # 13. PUT cross-tenant -> 404 RESOURCE_NOT_FOUND (alvo intacto).
         cross_update = await client.put(
-            f"/api/residentes/{b1_id}",
+            f"/api/familiares/{b1_id}",
             headers=headers_writer,
             json={"nome": "Tentativa Cross Tenant"},
         )
         assert cross_update.status_code == 404
         assert _detail_code(cross_update) == RESOURCE_NOT_FOUND
-        intact_b = await client.get(f"/api/residentes/{b1_id}", headers=headers_b)
-        assert intact_b.json()["nome"] == "Residente B1"
+        intact_b = await client.get(f"/api/familiares/{b1_id}", headers=headers_b)
+        assert intact_b.json()["nome"] == "Familiar B1"
 
-        # 15. UPDATE tentando trocar instituicao_id -> tenant permanece inalterado.
+        # 14. PUT tentando trocar tenant -> tenant preservado (leitura direta no banco).
         move_attempt = await client.put(
-            f"/api/residentes/{a2_id}",
+            f"/api/familiares/{a2_id}",
             headers=headers_writer,
-            json={"nome": "Residente A2", "instituicao_id": ilpi_b.id},
+            json={"nome": "Familiar A2", "ilpi_id": ilpi_b.id, "instituicao_id": ilpi_b.id},
         )
         assert move_attempt.status_code == 200, move_attempt.text
-        assert move_attempt.json()["instituicao_id"] == ilpi_a.id
-        confirm = await client.get(f"/api/residentes/{a2_id}", headers=headers_reader)
-        assert confirm.json()["instituicao_id"] == ilpi_a.id
+        moved_row = await _familiar_row(db, a2_id)
+        assert moved_row is not None and moved_row.ilpi_id == ilpi_a.id
+        assert moved_row.residente_id == res_a.id
+
+        # 15. PUT com residente_id de outra ILPI -> vínculo imutável (200, original preservado).
+        transfer_attempt = await client.put(
+            f"/api/familiares/{a2_id}",
+            headers=headers_writer,
+            json={"residente_id": res_b.id},
+        )
+        assert transfer_attempt.status_code == 200, transfer_attempt.text
+        transfer_row = await _familiar_row(db, a2_id)
+        assert transfer_row is not None and transfer_row.residente_id == res_a.id
+        assert transfer_row.ilpi_id == ilpi_a.id
 
         # 16. Primeiro acesso pendente -> 403 FIRST_PASSWORD_CHANGE_REQUIRED.
-        pending = await client.get("/api/residentes/", headers=headers_pending)
+        pending = await client.get("/api/familiares/", headers=headers_pending)
         assert pending.status_code == 403
         assert _detail_code(pending) == FIRST_PASSWORD_CHANGE_REQUIRED
         pending_create = await client.post(
-            "/api/residentes/", headers=headers_pending, json=_residente_payload("Bloqueado")
+            "/api/familiares/", headers=headers_pending, json=_familiar_payload(res_a.id, "Bloqueado")
         )
         assert pending_create.status_code == 403
         assert _detail_code(pending_create) == FIRST_PASSWORD_CHANGE_REQUIRED
 
-        # 17. Platform superuser sem acesso clínico (global já coberto no item 02;
-        # aqui também com tentativa de leitura por id e escrita).
-        global_get = await client.get(f"/api/residentes/{a1_id}", headers=headers_global)
+        # 17. platform_superuser global -> sem acesso clínico.
+        global_list = await client.get("/api/familiares/", headers=headers_global)
+        assert global_list.status_code == 403
+        assert _detail_code(global_list) == PERMISSION_DENIED
+        global_get = await client.get(f"/api/familiares/{a1_id}", headers=headers_global)
         assert global_get.status_code == 403
         assert _detail_code(global_get) == PERMISSION_DENIED
         global_create = await client.post(
-            "/api/residentes/", headers=headers_global, json=_residente_payload("Superuser")
+            "/api/familiares/", headers=headers_global, json=_familiar_payload(res_a.id, "Superuser")
         )
         assert global_create.status_code == 403
         assert _detail_code(global_create) == PERMISSION_DENIED
 
-        # 18. DELETE continua bloqueado (fail-closed): 403 e nenhuma deleção física.
-        total_before_delete = await _count(db, m.Residente)
-        for headers in (headers_writer, headers_b, headers_global):
-            blocked = await client.delete(f"/api/residentes/{a1_id}", headers=headers)
-            assert blocked.status_code == 403
+        # 18. DELETE com familiares:inativar continua bloqueado (físico nunca liberado).
+        total_before_delete = await _count(db, m.Familiar)
+        for headers in (headers_writer, headers_inativar, headers_b, headers_global):
+            blocked = await client.delete(f"/api/familiares/{a1_id}", headers=headers)
+            assert blocked.status_code == 403, blocked.text
             assert _detail_code(blocked) in {PERMISSION_CATALOG_PENDING, PERMISSION_DENIED}
-        assert await _count(db, m.Residente) == total_before_delete
-        still_there = await client.get(f"/api/residentes/{a1_id}", headers=headers_reader)
+        # familiares:inativar também não concede escrita.
+        inativar_create = await client.post(
+            "/api/familiares/", headers=headers_inativar, json=_familiar_payload(res_a.id, "Sem Criar")
+        )
+        assert inativar_create.status_code == 403
+        assert _detail_code(inativar_create) == PERMISSION_DENIED
+
+        # 19. Registro permanece após DELETE bloqueado.
+        assert await _count(db, m.Familiar) == total_before_delete
+        still_there = await client.get(f"/api/familiares/{a1_id}", headers=headers_reader)
         assert still_there.status_code == 200
 
         # DELETE sem token -> 401.
-        delete_no_token = await client.delete(f"/api/residentes/{a1_id}")
+        delete_no_token = await client.delete(f"/api/familiares/{a1_id}")
         assert delete_no_token.status_code == 401
 
-    asyncio.run(_with_client(residentes_db, scenario))
+    asyncio.run(_with_client(familiares_db, scenario))
 
 
-def test_outros_modulos_clinicos_permanecem_fail_closed(residentes_db):
-    """F5A-2A libera SOMENTE Residentes; demais módulos seguem fail-closed (20).
-
-    F5A-2B libera Familiares via RBAC (cobertura em
-    test_fase5a2b_familiares_rbac_tenant.py item 20); por isso Familiares não
-    consta mais desta lista.
-    """
+def test_outros_modulos_clinicos_permanecem_fail_closed(familiares_db):
+    """F5A-2B libera SOMENTE Familiares (+Residentes da 2A); demais seguem fail-closed (20)."""
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
-        ilpi = _new_institution("ILPI Fail-closed 5A-2A")
+        ilpi = _new_institution("ILPI Fail-closed 5A-2B")
         user = await _create_ilpi_user(
             db,
             ilpi,
-            permissions={"residentes:ler", "residentes:criar", "residentes:atualizar"},
-            profile_key="cuidador_fc",
+            permissions={"familiares:ler", "familiares:criar", "familiares:atualizar"},
+            profile_key="cuidador_fc_fam",
         )
         await db.commit()
         headers = _auth_headers(user, scope="ilpi", ilpi_id=ilpi.id)
 
         still_blocked = (
+            ("get", "/api/medicamentos/", None),
             ("get", "/api/tarefas/", None),
             ("post", "/api/tarefas/", {"residente_id": _new_id(), "descricao": "X"}),
+            ("post", "/api/prescricoes/", {"residente_id": _new_id(), "medicamento_id": _new_id(), "prescritor": "X", "dose": "1", "inicio": "2026-01-01"}),
             ("get", "/api/sinais-vitais/", None),
             ("post", "/api/sinais-vitais/", {"residente_id": _new_id()}),
-            ("get", "/api/medicamentos/", None),
             ("get", "/api/avaliacoes/", None),
             ("get", "/api/intercorrencias/", None),
             ("get", "/api/alertas/", None),
@@ -538,4 +594,9 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(residentes_db):
             assert isinstance(detail, dict), (method, route, response.text)
             assert detail.get("code") == PERMISSION_CATALOG_PENDING, (method, route, response.text)
 
-    asyncio.run(_with_client(residentes_db, scenario))
+        # Residentes segue protegido por RBAC próprio (sem wildcard via familiares).
+        residentes_denied = await client.get("/api/residentes/", headers=headers)
+        assert residentes_denied.status_code == 403
+        assert _detail_code(residentes_denied) == PERMISSION_DENIED
+
+    asyncio.run(_with_client(familiares_db, scenario))

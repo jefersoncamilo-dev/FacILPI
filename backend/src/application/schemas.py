@@ -370,6 +370,19 @@ class FamiliarCreate(BaseModel):
     tipo_responsabilidade: Optional[str] = None
     autorizacao_acesso: Optional[bool] = False
 
+class FamiliarUpdate(BaseModel):
+    # F5A-2B: update nunca controla tenant (ilpi_id/instituicao_id ausentes
+    # por construção) e nunca transfere vínculo (residente_id imutável por
+    # decisão oficial; eventual troca exige fluxo próprio, auditável).
+    nome: Optional[str] = None
+    cpf: Optional[str] = None
+    parentesco: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    endereco: Optional[str] = None
+    tipo_responsabilidade: Optional[str] = None
+    autorizacao_acesso: Optional[bool] = None
+
 class FamiliarResponse(FamiliarCreate):
     id: str
     class Config:

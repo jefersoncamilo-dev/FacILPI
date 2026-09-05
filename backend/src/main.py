@@ -133,6 +133,7 @@ def make_crud_router(
     fail_closed: bool = False,
     tenant_resource: str | None = None,
     tenant_column: str | None = None,
+    parent_check: dict | None = None,
 ):
     router = APIRouter(prefix=prefix, tags=tags)
 
@@ -191,6 +192,29 @@ def make_crud_router(
             detail={"code": PERMISSION_DENIED, "message": "Permissão não autorizada"},
         )
 
+    async def ensure_parent_same_tenant(db, data, session_tenant: str | None, context) -> None:
+        # Validação genérica de vínculo pai: o registro pai precisa pertencer
+        # à mesma ILPI da sessão. Divergência (inclusive cross-tenant) retorna
+        # 404 sem revelar existência. `parent_check` é explicitamente
+        # configurado por roteador: {"model", "id_field", "tenant_column"}.
+        parent_model = parent_check["model"]
+        id_field = parent_check["id_field"]
+        parent_tenant_column = parent_check["tenant_column"]
+        tenant = session_tenant if session_tenant is not None else resolve_session_tenant(context)
+        parent_id = data.get(id_field)
+        if not parent_id:
+            raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+        parent = (
+            await db.execute(
+                select(parent_model).where(
+                    parent_model.id == parent_id,
+                    getattr(parent_model, parent_tenant_column) == tenant,
+                )
+            )
+        ).scalar_one_or_none()
+        if parent is None:
+            raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+
     @router.get("/", response_model=list[response_schema])
     async def list_items(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), context = Depends(guard("list"))):
         query = scoped_query(select(model), context)
@@ -202,10 +226,16 @@ def make_crud_router(
     @router.post("/", response_model=response_schema, status_code=201)
     async def create_item(payload: create_schema, db: AsyncSession = Depends(get_db), context = Depends(guard("create"))):
         data = payload.model_dump(exclude_unset=True)
+        session_tenant: str | None = None
         if tenant_column is not None:
             # O cliente nunca escolhe o tenant: sobrescreve qualquer valor
             # recebido (ex.: ResidenteCreate.instituicao_id) pelo da sessão.
-            data[tenant_column] = resolve_session_tenant(context)
+            session_tenant = resolve_session_tenant(context)
+            data[tenant_column] = session_tenant
+        if parent_check is not None:
+            # O vínculo pai é validado na ILPI da sessão ANTES do INSERT
+            # (fail-closed; também evita violação da FK composta no PG).
+            await ensure_parent_same_tenant(db, data, session_tenant, context)
         if model == m.Instituicao and data.get("cnpj"):
             existing = await db.execute(select(m.Instituicao).where(m.Instituicao.cnpj == data["cnpj"]))
             if existing.scalar_one_or_none():
@@ -247,6 +277,10 @@ def make_crud_router(
             # Troca de tenant via update é proibida: ignora o tenant do cliente.
             data.pop("instituicao_id", None)
             data.pop("ilpi_id", None)
+        if parent_check is not None:
+            # Vínculo pai é imutável via PUT genérico: ignora o valor do
+            # cliente. Troca de vínculo exige fluxo próprio, auditável.
+            data.pop(parent_check["id_field"], None)
         for k, v in data.items():
             if isinstance(v, str):
                 v = v.strip()
@@ -291,7 +325,31 @@ residentes_router = make_crud_router(
     },
     tenant_column="instituicao_id",
 )
-familiares_router = make_crud_router(m.Familiar, s.FamiliarCreate, s.FamiliarCreate, s.FamiliarResponse, "/familiares", ["familiares"], fail_closed=True)
+# F5A-2B: Familiares protegido por RBAC + tenant (coluna ilpi_id própria) +
+# vínculo seguro com Residente (validado no POST; imutável no PUT).
+# DELETE permanece fail-closed (físico; inativação lógica é F5B) via "delete": None.
+# familiares:inativar existe no catálogo mas NÃO autoriza DELETE físico.
+familiares_router = make_crud_router(
+    m.Familiar,
+    s.FamiliarCreate,
+    s.FamiliarUpdate,
+    s.FamiliarResponse,
+    "/familiares",
+    ["familiares"],
+    permissions={
+        "list": "familiares:ler",
+        "get": "familiares:ler",
+        "create": "familiares:criar",
+        "update": "familiares:atualizar",
+        "delete": None,
+    },
+    tenant_column="ilpi_id",
+    parent_check={
+        "model": m.Residente,
+        "id_field": "residente_id",
+        "tenant_column": "instituicao_id",
+    },
+)
 medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"], fail_closed=True)
 prescricoes_router = make_crud_router(m.Prescricao, s.PrescricaoCreate, s.PrescricaoCreate, s.PrescricaoResponse, "/prescricoes", ["prescricoes"], fail_closed=True)
 tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
