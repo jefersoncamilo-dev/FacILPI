@@ -29,6 +29,7 @@ from ..infrastructure.models import (
 from .auth import (
     AUTH_CONTEXT_REQUIRED,
     AUTHENTICATION_REQUIRED,
+    decode_access_token,
     get_current_user,
 )
 
@@ -44,6 +45,7 @@ PROFILE_SELECTION_REQUIRED = "PROFILE_SELECTION_REQUIRED"
 PERMISSION_DENIED = "PERMISSION_DENIED"
 RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
 PERMISSION_CATALOG_PENDING = "PERMISSION_CATALOG_PENDING"
+FIRST_PASSWORD_CHANGE_REQUIRED = "FIRST_PASSWORD_CHANGE_REQUIRED"
 
 # These values are the scope metadata of migration 004.  The database model
 # intentionally stores the permission key, not this catalog annotation.
@@ -401,6 +403,16 @@ def _header(request: Request, *names: str) -> str | None:
     return None
 
 
+def _token_payload_from_request(request: Request) -> dict | None:
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    return decode_access_token(token)
+
+
 async def get_security_context(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -412,13 +424,49 @@ async def get_security_context(
     future route may send a profile/tenant selector in these headers, but the
     selector is always checked against the user's database links.
     """
+    if current_user.exige_troca_senha:
+        _deny(
+            code=FIRST_PASSWORD_CHANGE_REQUIRED,
+            http_status=status.HTTP_403_FORBIDDEN,
+            message="Troca de senha obrigatória",
+            user_id=current_user.id,
+        )
+
+    token_payload = _token_payload_from_request(request)
+    token_scope = _normalise_selector(token_payload.get("scope") if token_payload else None)
+    token_ilpi_id = _normalise_selector(token_payload.get("ilpi_id") if token_payload else None)
+    token_perfil_id = _normalise_selector(token_payload.get("perfil_id") if token_payload else None)
+    header_scope = _header(request, "X-Scope", "X-Context-Scope")
+    header_ilpi_id = _header(request, "X-ILPI-ID", "X-Instituicao-ID")
+    header_perfil_id = _header(request, "X-Perfil-ID", "X-Profile-ID")
+
+    if token_scope is not None:
+        for selected, header_value in (
+            (token_scope, header_scope),
+            (token_ilpi_id, header_ilpi_id),
+            (token_perfil_id, header_perfil_id),
+        ):
+            if header_value is not None and header_value != selected:
+                _deny(
+                    code=AUTH_CONTEXT_REQUIRED,
+                    http_status=status.HTTP_403_FORBIDDEN,
+                    message="Contexto de autorização não disponível",
+                    user_id=current_user.id,
+                )
+        scope = token_scope
+        ilpi_id = token_ilpi_id
+        perfil_id = token_perfil_id
+    else:
+        scope = header_scope
+        ilpi_id = header_ilpi_id
+        perfil_id = header_perfil_id
 
     return await load_security_context(
         db,
         current_user,
-        scope=_header(request, "X-Scope", "X-Context-Scope"),
-        ilpi_id=_header(request, "X-ILPI-ID", "X-Instituicao-ID"),
-        perfil_id=_header(request, "X-Perfil-ID", "X-Profile-ID"),
+        scope=scope,
+        ilpi_id=ilpi_id,
+        perfil_id=perfil_id,
     )
 
 
@@ -631,6 +679,7 @@ __all__ = [
     "PERMISSION_DENIED",
     "RESOURCE_NOT_FOUND",
     "PERMISSION_CATALOG_PENDING",
+    "FIRST_PASSWORD_CHANGE_REQUIRED",
     "SecurityContext",
     "load_security_context",
     "build_security_context",

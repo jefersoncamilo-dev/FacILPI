@@ -25,7 +25,8 @@ target_metadata = Base.metadata
 
 def get_url():
     # B: prioriza DATABASE_URL explícita e APP_DATABASE_URL (Path resolvido independente de CWD) antes de alembic.ini
-    url = context.get_x_argument(as_dictionary=True).get("database_url") or os.getenv("DATABASE_URL") or APP_DATABASE_URL or config.get_main_option("sqlalchemy.url")
+    # A: também suporta FASE3A_TEST_POSTGRES_URL para testes descartáveis
+    url = context.get_x_argument(as_dictionary=True).get("database_url") or os.getenv("FASE3A_TEST_POSTGRES_URL") or os.getenv("DATABASE_URL") or APP_DATABASE_URL or config.get_main_option("sqlalchemy.url")
     # normalize like database.py
     if url.startswith("sqlite:///"):
         url = url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)

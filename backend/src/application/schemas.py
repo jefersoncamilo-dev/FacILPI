@@ -26,6 +26,9 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+    scope: Optional[str] = None
+    ilpi_id: Optional[str] = None
+    perfil_id: Optional[str] = None
 
     @field_validator("email")
     @classmethod
@@ -36,12 +39,33 @@ class UserResponse(BaseModel):
     id: str
     nome: str
     email: str
+    ativo: bool = True
+    is_superuser: bool = False
+    exige_troca_senha: bool = False
     class Config:
         from_attributes = True
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    exige_troca_senha: bool = False
+
+class ContextSelection(BaseModel):
+    scope: str
+    ilpi_id: Optional[str] = None
+    perfil_id: Optional[str] = None
+
+class PrimeiroAcessoUpdate(BaseModel):
+    nova_senha: str = Field(..., min_length=8)
+    confirmar: str = Field(..., min_length=8)
+
+    @field_validator("nova_senha")
+    @classmethod
+    def pwd_strength(cls, v):
+        ok, msg = validate_password(v)
+        if not ok:
+            raise ValueError(msg)
+        return v
 
 class PasswordUpdate(BaseModel):
     nova_senha: str = Field(..., min_length=8)
@@ -59,9 +83,11 @@ class PasswordUpdate(BaseModel):
 class InstituicaoCreate(BaseModel):
     razao_social: str = Field(..., min_length=2)
     nome_fantasia: Optional[str] = None
+    finalidade: Optional[str] = None
     cnpj: Optional[str] = None
     endereco: Optional[str] = None
     municipio: Optional[str] = None
+    uf: Optional[str] = None
     telefone: Optional[str] = None
     email: Optional[EmailStr] = None
     responsavel_legal: Optional[str] = None
@@ -81,12 +107,24 @@ class InstituicaoCreate(BaseModel):
             raise ValueError("CNPJ inválido")
         return re.sub(r"\D","",v)
 
+    @field_validator("uf")
+    @classmethod
+    def validate_uf_field(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        value = v.strip().upper()
+        if value not in UF_VALIDAS:
+            raise ValueError("UF inválida")
+        return value
+
 class InstituicaoUpdate(BaseModel):
     razao_social: Optional[str] = None
     nome_fantasia: Optional[str] = None
+    finalidade: Optional[str] = None
     cnpj: Optional[str] = None
     endereco: Optional[str] = None
     municipio: Optional[str] = None
+    uf: Optional[str] = None
     telefone: Optional[str] = None
     email: Optional[EmailStr] = None
     responsavel_legal: Optional[str] = None
@@ -97,11 +135,106 @@ class InstituicaoUpdate(BaseModel):
     fuso_horario: Optional[str] = None
     situacao: Optional[str] = None
 
+    @field_validator("cnpj")
+    @classmethod
+    def validate_cnpj_field(cls, v):
+        if v is None or v.strip() == "":
+            return v
+        if not validate_cnpj(v):
+            raise ValueError("CNPJ inválido")
+        return re.sub(r"\D", "", v)
+
+    @field_validator("uf")
+    @classmethod
+    def validate_uf_field(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        value = v.strip().upper()
+        if value not in UF_VALIDAS:
+            raise ValueError("UF inválida")
+        return value
+
 class InstituicaoResponse(InstituicaoCreate):
     id: str
     created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
+
+class OnboardingStart(BaseModel):
+    usar_usuario_atual_como_admin: bool
+
+class UsuarioAdminCreate(BaseModel):
+    nome: str = Field(..., min_length=2, max_length=255)
+    email: EmailStr
+    perfil_id: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def lower_email(cls, v):
+        return v.lower().strip()
+
+class UsuarioAdminResponse(UserResponse):
+    senha_temporaria: str
+
+class FuncionarioAdminCreate(BaseModel):
+    nome: str = Field(..., min_length=2, max_length=255)
+    cpf: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    cargo: Optional[str] = None
+    profissao: Optional[str] = None
+    conselho_profissional: Optional[str] = None
+    numero_conselho: Optional[str] = None
+    uf_conselho: Optional[str] = None
+
+    @field_validator("cpf")
+    @classmethod
+    def cpf_valid(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        if not validate_cpf(v):
+            raise ValueError("CPF inválido")
+        return re.sub(r"\D", "", v)
+
+class FuncionarioResponse(FuncionarioAdminCreate):
+    id: str
+    ilpi_id: str
+    usuario_id: Optional[str] = None
+    situacao: str = "ativo"
+    class Config:
+        from_attributes = True
+
+class VincularUsuarioFuncionario(BaseModel):
+    usuario_id: str
+
+class UsuarioPerfilAssign(BaseModel):
+    perfil_id: str
+
+class PerfilAdminCreate(BaseModel):
+    nome: str = Field(..., min_length=2, max_length=100)
+    chave: str = Field(..., min_length=2, max_length=100)
+    descricao: Optional[str] = None
+
+class PerfilResponse(PerfilAdminCreate):
+    id: str
+    ilpi_id: Optional[str] = None
+    escopo: str
+    situacao: str
+    class Config:
+        from_attributes = True
+
+class PerfilPermissoesUpdate(BaseModel):
+    permissoes: list[str]
+
+class ResetPasswordResponse(BaseModel):
+    senha_temporaria: str
+
+
+UF_VALIDAS = {
+    "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
+    "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",
+    "SP", "SE", "TO",
+}
 
 # ---- Residente ----
 class ResidenteCreate(BaseModel):

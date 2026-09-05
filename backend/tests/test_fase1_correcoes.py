@@ -44,6 +44,12 @@ def _quote_identifier(name):
 
 def _null_ilpi_counts(con):
     counts = {}
+    global_or_optional_ilpi_tables = {
+        "perfis",
+        "usuario_ilpi_perfis",
+        "auditoria",
+        "refresh_tokens",
+    }
     tables = [
         row[0]
         for row in con.execute(
@@ -52,6 +58,8 @@ def _null_ilpi_counts(con):
         )
     ]
     for table in tables:
+        if table in global_or_optional_ilpi_tables:
+            continue
         columns = {
             row[1]
             for row in con.execute(f"PRAGMA table_info({_quote_identifier(table)})")

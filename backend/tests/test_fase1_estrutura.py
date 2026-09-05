@@ -4,27 +4,35 @@ Valida critérios do parecer aprovado (8 observações).
 Não cria admin@ilpi.com, não executa bootstrap, não altera placeholders.
 """
 import sqlite3
+import os
 import pathlib
 import shutil
+import subprocess
+import sys
+import tempfile
 import uuid
 
-# O banco oficial deve ser somente leitura durante os testes estruturais.
-DB_CANDIDATES = [
-    pathlib.Path("storage/app.db"),
-    pathlib.Path("../storage/app.db"),
-]
+BACKEND = pathlib.Path(__file__).resolve().parents[1]
 
-def _find_db():
-    for p in DB_CANDIDATES:
-        if p.exists():
-            return str(p)
-    # fallback para execução a partir de backend/
-    alt = pathlib.Path("storage/app.db")
-    if alt.exists():
-        return str(alt)
-    raise FileNotFoundError(f"DB não encontrado em {DB_CANDIDATES}")
 
-DB_PATH = _find_db()
+def _prepare_fase1_db():
+    path = pathlib.Path(tempfile.mkdtemp(prefix="facilpi-fase1-")) / "fase1-structure.db"
+    env = os.environ.copy()
+    env["DATABASE_URL"] = f"sqlite+aiosqlite:///{path.resolve().as_posix()}"
+    result = subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "002_fase1_isolamento"],
+        cwd=BACKEND,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return path
+
+
+DB_PATH = _prepare_fase1_db()
 
 def _connect(db_path=DB_PATH):
     con = sqlite3.connect(str(db_path))

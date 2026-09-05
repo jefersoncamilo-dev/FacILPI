@@ -1,5 +1,5 @@
 import os
-from fastapi import FastAPI, Depends, HTTPException, Request, APIRouter, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Request, Response, APIRouter, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -10,7 +10,19 @@ import pathlib
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
-from .application.auth import hash_password, verify_password, create_access_token, get_current_user, check_rate_limit
+from .application.auth import hash_password, verify_password, get_current_user, check_rate_limit, revoke_user_refresh_tokens
+from .application.audit import add_audit
+from .application.fase3a import (
+    auth_session_router,
+    bootstrap_router,
+    funcionarios_router,
+    instituicoes_router as fase3a_instituicoes_router,
+    onboarding_router,
+    perfis_router,
+    permissoes_router,
+    usuarios_router,
+    issue_session_response,
+)
 from .application.security import (
     ILPI_SCOPE,
     SecurityContext,
@@ -24,11 +36,12 @@ STORAGE_PATH = os.getenv("STORAGE_PATH", "./storage")
 pathlib.Path(STORAGE_PATH).mkdir(parents=True, exist_ok=True)
 
 # CORS Origins
-cors_origins = os.getenv("CORS_ORIGINS", "*")
-if cors_origins == "*":
-    allow_origins = ["*"]
-else:
-    allow_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+default_local_origins = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
+cors_origins = os.getenv("CORS_ORIGINS", default_local_origins)
+if cors_origins.strip() == "*":
+    # Cookies exigem credentials=true; CORS não pode responder com origem '*'.
+    cors_origins = default_local_origins
+allow_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
 
 app = FastAPI(title="FáciLPI API", version="1.0.0")
 
@@ -63,7 +76,7 @@ async def register(request: Request):
     )
 
 @auth_router.post("/token", response_model=s.TokenResponse)
-async def token(payload: s.UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
+async def token(payload: s.UserLogin, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
     check_rate_limit(f"token:{client_ip}")
     result = await db.execute(select(m.User).where(m.User.email == payload.email.lower().strip()))
@@ -72,16 +85,36 @@ async def token(payload: s.UserLogin, request: Request, db: AsyncSession = Depen
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     if not user.ativo:
         raise HTTPException(status_code=401, detail="Usuário inativo")
-    access_token = create_access_token(user)
-    return {"access_token": access_token, "token_type": "bearer"}
+    session_payload = await issue_session_response(
+        db,
+        user,
+        response,
+        request,
+        scope=payload.scope,
+        ilpi_id=payload.ilpi_id,
+        perfil_id=payload.perfil_id,
+    )
+    await db.commit()
+    return session_payload
 
 @auth_router.put("/password")
-async def update_password(payload: s.PasswordUpdate, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
+async def update_password(payload: s.PasswordUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
     # rate limit authenticated by user id
     check_rate_limit(f"password:{current_user.id}")
     if payload.nova_senha != payload.confirmar_senha:
         raise HTTPException(status_code=400, detail="Senhas não conferem")
     current_user.password_hash = hash_password(payload.nova_senha)
+    current_user.exige_troca_senha = False
+    await revoke_user_refresh_tokens(db, current_user.id)
+    add_audit(
+        db,
+        acao="auth.senha_alterada",
+        entidade="users",
+        registro_id=current_user.id,
+        usuario_id=current_user.id,
+        valores_posteriores={"exige_troca_senha": False},
+        request=request,
+    )
     await db.commit()
     return {"mensagem": "Senha alterada com sucesso"}
 
@@ -190,22 +223,7 @@ def make_crud_router(
     return router
 
 # Create routers for each entity
-instituicoes_router = make_crud_router(
-    m.Instituicao,
-    s.InstituicaoCreate,
-    s.InstituicaoUpdate,
-    s.InstituicaoResponse,
-    "/instituicoes",
-    ["instituicoes"],
-    permissions={
-        "list": "ilpis:ler",
-        "create": "ilpis:criar",
-        "get": "ilpis:ler",
-        "update": "ilpis:atualizar",
-        "delete": "ilpis:inativar",
-    },
-    tenant_resource="instituicao",
-)
+instituicoes_router = fase3a_instituicoes_router
 residentes_router = make_crud_router(m.Residente, s.ResidenteCreate, s.ResidenteUpdate, s.ResidenteResponse, "/residentes", ["residentes"], fail_closed=True)
 familiares_router = make_crud_router(m.Familiar, s.FamiliarCreate, s.FamiliarCreate, s.FamiliarResponse, "/familiares", ["familiares"], fail_closed=True)
 medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"], fail_closed=True)
@@ -259,7 +277,14 @@ async def upload_file(entity_id: str, file: UploadFile = File(...), _blocked: No
 # Include routers under /api
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(auth_session_router, prefix="/api")
+app.include_router(bootstrap_router, prefix="/api")
 app.include_router(instituicoes_router, prefix="/api")
+app.include_router(onboarding_router, prefix="/api")
+app.include_router(usuarios_router, prefix="/api")
+app.include_router(funcionarios_router, prefix="/api")
+app.include_router(perfis_router, prefix="/api")
+app.include_router(permissoes_router, prefix="/api")
 app.include_router(residentes_router, prefix="/api")
 app.include_router(familiares_router, prefix="/api")
 app.include_router(medicamentos_router, prefix="/api")

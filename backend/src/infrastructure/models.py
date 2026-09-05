@@ -23,6 +23,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
+    exige_troca_senha: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -31,7 +33,7 @@ class Instituicao(Base):
     __tablename__ = "instituicoes"
     __table_args__ = (
         CheckConstraint(
-            "situacao IN ('ativa','rascunho','ILPI_RASCUNHO','ONBOARDING_IN_PROGRESS','READY_FOR_ACTIVATION','ACTIVE','SUSPENSA','INATIVA','suspensa','inativa')",
+            "situacao IN ('ativa','rascunho','ILPI_RASCUNHO','ONBOARDING_IN_PROGRESS','READY_FOR_ACTIVATION','ACTIVE','ATIVA','SUSPENSA','INATIVA','suspensa','inativa')",
             name="ck_instituicoes_situacao",
         ),
         CheckConstraint("capacidade IS NULL OR capacidade > 0", name="ck_instituicoes_capacidade_pos"),
@@ -39,9 +41,11 @@ class Instituicao(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     razao_social: Mapped[str] = mapped_column(String(255), nullable=False)
     nome_fantasia: Mapped[str] = mapped_column(String(255), nullable=True)
+    finalidade: Mapped[str] = mapped_column(String(255), nullable=True)
     cnpj: Mapped[str] = mapped_column(String(18), unique=True, nullable=True)
     endereco: Mapped[str] = mapped_column(Text, nullable=True)
     municipio: Mapped[str] = mapped_column(String(255), nullable=True)
+    uf: Mapped[str] = mapped_column(String(2), nullable=True)
     telefone: Mapped[str] = mapped_column(String(20), nullable=True)
     email: Mapped[str] = mapped_column(String(255), nullable=True)
     responsavel_legal: Mapped[str] = mapped_column(String(255), nullable=True)
@@ -332,7 +336,7 @@ class BootstrapState(Base):
     __tablename__ = "bootstrap_state"
     __table_args__ = (
         CheckConstraint(
-            "estado IN ('UNINITIALIZED','PLATFORM_BOOTSTRAPPED','FIRST_PASSWORD_CHANGED')",
+            "estado IN ('UNINITIALIZED','PLATFORM_BOOTSTRAPPED','FIRST_PASSWORD_CHANGED','ILPI_CREATED','ONBOARDING_IN_PROGRESS','ONBOARDING_COMPLETED')",
             name="ck_bootstrap_estado",
         ),
     )
@@ -340,6 +344,9 @@ class BootstrapState(Base):
     estado: Mapped[str] = mapped_column(String(40), nullable=False, default="UNINITIALIZED")
     platform_bootstrapped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     first_password_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    ilpi_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    onboarding_completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     atualizado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
