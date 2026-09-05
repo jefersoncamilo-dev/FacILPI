@@ -282,9 +282,9 @@ def test_diagnostico_legado_em_fixture_temporaria(tmp_path):
 
 def test_migration_002_detecta_orfao_em_banco_temporario(tmp_path):
     """A migration 002 deve falhar com diagnóstico para residente inexistente."""
-    db = _disposable_db(tmp_path)
-    downgrade = _run_alembic(db, "downgrade", "001_initial")
-    assert downgrade.returncode == 0, downgrade.stdout + downgrade.stderr
+    db = tmp_path / "fase1-migration-002.db"
+    baseline = _run_alembic(db, "upgrade", "001_initial")
+    assert baseline.returncode == 0, baseline.stdout + baseline.stderr
 
     orphan_residente_id = str(uuid.uuid4())
     orphan_task_id = str(uuid.uuid4())

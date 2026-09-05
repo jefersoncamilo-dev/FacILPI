@@ -466,7 +466,7 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
                 "template_permissoes": "SELECT COUNT(*) FROM perfil_permissoes pp JOIN perfis p ON p.id = pp.perfil_id WHERE p.ilpi_id IS NULL",
             }.items()
         }
-        assert counts == {"permissoes": 26, "template_perfis": 2, "template_permissoes": 37}
+        assert counts == {"permissoes": 40, "template_perfis": 2, "template_permissoes": 51}
 
         platform_still_works = await client.get("/api/instituicoes/", headers=_auth_headers(context["global_access"]))
         assert platform_still_works.status_code == 200, platform_still_works.text
