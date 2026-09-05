@@ -124,6 +124,110 @@ def _public_user(user: m.User) -> dict:
     }
 
 
+def _public_funcionario(employee: m.Funcionario, *, senha_temporaria: str | None = None) -> dict:
+    return {
+        "id": employee.id,
+        "ilpi_id": employee.ilpi_id,
+        "usuario_id": employee.usuario_id,
+        "nome": employee.nome,
+        "cpf": employee.cpf,
+        "telefone": employee.telefone,
+        "email": employee.email,
+        "cargo": employee.cargo,
+        "profissao": employee.profissao,
+        "conselho_profissional": employee.conselho_profissional,
+        "numero_conselho": employee.numero_conselho,
+        "uf_conselho": employee.uf_conselho,
+        "situacao": employee.situacao,
+        "senha_temporaria": senha_temporaria,
+    }
+
+
+def _registration_snapshot(employee: m.Funcionario) -> dict:
+    return {
+        "nome": employee.nome,
+        "cpf": employee.cpf,
+        "email": employee.email,
+        "telefone": employee.telefone,
+        "cargo": employee.cargo,
+        "profissao": employee.profissao,
+        "conselho_profissional": employee.conselho_profissional,
+        "numero_conselho": employee.numero_conselho,
+        "uf_conselho": employee.uf_conselho,
+        "situacao": employee.situacao,
+        "usuario_id": employee.usuario_id,
+    }
+
+
+REGULATED_PROFESSIONS = {
+    "assistente social",
+    "enfermeiro",
+    "farmaceutico",
+    "farmacêutico",
+    "fisioterapeuta",
+    "fonoaudiologo",
+    "fonoaudiólogo",
+    "medico",
+    "médico",
+    "nutricionista",
+    "psicologo",
+    "psicólogo",
+    "terapeuta ocupacional",
+}
+
+
+def _validate_professional_registration(data: dict) -> None:
+    profession = (data.get("profissao") or "").strip().lower()
+    requires_registration = profession in REGULATED_PROFESSIONS or any(
+        data.get(field) for field in ("conselho_profissional", "numero_conselho", "uf_conselho")
+    )
+    if not requires_registration:
+        return
+    missing = [
+        field
+        for field in ("conselho_profissional", "numero_conselho", "uf_conselho")
+        if not data.get(field)
+    ]
+    if missing:
+        raise _http_error(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "CONSELHO_PROFISSIONAL_REQUIRED",
+            "Conselho profissional, número e UF são obrigatórios para profissão regulamentada",
+        )
+
+
+async def _revoke_context_refresh_tokens(db: AsyncSession, user_id: str, ilpi_id: str | None) -> int:
+    rows = (
+        await db.execute(
+            select(m.RefreshToken).where(
+                m.RefreshToken.user_id == user_id,
+                m.RefreshToken.ilpi_id == ilpi_id,
+                m.RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    now = _now()
+    for row in rows:
+        row.revoked_at = now
+    return len(rows)
+
+
+async def _load_local_user(db: AsyncSession, context: SecurityContext, user_id: str) -> m.User:
+    result = await db.execute(
+        select(m.User)
+        .join(m.UsuarioIlpiPerfil, m.UsuarioIlpiPerfil.usuario_id == m.User.id)
+        .where(
+            m.User.id == user_id,
+            m.UsuarioIlpiPerfil.ilpi_id == context.ilpi_id,
+            m.UsuarioIlpiPerfil.situacao == "ativo",
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Usuário não encontrado")
+    return user
+
+
 def _temporary_password() -> str:
     # Garante senha forte mesmo se token_urlsafe não trouxer todas as classes.
     return f"Aa1!{generate_temporary_password()}"
@@ -932,10 +1036,69 @@ async def criar_funcionario(
 ):
     _require_ilpi_context(context)
     data = _trim_strings(payload.model_dump(exclude_unset=True))
+    criar_usuario = data.pop("criar_usuario", False)
+    perfil_id = data.pop("perfil_id", None)
+    _validate_professional_registration(data)
     employee = m.Funcionario(id=_new_id(), ilpi_id=context.ilpi_id, situacao="ativo", **data)
+    temp_password = None
     try:
         db.add(employee)
         await db.flush()
+        if criar_usuario and perfil_id:
+            temp_password = _temporary_password()
+            user = m.User(
+                id=_new_id(),
+                nome=employee.nome,
+                email=employee.email,
+                password_hash=hash_password(temp_password),
+                ativo=True,
+                is_superuser=False,
+                exige_troca_senha=True,
+            )
+            db.add(user)
+            await db.flush()
+            employee.usuario_id = user.id
+            profile = (
+                await db.execute(
+                    select(m.Perfil).where(
+                        m.Perfil.id == perfil_id,
+                        m.Perfil.ilpi_id == context.ilpi_id,
+                        m.Perfil.escopo == ILPI_SCOPE,
+                        m.Perfil.situacao == "ativo",
+                    )
+                )
+            ).scalar_one_or_none()
+            if profile is None:
+                raise _http_error(status.HTTP_403_FORBIDDEN, "PERFIL_LOCAL_REQUIRED", "Perfil institucional obrigatório")
+            link = m.UsuarioIlpiPerfil(
+                id=_new_id(),
+                usuario_id=user.id,
+                ilpi_id=context.ilpi_id,
+                perfil_id=profile.id,
+                situacao="ativo",
+            )
+            db.add(link)
+            await db.flush()
+            add_audit(
+                db,
+                acao="usuario_ilpi_perfil.criado",
+                entidade="usuario_ilpi_perfis",
+                registro_id=link.id,
+                usuario_id=context.user.id,
+                ilpi_id=context.ilpi_id,
+                valores_posteriores={"usuario_id": user.id, "perfil_id": profile.id, "ilpi_id": context.ilpi_id},
+                request=request,
+            )
+            add_audit(
+                db,
+                acao="usuario.criado",
+                entidade="users",
+                registro_id=user.id,
+                usuario_id=context.user.id,
+                ilpi_id=context.ilpi_id,
+                valores_posteriores=_public_user(user),
+                request=request,
+            )
         add_audit(
             db,
             acao="funcionario.criado",
@@ -943,12 +1106,12 @@ async def criar_funcionario(
             registro_id=employee.id,
             usuario_id=context.user.id,
             ilpi_id=context.ilpi_id,
-            valores_posteriores={"nome": employee.nome, "cpf": employee.cpf, "email": employee.email},
+            valores_posteriores=_registration_snapshot(employee),
             request=request,
         )
         await db.commit()
         await db.refresh(employee)
-        return employee
+        return _public_funcionario(employee, senha_temporaria=temp_password)
     except IntegrityError:
         await db.rollback()
         raise _http_error(status.HTTP_409_CONFLICT, "FUNCIONARIO_DUPLICADO", "Funcionário já cadastrado nesta ILPI")
@@ -1095,6 +1258,244 @@ async def atualizar_permissoes_perfil(
     )
     await db.commit()
     return {"perfil_id": profile.id, "permissoes": sorted(payload.permissoes)}
+
+
+@funcionarios_router.get("/", response_model=list[s.FuncionarioResponse])
+async def listar_funcionarios(
+    skip: int = 0,
+    limit: int = 100,
+    situacao: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("funcionarios:ler")),
+):
+    _require_ilpi_context(context)
+    query = select(m.Funcionario).where(m.Funcionario.ilpi_id == context.ilpi_id)
+    if situacao:
+        query = query.where(m.Funcionario.situacao == situacao)
+    result = await db.execute(query.order_by(m.Funcionario.created_at.desc()).offset(skip).limit(limit))
+    return result.scalars().all()
+
+
+@funcionarios_router.get("/{funcionario_id}", response_model=s.FuncionarioResponse)
+async def obter_funcionario(
+    funcionario_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("funcionarios:ler")),
+):
+    _require_ilpi_context(context)
+    employee = (
+        await db.execute(
+            select(m.Funcionario).where(m.Funcionario.id == funcionario_id, m.Funcionario.ilpi_id == context.ilpi_id)
+        )
+    ).scalar_one_or_none()
+    if employee is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "FUNCIONARIO_NOT_FOUND", "Funcionário não encontrado")
+    return employee
+
+
+@funcionarios_router.put("/{funcionario_id}", response_model=s.FuncionarioResponse)
+async def atualizar_funcionario(
+    funcionario_id: str,
+    payload: s.FuncionarioUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("funcionarios:atualizar")),
+):
+    _require_ilpi_context(context)
+    employee = (
+        await db.execute(
+            select(m.Funcionario).where(m.Funcionario.id == funcionario_id, m.Funcionario.ilpi_id == context.ilpi_id)
+        )
+    ).scalar_one_or_none()
+    if employee is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "FUNCIONARIO_NOT_FOUND", "Funcionário não encontrado")
+    before = _registration_snapshot(employee)
+    data = _trim_strings(payload.model_dump(exclude_unset=True))
+    _validate_professional_registration(data)
+    for key, value in data.items():
+        setattr(employee, key, value)
+    add_audit(
+        db,
+        acao="funcionario.atualizado",
+        entidade="funcionarios",
+        registro_id=employee.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_anteriores=before,
+        valores_posteriores=_registration_snapshot(employee),
+        request=request,
+    )
+    try:
+        await db.commit()
+        await db.refresh(employee)
+        return employee
+    except IntegrityError:
+        await db.rollback()
+        raise _http_error(status.HTTP_409_CONFLICT, "FUNCIONARIO_DUPLICADO", "Funcionário já cadastrado nesta ILPI")
+
+
+@funcionarios_router.delete("/{funcionario_id}", status_code=204)
+async def inativar_funcionario(
+    funcionario_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("funcionarios:inativar")),
+):
+    _require_ilpi_context(context)
+    employee = (
+        await db.execute(
+            select(m.Funcionario).where(m.Funcionario.id == funcionario_id, m.Funcionario.ilpi_id == context.ilpi_id)
+        )
+    ).scalar_one_or_none()
+    if employee is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "FUNCIONARIO_NOT_FOUND", "Funcionário não encontrado")
+    if employee.situacao == "inativo":
+        raise _http_error(status.HTTP_409_CONFLICT, "FUNCIONARIO_JA_INATIVO", "Funcionário já está inativo")
+    before = _registration_snapshot(employee)
+    employee.situacao = "inativo"
+    add_audit(
+        db,
+        acao="funcionario.inativado",
+        entidade="funcionarios",
+        registro_id=employee.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_anteriores=before,
+        valores_posteriores=_registration_snapshot(employee),
+        request=request,
+    )
+    await db.commit()
+    return None
+
+
+@funcionarios_router.delete("/{funcionario_id}/vincular-usuario", status_code=200)
+async def desvincular_usuario_funcionario(
+    funcionario_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("funcionarios:vincular_usuario")),
+):
+    _require_ilpi_context(context)
+    employee = (
+        await db.execute(
+            select(m.Funcionario).where(m.Funcionario.id == funcionario_id, m.Funcionario.ilpi_id == context.ilpi_id)
+        )
+    ).scalar_one_or_none()
+    if employee is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "FUNCIONARIO_NOT_FOUND", "Funcionário não encontrado")
+    if employee.usuario_id is None:
+        raise _http_error(status.HTTP_409_CONFLICT, "SEM_VINCULO", "Funcionário não possui usuário vinculado")
+    before = {"usuario_id": employee.usuario_id}
+    user_id = employee.usuario_id
+    employee.usuario_id = None
+    await _revoke_context_refresh_tokens(db, user_id, context.ilpi_id)
+    add_audit(
+        db,
+        acao="funcionario.usuario_desvinculado",
+        entidade="funcionarios",
+        registro_id=employee.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_anteriores=before,
+        valores_posteriores={"usuario_id": None},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(employee)
+    return {"id": employee.id, "usuario_id": None}
+
+
+@usuarios_router.get("/", response_model=list[s.UserResponse])
+async def listar_usuarios_locais(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("usuarios:ler")),
+):
+    _require_ilpi_context(context)
+    query = (
+        select(m.User)
+        .join(m.UsuarioIlpiPerfil, m.UsuarioIlpiPerfil.usuario_id == m.User.id)
+        .where(m.UsuarioIlpiPerfil.ilpi_id == context.ilpi_id, m.UsuarioIlpiPerfil.situacao == "ativo")
+        .distinct()
+    )
+    result = await db.execute(query.order_by(m.User.created_at.desc()).offset(skip).limit(limit))
+    return result.scalars().all()
+
+
+@usuarios_router.get("/{user_id}", response_model=s.UserResponse)
+async def obter_usuario_local(
+    user_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("usuarios:ler")),
+):
+    _require_ilpi_context(context)
+    user = await _load_local_user(db, context, user_id)
+    return user
+
+
+@usuarios_router.put("/{user_id}", response_model=s.UserResponse)
+async def atualizar_usuario_local(
+    user_id: str,
+    payload: s.UsuarioAdminUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("usuarios:atualizar")),
+):
+    _require_ilpi_context(context)
+    user = await _load_local_user(db, context, user_id)
+    data = _trim_strings(payload.model_dump(exclude_unset=True))
+    for key, value in data.items():
+        setattr(user, key, value)
+    add_audit(
+        db,
+        acao="usuario.atualizado",
+        entidade="users",
+        registro_id=user.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_posteriores=_public_user(user),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@usuarios_router.delete("/{user_id}/acesso", status_code=200)
+async def revogar_acesso_local(
+    user_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("usuarios:inativar")),
+):
+    _require_ilpi_context(context)
+    user = await _load_local_user(db, context, user_id)
+    links = (
+        await db.execute(
+            select(m.UsuarioIlpiPerfil).where(
+                m.UsuarioIlpiPerfil.usuario_id == user.id,
+                m.UsuarioIlpiPerfil.ilpi_id == context.ilpi_id,
+                m.UsuarioIlpiPerfil.situacao == "ativo",
+            )
+        )
+    ).scalars().all()
+    for link in links:
+        link.situacao = "inativo"
+        link.data_final = _now()
+    await _revoke_context_refresh_tokens(db, user.id, context.ilpi_id)
+    add_audit(
+        db,
+        acao="usuario.acesso_revogado",
+        entidade="users",
+        registro_id=user.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_posteriores={"situacao": "inativo"},
+        request=request,
+    )
+    await db.commit()
+    return {"usuario_id": user.id, "acesso_revogado": True}
 
 
 @permissoes_router.get("/")

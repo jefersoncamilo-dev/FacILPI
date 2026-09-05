@@ -176,8 +176,43 @@ class UsuarioAdminCreate(BaseModel):
 class UsuarioAdminResponse(UserResponse):
     senha_temporaria: str
 
+class UsuarioAdminUpdate(BaseModel):
+    nome: Optional[str] = Field(None, min_length=2, max_length=255)
+
 class FuncionarioAdminCreate(BaseModel):
     nome: str = Field(..., min_length=2, max_length=255)
+    cpf: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[EmailStr] = None
+    cargo: Optional[str] = None
+    profissao: Optional[str] = None
+    conselho_profissional: Optional[str] = None
+    numero_conselho: Optional[str] = None
+    uf_conselho: Optional[str] = None
+    criar_usuario: bool = False
+    perfil_id: Optional[str] = None
+
+    @field_validator("cpf")
+    @classmethod
+    def cpf_valid(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        if not validate_cpf(v):
+            raise ValueError("CPF inválido")
+        return re.sub(r"\D", "", v)
+
+    @field_validator("uf_conselho")
+    @classmethod
+    def uf_conselho_valid(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        value = v.strip().upper()
+        if value not in UF_VALIDAS:
+            raise ValueError("UF do conselho inválida")
+        return value
+
+class FuncionarioUpdate(BaseModel):
+    nome: Optional[str] = Field(None, min_length=2, max_length=255)
     cpf: Optional[str] = None
     telefone: Optional[str] = None
     email: Optional[EmailStr] = None
@@ -196,11 +231,31 @@ class FuncionarioAdminCreate(BaseModel):
             raise ValueError("CPF inválido")
         return re.sub(r"\D", "", v)
 
-class FuncionarioResponse(FuncionarioAdminCreate):
+    @field_validator("uf_conselho")
+    @classmethod
+    def uf_conselho_valid(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        value = v.strip().upper()
+        if value not in UF_VALIDAS:
+            raise ValueError("UF do conselho inválida")
+        return value
+
+class FuncionarioResponse(BaseModel):
     id: str
     ilpi_id: str
     usuario_id: Optional[str] = None
+    nome: str
+    cpf: Optional[str] = None
+    telefone: Optional[str] = None
+    email: Optional[str] = None
+    cargo: Optional[str] = None
+    profissao: Optional[str] = None
+    conselho_profissional: Optional[str] = None
+    numero_conselho: Optional[str] = None
+    uf_conselho: Optional[str] = None
     situacao: str = "ativo"
+    senha_temporaria: Optional[str] = None
     class Config:
         from_attributes = True
 

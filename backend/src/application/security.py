@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..infrastructure.database import get_db
 from ..infrastructure.models import (
+    Funcionario,
     Perfil,
     PerfilPermissao,
     Permissao,
@@ -373,6 +374,23 @@ async def load_security_context(
             message="Contexto de autorização não disponível",
             context=context,
         )
+    if context.scope == ILPI_SCOPE:
+        active_employee = (
+            await db.execute(
+                select(Funcionario.id).where(
+                    Funcionario.ilpi_id == context.ilpi_id,
+                    Funcionario.usuario_id == context.user.id,
+                    Funcionario.situacao == "ativo",
+                )
+            )
+        ).scalar_one_or_none()
+        if active_employee is None:
+            _deny(
+                code=AUTH_CONTEXT_REQUIRED,
+                http_status=status.HTTP_403_FORBIDDEN,
+                message="Contexto de autorização não disponível",
+                context=context,
+            )
     return context
 
 
