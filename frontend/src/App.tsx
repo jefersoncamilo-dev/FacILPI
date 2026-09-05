@@ -8,6 +8,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Residentes } from './pages/Residentes'
 import { MeuPlantao } from './pages/MeuPlantao'
 import { Placeholder } from './pages/Placeholder'
+import { Equipe } from './pages/Equipe'
 
 function Protected({ children }: { children: React.ReactNode }) {
   return <PrivateRoute><Layout>{children}</Layout></PrivateRoute>
@@ -33,7 +34,7 @@ export default function App() {
           <Route path="/agenda" element={<Protected><Placeholder title="Agenda Clínica" desc="Compromissos com detecção de conflito" /></Protected>} />
           <Route path="/passagem" element={<Protected><Placeholder title="Passagem de Plantão" desc="Resumo automático do turno + pendências" /></Protected>} />
           <Route path="/quartos" element={<Protected><Placeholder title="Quartos e Leitos" desc="Mapa de ocupação com disponibilidade" /></Protected>} />
-          <Route path="/equipe" element={<Protected><Placeholder title="Equipe e Escalas" desc="Dimensionamento por grau de dependência" /></Protected>} />
+          <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
           <Route path="/estoque" element={<Protected><Placeholder title="Estoque" desc="Entradas/saídas, lote, validade, saldo" /></Protected>} />
           <Route path="/financeiro" element={<Protected><Placeholder title="Financeiro" desc="Cobranças, pagamentos, inadimplência" /></Protected>} />
           <Route path="/familia" element={<Protected><Placeholder title="Portal da Família" /></Protected>} />

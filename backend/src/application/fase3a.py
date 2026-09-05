@@ -1169,6 +1169,22 @@ async def vincular_usuario_funcionario(
         raise _http_error(status.HTTP_409_CONFLICT, "FUNCIONARIO_DUPLICADO", "Usuário já vinculado a funcionário nesta ILPI")
 
 
+@perfis_router.get("/", response_model=list[s.PerfilResponse])
+async def listar_perfis_locais(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("perfis:ler")),
+):
+    _require_ilpi_context(context)
+    query = select(m.Perfil).where(
+        m.Perfil.ilpi_id == context.ilpi_id,
+        m.Perfil.escopo == ILPI_SCOPE,
+    )
+    result = await db.execute(query.order_by(m.Perfil.nome).offset(skip).limit(limit))
+    return result.scalars().all()
+
+
 @perfis_router.post("/", response_model=s.PerfilResponse, status_code=201)
 async def criar_perfil(
     payload: s.PerfilAdminCreate,

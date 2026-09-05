@@ -195,6 +195,10 @@ async def _create_ilpi_admin_context(client: httpx.AsyncClient, db: AsyncSession
 async def _create_other_tenant(db: AsyncSession) -> dict[str, str]:
     ilpi = m.Instituicao(id=str(uuid.uuid4()), razao_social="ILPI Outro Tenant", situacao=ILPI_DRAFT, capacidade=5, uf="RJ")
     db.add(ilpi)
+    # Flush incremental: os models não declaram relationship(), então o UoW
+    # pode ordenar o flush fora da ordem de dependência em bancos que impõem
+    # FK (PostgreSQL). SQLite mascara o problema (FK desligado por padrão).
+    await db.flush()
     template = (await db.execute(select(m.Perfil).where(m.Perfil.chave == "ilpi_admin", m.Perfil.ilpi_id.is_(None)))).scalar_one()
     profile = m.Perfil(
         id=str(uuid.uuid4()),
@@ -206,11 +210,13 @@ async def _create_other_tenant(db: AsyncSession) -> dict[str, str]:
         situacao="ativo",
     )
     db.add(profile)
+    await db.flush()
     permission_ids = (
         await db.execute(select(m.PerfilPermissao.permissao_id).where(m.PerfilPermissao.perfil_id == template.id))
     ).scalars().all()
     for permission_id in permission_ids:
         db.add(m.PerfilPermissao(perfil_id=profile.id, permissao_id=permission_id))
+    await db.flush()
     user = m.User(
         id=str(uuid.uuid4()),
         nome="Usuario Outro Tenant",
@@ -221,6 +227,7 @@ async def _create_other_tenant(db: AsyncSession) -> dict[str, str]:
         exige_troca_senha=False,
     )
     db.add(user)
+    await db.flush()
     employee = m.Funcionario(
         id=str(uuid.uuid4()),
         ilpi_id=ilpi.id,
