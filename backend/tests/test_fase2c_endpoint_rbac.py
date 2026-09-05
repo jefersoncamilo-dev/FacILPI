@@ -403,8 +403,10 @@ def test_instituicoes_endpoint_rbac_and_tenant_isolation(endpoint_db):
 
 
 def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
+    # F5A-2A: Residentes (GET/POST/PUT) usa RBAC real com isolamento de tenant
+    # (cobertura em test_fase5a2a_residentes_rbac_tenant.py); aqui permanece
+    # apenas o DELETE de residentes, ainda fail-closed (BLOCKED_FOR_F5B).
     clinical_list_routes = (
-        "/api/residentes/",
         "/api/familiares/",
         "/api/medicamentos/",
         "/api/prescricoes/",
@@ -417,8 +419,7 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
     resident_id = _new_id()
     medication_id = _new_id()
     clinical_mutations = (
-        ("post", "/api/residentes/", {"nome": "Residente", "data_nascimento": "1940-01-01"}),
-        ("put", f"/api/residentes/{resident_id}", {"nome": "Residente"}),
+        # F5A-2A: POST/PUT de residentes liberados via RBAC; DELETE segue fail-closed.
         ("delete", f"/api/residentes/{resident_id}", None),
         ("post", "/api/familiares/", {"residente_id": resident_id, "nome": "Familiar"}),
         ("put", f"/api/familiares/{_new_id()}", {"residente_id": resident_id, "nome": "Familiar"}),

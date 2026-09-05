@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import false, select, func
 import pathlib
 
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
@@ -25,6 +25,8 @@ from .application.fase3a import (
 )
 from .application.security import (
     ILPI_SCOPE,
+    PERMISSION_DENIED,
+    RESOURCE_NOT_FOUND,
     SecurityContext,
     block_pending_permission_catalog,
     ensure_same_tenant,
@@ -130,6 +132,7 @@ def make_crud_router(
     permissions: dict[str, str] | None = None,
     fail_closed: bool = False,
     tenant_resource: str | None = None,
+    tenant_column: str | None = None,
 ):
     router = APIRouter(prefix=prefix, tags=tags)
 
@@ -137,7 +140,12 @@ def make_crud_router(
         if fail_closed:
             return block_pending_permission_catalog
         if permissions is not None:
-            return require_permission(permissions[action])
+            permission_key = permissions.get(action)
+            if not permission_key:
+                # Ação sem permissão aprovada (ex.: DELETE físico aguardando
+                # inativação lógica na F5B): continua fail-closed.
+                return block_pending_permission_catalog
+            return require_permission(permission_key)
         return get_current_user
 
     def scoped_query(query, context):
@@ -147,11 +155,41 @@ def make_crud_router(
             and context.scope == ILPI_SCOPE
         ):
             return query.where(model.id == context.ilpi_id)
+        if tenant_column is not None:
+            if (
+                isinstance(context, SecurityContext)
+                and context.scope == ILPI_SCOPE
+                and context.ilpi_id is not None
+            ):
+                return query.where(getattr(model, tenant_column) == context.ilpi_id)
+            # Fail-closed: sem contexto ILPI válido, nada é listado.
+            return query.where(false())
         return query
 
     def ensure_resource_scope(context, item_id: str) -> None:
         if tenant_resource == "instituicao" and isinstance(context, SecurityContext):
             ensure_same_tenant(context, item_id)
+
+    def ensure_clinical_tenant(context, obj) -> None:
+        # Recurso clínico precisa pertencer à ILPI da sessão; divergência
+        # retorna 404 sem revelar existência (via ensure_same_tenant).
+        if tenant_column is None or not isinstance(context, SecurityContext):
+            return
+        ensure_same_tenant(context, getattr(obj, tenant_column, None))
+
+    def resolve_session_tenant(context) -> str:
+        # Única fonte válida de tenant: SecurityContext.ilpi_id. Valores de
+        # body/query/path/header nunca decidem o tenant efetivo.
+        if (
+            isinstance(context, SecurityContext)
+            and context.scope == ILPI_SCOPE
+            and context.ilpi_id is not None
+        ):
+            return context.ilpi_id
+        raise HTTPException(
+            status_code=403,
+            detail={"code": PERMISSION_DENIED, "message": "Permissão não autorizada"},
+        )
 
     @router.get("/", response_model=list[response_schema])
     async def list_items(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), context = Depends(guard("list"))):
@@ -164,6 +202,10 @@ def make_crud_router(
     @router.post("/", response_model=response_schema, status_code=201)
     async def create_item(payload: create_schema, db: AsyncSession = Depends(get_db), context = Depends(guard("create"))):
         data = payload.model_dump(exclude_unset=True)
+        if tenant_column is not None:
+            # O cliente nunca escolhe o tenant: sobrescreve qualquer valor
+            # recebido (ex.: ResidenteCreate.instituicao_id) pelo da sessão.
+            data[tenant_column] = resolve_session_tenant(context)
         if model == m.Instituicao and data.get("cnpj"):
             existing = await db.execute(select(m.Instituicao).where(m.Instituicao.cnpj == data["cnpj"]))
             if existing.scalar_one_or_none():
@@ -188,7 +230,8 @@ def make_crud_router(
         result = await db.execute(select(model).where(model.id == item_id))
         obj = result.scalar_one_or_none()
         if not obj:
-            raise HTTPException(status_code=404, detail="Não encontrado")
+            raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+        ensure_clinical_tenant(context, obj)
         return obj
 
     @router.put("/{item_id}", response_model=response_schema)
@@ -197,8 +240,13 @@ def make_crud_router(
         result = await db.execute(select(model).where(model.id == item_id))
         obj = result.scalar_one_or_none()
         if not obj:
-            raise HTTPException(status_code=404, detail="Não encontrado")
+            raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+        ensure_clinical_tenant(context, obj)
         data = payload.model_dump(exclude_unset=True)
+        if tenant_column is not None:
+            # Troca de tenant via update é proibida: ignora o tenant do cliente.
+            data.pop("instituicao_id", None)
+            data.pop("ilpi_id", None)
         for k, v in data.items():
             if isinstance(v, str):
                 v = v.strip()
@@ -215,7 +263,8 @@ def make_crud_router(
         result = await db.execute(select(model).where(model.id == item_id))
         obj = result.scalar_one_or_none()
         if not obj:
-            raise HTTPException(status_code=404, detail="Não encontrado")
+            raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+        ensure_clinical_tenant(context, obj)
         await db.delete(obj)
         await db.commit()
         return None
@@ -224,7 +273,24 @@ def make_crud_router(
 
 # Create routers for each entity
 instituicoes_router = fase3a_instituicoes_router
-residentes_router = make_crud_router(m.Residente, s.ResidenteCreate, s.ResidenteUpdate, s.ResidenteResponse, "/residentes", ["residentes"], fail_closed=True)
+# F5A-2A: Residentes protegido por RBAC + tenant (coluna instituicao_id).
+# DELETE permanece fail-closed (físico; inativação lógica é F5B) via "delete": None.
+residentes_router = make_crud_router(
+    m.Residente,
+    s.ResidenteCreate,
+    s.ResidenteUpdate,
+    s.ResidenteResponse,
+    "/residentes",
+    ["residentes"],
+    permissions={
+        "list": "residentes:ler",
+        "get": "residentes:ler",
+        "create": "residentes:criar",
+        "update": "residentes:atualizar",
+        "delete": None,
+    },
+    tenant_column="instituicao_id",
+)
 familiares_router = make_crud_router(m.Familiar, s.FamiliarCreate, s.FamiliarCreate, s.FamiliarResponse, "/familiares", ["familiares"], fail_closed=True)
 medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"], fail_closed=True)
 prescricoes_router = make_crud_router(m.Prescricao, s.PrescricaoCreate, s.PrescricaoCreate, s.PrescricaoResponse, "/prescricoes", ["prescricoes"], fail_closed=True)
