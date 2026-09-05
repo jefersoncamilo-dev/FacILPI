@@ -31,6 +31,7 @@ from src.application import auth  # noqa: E402
 from src.application.auth import create_access_token, hash_password  # noqa: E402
 from src.application.security import (  # noqa: E402
     AUTH_CONTEXT_REQUIRED,
+    ILPI_CONTEXT_REQUIRED,
     PERMISSION_CATALOG_PENDING,
     PERMISSION_DENIED,
     RESOURCE_NOT_FOUND,
@@ -213,6 +214,12 @@ async def _create_ilpi_user(
     permissions: set[str],
     profile_key: str = "ilpi_admin",
 ) -> m.User:
+    """ILPI user with profile + link + active Funcionario (Fase 3B requirement).
+
+    Rows are flushed in FK dependency order because PostgreSQL enforces FK
+    constraints immediately while the models declare no ORM relationships
+    for the unit of work to sort by.
+    """
     user = _new_user()
     profile = m.Perfil(
         id=_new_id(),
@@ -222,7 +229,20 @@ async def _create_ilpi_user(
         escopo="ilpi",
         situacao="ativo",
     )
-    db.add_all([institution, user, profile, _new_link(user.id, profile.id, institution.id)])
+    db.add_all([institution, user])
+    await db.flush()
+    db.add(profile)
+    await db.flush()
+    employee = m.Funcionario(
+        id=_new_id(),
+        ilpi_id=institution.id,
+        usuario_id=user.id,
+        nome=user.nome,
+        email=user.email,
+        cargo="Administrador da ILPI",
+        situacao="ativo",
+    )
+    db.add_all([employee, _new_link(user.id, profile.id, institution.id)])
     await db.flush()
     await _grant_permissions(db, profile.id, permissions)
     return user
@@ -268,8 +288,35 @@ async def _count(db: AsyncSession, model) -> int:
 
 def test_public_register_is_disabled_and_login_still_works(endpoint_db):
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        # Login user must be a valid institutional user under the current
+        # model: User + local Perfil + UsuarioIlpiPerfil + active Funcionario.
+        # The login itself uses the default flow (no explicit scope), which
+        # resolves the single database-validated context.
+        institution = _new_institution("ILPI Login")
         user = _new_user(password_hash=hash_password(PASSWORD))
-        db.add(user)
+        profile = m.Perfil(
+            id=_new_id(),
+            ilpi_id=institution.id,
+            nome="Perfil Login",
+            chave="perfil_login",
+            escopo="ilpi",
+            situacao="ativo",
+        )
+        db.add_all([institution, user])
+        await db.flush()
+        db.add(profile)
+        await db.flush()
+        employee = m.Funcionario(
+            id=_new_id(),
+            ilpi_id=institution.id,
+            usuario_id=user.id,
+            nome=user.nome,
+            email=user.email,
+            cargo="Cuidador",
+            situacao="ativo",
+        )
+        db.add_all([employee, _new_link(user.id, profile.id, institution.id)])
+        await db.flush()
         await db.commit()
         users_before = await _count(db, m.User)
 
@@ -518,11 +565,15 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
 
 
 def test_catalog_admin_routes_were_not_invented_or_mutated(endpoint_db):
-    absent_admin_routes = (
-        "/api/usuarios/",
-        "/api/funcionarios/",
-        "/api/perfis/",
-        "/api/permissoes/",
+    """Administrative routes exist (Fase 3A) but stay protected and immutable.
+
+    The historical contract expected 404 for these routes. The current
+    contract is: implemented and guarded. This test proves the current
+    property instead of the obsolete absence: unauthenticated reads are 401,
+    out-of-scope or ungranted attempts are 403 with the guard's code,
+    never-invented routes stay 404, and no attempt mutates the catalog.
+    """
+    still_absent_routes = (
         "/api/configuracoes/",
         "/api/auditoria/",
     )
@@ -535,9 +586,48 @@ def test_catalog_admin_routes_were_not_invented_or_mutated(endpoint_db):
             "permissoes": await _count(db, m.Permissao),
             "perfis": await _count(db, m.Perfil),
             "perfil_permissoes": await _count(db, m.PerfilPermissao),
+            "users": await _count(db, m.User),
+            "funcionarios": await _count(db, m.Funcionario),
         }
 
-        for route in absent_admin_routes:
+        no_token_usuarios = await client.get("/api/usuarios/")
+        assert no_token_usuarios.status_code == 401
+        no_token_funcionarios = await client.get("/api/funcionarios/")
+        assert no_token_funcionarios.status_code == 401
+
+        usuarios = await client.get("/api/usuarios/", headers=headers)
+        assert usuarios.status_code == 403
+        assert _detail_code(usuarios) == ILPI_CONTEXT_REQUIRED
+
+        funcionarios = await client.get("/api/funcionarios/", headers=headers)
+        assert funcionarios.status_code == 403
+        assert _detail_code(funcionarios) == PERMISSION_DENIED
+
+        perfis = await client.get("/api/perfis/", headers=headers)
+        assert perfis.status_code == 403
+        assert _detail_code(perfis) == ILPI_CONTEXT_REQUIRED
+
+        permissoes = await client.get("/api/permissoes/", headers=headers)
+        assert permissoes.status_code == 200
+        assert any(item["chave"] == "residentes:ler" for item in permissoes.json())
+
+        create_user = await client.post(
+            "/api/usuarios/",
+            headers=headers,
+            json={"nome": "Nao Criar", "email": "nao-criar-admin@example.com"},
+        )
+        assert create_user.status_code == 403
+        assert _detail_code(create_user) == ILPI_CONTEXT_REQUIRED
+
+        create_employee = await client.post(
+            "/api/funcionarios/",
+            headers=headers,
+            json={"nome": "Nao Criar"},
+        )
+        assert create_employee.status_code == 403
+        assert _detail_code(create_employee) == PERMISSION_DENIED
+
+        for route in still_absent_routes:
             read_response = await client.get(route, headers=headers)
             assert read_response.status_code == 404
 
@@ -560,6 +650,8 @@ def test_catalog_admin_routes_were_not_invented_or_mutated(endpoint_db):
             "permissoes": await _count(db, m.Permissao),
             "perfis": await _count(db, m.Perfil),
             "perfil_permissoes": await _count(db, m.PerfilPermissao),
+            "users": await _count(db, m.User),
+            "funcionarios": await _count(db, m.Funcionario),
         }
 
     asyncio.run(_with_client(endpoint_db, scenario))
