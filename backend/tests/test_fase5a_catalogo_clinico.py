@@ -171,7 +171,7 @@ def _run_catalog_scenario(url: str) -> None:
     assert _grants(url, CLONE_ID) == EXPECTED_ADMIN_22
     before = {row["chave"] for row in asyncio.run(_query(url, "SELECT chave FROM permissoes"))}
     assert len(before) == 26
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "006_catalogo_clinico_rbac"))
     snap = {row["chave"]: row["id"] for row in asyncio.run(_query(url, "SELECT chave, id FROM permissoes"))}
     assert len(snap) == 40, sorted(snap)
     assert len(set(snap.values())) == 40, "duplicated permission ids"
@@ -186,8 +186,8 @@ def _run_catalog_scenario(url: str) -> None:
     asyncio.run(_exec(url, "INSERT INTO perfil_permissoes (perfil_id, permissao_id) SELECT :cid, permissao_id FROM perfil_permissoes WHERE perfil_id = :tid", {"cid": FUTURE_CLONE_ID, "tid": TEMPLATE_ID}))
     assert _grants(url, FUTURE_CLONE_ID) == _grants(url, TEMPLATE_ID)
     assert set(EXPECTED_KEYS) <= _grants(url, FUTURE_CLONE_ID)
-    # idempotÃƒÆ’Ã‚Âªncia: upgrade novamente nÃƒÆ’Ã‚Â£o duplica nem altera
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    # idempotência: upgrade novamente não duplica nem altera
+    _assert_success(_run_alembic(url, "upgrade", "006_catalogo_clinico_rbac"))
     assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_KEYS)
     assert len(asyncio.run(_query(url, "SELECT perfil_id FROM perfil_permissoes"))) == 59 + 28 + 36
     # downgrade remove exatamente os artefatos da 006 e restaura o baseline
@@ -199,7 +199,7 @@ def _run_catalog_scenario(url: str) -> None:
     assert _grants(url, CLONE_ID) == EXPECTED_ADMIN_22
     assert _grants(url, FUTURE_CLONE_ID) == EXPECTED_ADMIN_22
     # re-upgrade restaura integralmente
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "006_catalogo_clinico_rbac"))
     assert len(asyncio.run(_query(url, "SELECT chave FROM permissoes"))) == 40
     assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_KEYS)
     assert _grants(url, FUTURE_CLONE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_KEYS)
@@ -208,7 +208,7 @@ def _run_catalog_scenario(url: str) -> None:
 
 
 def _run_downgrade_refusal_scenario(url: str) -> None:
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "006_catalogo_clinico_rbac"))
     asyncio.run(_exec(url, "INSERT INTO perfis (id, ilpi_id, nome, chave, descricao, escopo, situacao) VALUES (:id, NULL, 'Perfil externo', 'perfil_externo', 'fixture', 'global', 'ativo')", {"id": CUSTOM_PROFILE_ID}))
     asyncio.run(_exec(url, "INSERT INTO perfil_permissoes (perfil_id, permissao_id) VALUES (:pid, :mid)", {"pid": CUSTOM_PROFILE_ID, "mid": EXPECTED_PERMISSION_IDS[0]}))
     refused = _run_alembic(url, "downgrade", "005_fase3a_bootstrap_auth")

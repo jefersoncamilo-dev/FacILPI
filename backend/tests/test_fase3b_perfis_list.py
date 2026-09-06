@@ -318,6 +318,6 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
                 "template_permissoes": "SELECT COUNT(*) FROM perfil_permissoes pp JOIN perfis p ON p.id = pp.perfil_id WHERE p.ilpi_id IS NULL",
             }.items()
         }
-        assert counts == {"permissoes": 40, "template_perfis": 2, "template_permissoes": 51}
+        assert counts == {"permissoes": 44, "template_perfis": 2, "template_permissoes": 55}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))
