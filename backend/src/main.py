@@ -350,6 +350,31 @@ familiares_router = make_crud_router(
         "tenant_column": "instituicao_id",
     },
 )
+# F5A-2C: Documentos do Residente protegido por RBAC + tenant (coluna
+# instituicao_id) + vínculo seguro com Residente (validado no POST;
+# residente_id imutável no PUT). DELETE permanece fail-closed (físico;
+# documentos:inativar NÃO autoriza DELETE físico).
+documentos_router = make_crud_router(
+    m.Documento,
+    s.DocumentoCreate,
+    s.DocumentoUpdate,
+    s.DocumentoResponse,
+    "/documentos",
+    ["documentos"],
+    permissions={
+        "list": "documentos:ler",
+        "get": "documentos:ler",
+        "create": "documentos:criar",
+        "update": "documentos:atualizar",
+        "delete": None,
+    },
+    tenant_column="instituicao_id",
+    parent_check={
+        "model": m.Residente,
+        "id_field": "residente_id",
+        "tenant_column": "instituicao_id",
+    },
+)
 medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"], fail_closed=True)
 prescricoes_router = make_crud_router(m.Prescricao, s.PrescricaoCreate, s.PrescricaoCreate, s.PrescricaoResponse, "/prescricoes", ["prescricoes"], fail_closed=True)
 tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
@@ -411,6 +436,7 @@ app.include_router(perfis_router, prefix="/api")
 app.include_router(permissoes_router, prefix="/api")
 app.include_router(residentes_router, prefix="/api")
 app.include_router(familiares_router, prefix="/api")
+app.include_router(documentos_router, prefix="/api")
 app.include_router(medicamentos_router, prefix="/api")
 app.include_router(prescricoes_router, prefix="/api")
 app.include_router(tarefas_router, prefix="/api")
