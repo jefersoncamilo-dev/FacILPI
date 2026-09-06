@@ -64,8 +64,19 @@ FAKE_ILPI_A = "fac15000-0000-4000-8000-0000000000a1"
 FAKE_ILPI_B = "fac15000-0000-4000-8000-0000000000b2"
 
 BASELINE_PRE_007 = 40
-BASELINE_POST_007 = 44
+BASELINE_POST_007_PRE_008 = 44
+BASELINE_POST_007 = 51
 EXPECTED_DOC_COUNT = 4
+
+EXPECTED_F5A2D_KEYS = (
+    "quartos_leitos:ler",
+    "quartos_leitos:criar",
+    "quartos_leitos:atualizar",
+    "quartos_leitos:inativar",
+    "ausencias:ler",
+    "ausencias:criar",
+    "ausencias:atualizar",
+)
 
 
 def _sqlite_url(path: pathlib.Path) -> str:
@@ -214,11 +225,11 @@ def _run_upgrade_scenario(url: str) -> None:
 
     # Verify ilpi_admin template gets exactly 4 new grants
     template_grants = _grants(url, TEMPLATE_ID)
-    assert template_grants == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS)
+    assert template_grants == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
 
     # Verify clone gets same grants
     clone_grants = _grants(url, CLONE_ID)
-    assert clone_grants == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS)
+    assert clone_grants == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
 
     # Verify platform_superuser gets zero documentos grants
     super_grants = _grants(url, SUPER_ID)
@@ -230,9 +241,9 @@ def _run_upgrade_scenario(url: str) -> None:
     for key in EXPECTED_DOC_KEYS:
         assert f'"{key}"' in security, f"{key} not in _ILPI_ONLY_PERMISSIONS"
 
-    # Verify 004 and 006 catalogs preserved
+    # Verify 004, 006 and 008 catalogs preserved (non-document permissions)
     admin_keys = {row["chave"] for row in asyncio.run(_query(url, "SELECT chave FROM permissoes WHERE modulo NOT IN ('documentos')"))}
-    assert len(admin_keys) == BASELINE_PRE_007, "004+006 catalog should be preserved"
+    assert len(admin_keys) == BASELINE_PRE_007 + len(EXPECTED_F5A2D_KEYS), "004+006+008 catalogs should be preserved"
 
 
 def _run_future_clone_scenario(url: str) -> None:
@@ -246,7 +257,7 @@ def _run_future_clone_scenario(url: str) -> None:
 def _run_idempotency_scenario(url: str) -> None:
     """Re-upgrade does not duplicate permissions."""
     _assert_success(_run_alembic(url, "upgrade", "head"))
-    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS)
+    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
     perms = asyncio.run(_query(url, "SELECT chave FROM permissoes"))
     assert len(perms) == BASELINE_POST_007
 
@@ -266,8 +277,8 @@ def _run_reupgrade_scenario(url: str) -> None:
     """Re-upgrade after downgrade restores everything."""
     _assert_success(_run_alembic(url, "upgrade", "head"))
     assert len(asyncio.run(_query(url, "SELECT chave FROM permissoes"))) == BASELINE_POST_007
-    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS)
-    assert _grants(url, FUTURE_CLONE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS)
+    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
+    assert _grants(url, FUTURE_CLONE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
 
 
 def _run_upgrade_downgrade_upgrade_scenario(url: str) -> None:
@@ -288,7 +299,7 @@ def _run_downgrade_refusal_scenario(url: str) -> None:
     assert refused.returncode != 0, refused.stdout + refused.stderr
     output = refused.stdout + refused.stderr
     assert "007 recusa downgrade" in output
-    assert len(asyncio.run(_query(url, "SELECT chave FROM permissoes"))) == BASELINE_POST_007
+    assert len(asyncio.run(_query(url, "SELECT chave FROM permissoes"))) == BASELINE_POST_007_PRE_008
     assert EXPECTED_DOC_KEYS[0] in _grants(url, CUSTOM_PROFILE_ID)
 
 
@@ -297,7 +308,7 @@ def _run_unique_constraint_scenario(url: str) -> None:
     _assert_success(_run_alembic(url, "upgrade", "head"))
     # Second upgrade should be idempotent (no error, no duplicate)
     _assert_success(_run_alembic(url, "upgrade", "head"))
-    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS)
+    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
     perms = asyncio.run(_query(url, "SELECT chave FROM permissoes"))
     assert len(perms) == BASELINE_POST_007, "idempotency preserved"
 
@@ -307,7 +318,7 @@ def _run_idempotency_only(url: str) -> None:
     _assert_success(_run_alembic(url, "upgrade", "006_catalogo_clinico_rbac"))
     _assert_success(_run_alembic(url, "upgrade", "head"))
     _assert_success(_run_alembic(url, "upgrade", "head"))
-    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS)
+    assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
     perms = asyncio.run(_query(url, "SELECT chave FROM permissoes"))
     assert len(perms) == BASELINE_POST_007, "idempotency preserved"
 

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, date
+import sqlalchemy as sa
 from sqlalchemy import String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint, CheckConstraint, Index, ForeignKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -133,6 +134,30 @@ class QuartoLeito(Base):
             ["residentes.id", "residentes.instituicao_id"],
             name="fk_quartos_residente_ilpi",
         ),
+        CheckConstraint("capacidade = 1", name="ck_quartos_leitos_capacidade_1"),
+        CheckConstraint(
+            "situacao IN ('livre','reservado','bloqueado','manutencao','inativo')",
+            name="ck_quartos_leitos_situacao",
+        ),
+        Index(
+            "uq_quartos_leitos_inst_quarto_leito",
+            "instituicao_id", "quarto", "leito",
+            unique=True,
+            sqlite_where=sa.text("unidade IS NULL"),
+            postgresql_where=sa.text("unidade IS NULL"),
+        ),
+        UniqueConstraint(
+            "instituicao_id", "unidade", "quarto", "leito",
+            name="uq_quartos_leitos_inst_unidade_quarto_leito",
+        ),
+        Index(
+            "uq_quartos_leitos_residente_ativo",
+            "instituicao_id", "residente_atual_id",
+            unique=True,
+            sqlite_where=sa.text("residente_atual_id IS NOT NULL"),
+            postgresql_where=sa.text("residente_atual_id IS NOT NULL"),
+        ),
+        Index("ix_quartos_leitos_ilpi_id", "instituicao_id"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     instituicao_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
@@ -142,8 +167,70 @@ class QuartoLeito(Base):
     capacidade: Mapped[int] = mapped_column(Integer, default=1)
     acessibilidade: Mapped[str] = mapped_column(String(100), nullable=True)
     residente_atual_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=True)
-    situacao: Mapped[str] = mapped_column(String(50), default="livre")  # livre, ocupado, reservado, bloqueado, manutencao
+    situacao: Mapped[str] = mapped_column(String(50), default="livre")
     data_ocupacao: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class OcupacaoHistorico(Base):
+    __tablename__ = "ocupacao_historico"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["residente_id", "instituicao_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_ocupacao_hist_residente_ilpi",
+        ),
+        ForeignKeyConstraint(
+            ["quarto_leito_id", "instituicao_id"],
+            ["quartos_leitos.id", "quartos_leitos.instituicao_id"],
+            name="fk_ocupacao_hist_leito_ilpi",
+        ),
+        Index("ix_ocupacao_hist_ilpi_residente", "instituicao_id", "residente_id"),
+        Index("ix_ocupacao_hist_ilpi_leito", "instituicao_id", "quarto_leito_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    instituicao_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
+    residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False)
+    quarto_leito_id: Mapped[str] = mapped_column(String(36), ForeignKey("quartos_leitos.id"), nullable=False)
+    data_entrada: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    data_saida: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    tipo_movimentacao: Mapped[str] = mapped_column(String(50), nullable=False)
+    motivo: Mapped[str] = mapped_column(Text, nullable=True)
+    usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Ausencia(Base):
+    __tablename__ = "ausencias"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["residente_id", "instituicao_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_ausencias_residente_ilpi",
+        ),
+        CheckConstraint(
+            "tipo IN ('hospitalizacao','saida_temporaria')",
+            name="ck_ausencias_tipo",
+        ),
+        Index(
+            "uq_ausencias_ativa_por_residente",
+            "instituicao_id", "residente_id",
+            unique=True,
+            sqlite_where=sa.text("data_fim IS NULL"),
+            postgresql_where=sa.text("data_fim IS NULL"),
+        ),
+        Index("ix_ausencias_ilpi_residente", "instituicao_id", "residente_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    instituicao_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
+    residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False)
+    quarto_leito_id: Mapped[str] = mapped_column(String(36), ForeignKey("quartos_leitos.id"), nullable=True)
+    tipo: Mapped[str] = mapped_column(String(50), nullable=False)
+    data_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    data_fim: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    motivo: Mapped[str] = mapped_column(Text, nullable=False)
+    observacoes: Mapped[str] = mapped_column(Text, nullable=True)
+    usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

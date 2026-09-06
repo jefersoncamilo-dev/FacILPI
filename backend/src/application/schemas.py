@@ -554,3 +554,119 @@ class DocumentoResponse(BaseModel):
     created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
+
+
+# ---- QuartoLeito (F5A-2D) ----
+class QuartoLeitoCreate(BaseModel):
+    unidade: Optional[str] = None
+    quarto: str = Field(..., min_length=1, max_length=50)
+    leito: str = Field(..., min_length=1, max_length=50)
+    acessibilidade: Optional[str] = None
+    situacao: Optional[str] = "livre"
+
+    @field_validator("situacao")
+    @classmethod
+    def validate_situacao(cls, v):
+        allowed = {"livre", "reservado", "bloqueado", "manutencao", "inativo"}
+        if v not in allowed:
+            raise ValueError(f"situacao deve ser uma de: {sorted(allowed)}")
+        return v
+
+class QuartoLeitoUpdate(BaseModel):
+    unidade: Optional[str] = None
+    quarto: Optional[str] = Field(None, min_length=1, max_length=50)
+    leito: Optional[str] = Field(None, min_length=1, max_length=50)
+    acessibilidade: Optional[str] = None
+    situacao: Optional[str] = None
+
+    @field_validator("situacao")
+    @classmethod
+    def validate_situacao(cls, v):
+        if v is None:
+            return v
+        allowed = {"livre", "reservado", "bloqueado", "manutencao", "inativo"}
+        if v not in allowed:
+            raise ValueError(f"situacao deve ser uma de: {sorted(allowed)}")
+        return v
+
+class QuartoLeitoResponse(BaseModel):
+    id: str
+    instituicao_id: str
+    unidade: Optional[str] = None
+    quarto: str
+    leito: str
+    capacidade: int
+    acessibilidade: Optional[str] = None
+    residente_atual_id: Optional[str] = None
+    situacao: str
+    data_ocupacao: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+class QuartoLeitoAlocar(BaseModel):
+    residente_id: str
+
+class QuartoLeitoLiberar(BaseModel):
+    pass
+
+class TransferenciaRequest(BaseModel):
+    residente_id: str
+    novo_leito_id: str
+    motivo: Optional[str] = None
+
+
+# ---- OcupacaoHistorico (F5A-2D) ----
+class OcupacaoHistoricoResponse(BaseModel):
+    id: str
+    instituicao_id: str
+    residente_id: str
+    quarto_leito_id: str
+    data_entrada: datetime
+    data_saida: Optional[datetime] = None
+    tipo_movimentacao: str
+    motivo: Optional[str] = None
+    usuario_id: str
+    created_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+
+# ---- Ausencia (F5A-2D) ----
+class AusenciaCreate(BaseModel):
+    residente_id: str
+    quarto_leito_id: Optional[str] = None
+    tipo: str
+    motivo: str = Field(..., min_length=1)
+    observacoes: Optional[str] = None
+
+    @field_validator("tipo")
+    @classmethod
+    def validate_tipo(cls, v):
+        allowed = {"hospitalizacao", "saida_temporaria"}
+        if v not in allowed:
+            raise ValueError(f"tipo deve ser uma de: {sorted(allowed)}")
+        return v
+
+class AusenciaUpdate(BaseModel):
+    quarto_leito_id: Optional[str] = None
+    motivo: Optional[str] = None
+    observacoes: Optional[str] = None
+
+class AusenciaEncerrar(BaseModel):
+    pass
+
+class AusenciaResponse(BaseModel):
+    id: str
+    instituicao_id: str
+    residente_id: str
+    quarto_leito_id: Optional[str] = None
+    tipo: str
+    data_inicio: datetime
+    data_fim: Optional[datetime] = None
+    motivo: str
+    observacoes: Optional[str] = None
+    usuario_id: str
+    created_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True

@@ -89,6 +89,13 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "documentos:criar",
         "documentos:atualizar",
         "documentos:inativar",
+        "quartos_leitos:ler",
+        "quartos_leitos:criar",
+        "quartos_leitos:atualizar",
+        "quartos_leitos:inativar",
+        "ausencias:ler",
+        "ausencias:criar",
+        "ausencias:atualizar",
     }
 )
 _CLINICAL_MODULES = frozenset(

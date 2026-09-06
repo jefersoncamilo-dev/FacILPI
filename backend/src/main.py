@@ -23,6 +23,11 @@ from .application.fase3a import (
     usuarios_router,
     issue_session_response,
 )
+from .application.fase5a2d import (
+    quartos_leitos_router,
+    ausencias_router,
+    ocupacao_historico_router,
+)
 from .application.security import (
     ILPI_SCOPE,
     PERMISSION_DENIED,
@@ -445,6 +450,9 @@ app.include_router(sinais_router, prefix="/api")
 app.include_router(intercorrencias_router, prefix="/api")
 app.include_router(alertas_router, prefix="/api")
 app.include_router(uploads_router, prefix="/api")
+app.include_router(quartos_leitos_router, prefix="/api")
+app.include_router(ausencias_router, prefix="/api")
+app.include_router(ocupacao_historico_router, prefix="/api")
 
 @app.get("/")
 async def root():
