@@ -521,3 +521,36 @@ class AlertaResponse(AlertaCreate):
     created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
+
+# ---- Documento (F5A-2C) ----
+class DocumentoCreate(BaseModel):
+    residente_id: str
+    tipo: str
+    numero: Optional[str] = None
+    arquivo: Optional[str] = None
+    validade: Optional[date] = None
+    obrigatorio: Optional[bool] = False
+    responsavel_envio: Optional[str] = None
+
+class DocumentoUpdate(BaseModel):
+    tipo: Optional[str] = None
+    numero: Optional[str] = None
+    arquivo: Optional[str] = None
+    validade: Optional[date] = None
+    obrigatorio: Optional[bool] = None
+    situacao: Optional[str] = None
+    responsavel_envio: Optional[str] = None
+
+class DocumentoResponse(BaseModel):
+    id: str
+    residente_id: Optional[str] = None
+    tipo: str
+    numero: Optional[str] = None
+    arquivo: Optional[str] = None
+    validade: Optional[date] = None
+    obrigatorio: Optional[bool] = None
+    situacao: Optional[str] = None
+    responsavel_envio: Optional[str] = None
+    created_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True
