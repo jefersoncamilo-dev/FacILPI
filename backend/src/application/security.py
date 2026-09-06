@@ -85,6 +85,10 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "tarefas:inativar",
         "sinais_vitais:ler",
         "sinais_vitais:criar",
+        "documentos:ler",
+        "documentos:criar",
+        "documentos:atualizar",
+        "documentos:inativar",
     }
 )
 _CLINICAL_MODULES = frozenset(

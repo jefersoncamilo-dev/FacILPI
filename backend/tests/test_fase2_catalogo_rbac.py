@@ -491,7 +491,7 @@ def _assert_success(result: subprocess.CompletedProcess[str]) -> None:
 
 
 def _run_catalog_scenario(url: str) -> None:
-    upgrade = _run_alembic(url, "upgrade", "head")
+    upgrade = _run_alembic(url, "upgrade", "004_catalogo_permissoes_rbac")
     _assert_success(upgrade)
     initial = _get_snapshot(url)
     _assert_catalog(initial)
@@ -499,7 +499,7 @@ def _run_catalog_scenario(url: str) -> None:
     asyncio.run(_insert_duplicate_template(url))
 
     _assert_success(_run_alembic(url, "stamp", "003_correcoes_fase1"))
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "004_catalogo_permissoes_rbac"))
     rerun = _get_snapshot(url)
     assert rerun == initial
 
@@ -516,7 +516,7 @@ def _run_catalog_scenario(url: str) -> None:
     _assert_custom_records(downgraded)
     assert downgraded["counts"] == before_downgrade["counts"]
 
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "004_catalogo_permissoes_rbac"))
     restored = _get_snapshot(url)
     _assert_custom_records(restored)
     assert _catalog_projection(restored) == catalog_before_downgrade
@@ -541,10 +541,10 @@ def _run_catalog_scenario(url: str) -> None:
 
 
 def _run_adulteration_scenario(url: str, mode: str) -> None:
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "004_catalogo_permissoes_rbac"))
     asyncio.run(_mutate_permission(url, mode))
     _assert_success(_run_alembic(url, "stamp", "003_correcoes_fase1"))
-    failed = _run_alembic(url, "upgrade", "head")
+    failed = _run_alembic(url, "upgrade", "004_catalogo_permissoes_rbac")
     assert failed.returncode != 0
     output = failed.stdout + failed.stderr
     assert "004" in output
