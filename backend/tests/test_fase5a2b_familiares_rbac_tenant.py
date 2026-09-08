@@ -559,7 +559,12 @@ def test_familiares_rbac_tenant_endpoints(familiares_db):
 
 
 def test_outros_modulos_clinicos_permanecem_fail_closed(familiares_db):
-    """F5A-2B libera SOMENTE Familiares (+Residentes da 2A); demais seguem fail-closed (20)."""
+    """F5A-2B libera SOMENTE Familiares (+Residentes da 2A); demais seguem fail-closed (20).
+
+    F5A-3A1 libera Avaliações via RBAC (cobertura em
+    test_fase5a3a1_avaliacoes_rbac_tenant.py); por isso Avaliações não
+    consta mais desta lista.
+    """
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         ilpi = _new_institution("ILPI Fail-closed 5A-2B")
@@ -579,7 +584,6 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(familiares_db):
             ("post", "/api/prescricoes/", {"residente_id": _new_id(), "medicamento_id": _new_id(), "prescritor": "X", "dose": "1", "inicio": "2026-01-01"}),
             ("get", "/api/sinais-vitais/", None),
             ("post", "/api/sinais-vitais/", {"residente_id": _new_id()}),
-            ("get", "/api/avaliacoes/", None),
             ("get", "/api/intercorrencias/", None),
             ("get", "/api/alertas/", None),
         )

@@ -504,6 +504,9 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(residentes_db):
     F5A-2B libera Familiares via RBAC (cobertura em
     test_fase5a2b_familiares_rbac_tenant.py item 20); por isso Familiares não
     consta mais desta lista.
+    F5A-3A1 libera Avaliações via RBAC (cobertura em
+    test_fase5a3a1_avaliacoes_rbac_tenant.py); por isso Avaliações não
+    consta mais desta lista.
     """
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
@@ -523,7 +526,6 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(residentes_db):
             ("get", "/api/sinais-vitais/", None),
             ("post", "/api/sinais-vitais/", {"residente_id": _new_id()}),
             ("get", "/api/medicamentos/", None),
-            ("get", "/api/avaliacoes/", None),
             ("get", "/api/intercorrencias/", None),
             ("get", "/api/alertas/", None),
         )

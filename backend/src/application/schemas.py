@@ -670,3 +670,34 @@ class AusenciaResponse(BaseModel):
     created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
+
+
+# ---- Avaliacao (F5A-3A1) ----
+class AvaliacaoCreate(BaseModel):
+    residente_id: str
+    tipo: str = Field(..., min_length=1)
+    instrumento: Optional[str] = None
+    respostas: Optional[str] = None
+    pontuacao: Optional[float] = None
+    classificacao: Optional[str] = None
+    data: Optional[datetime] = None
+    validade: Optional[date] = None
+    observacoes: Optional[str] = None
+
+
+class AvaliacaoUpdate(BaseModel):
+    instrumento: Optional[str] = None
+    respostas: Optional[str] = None
+    pontuacao: Optional[float] = None
+    classificacao: Optional[str] = None
+    validade: Optional[date] = None
+    observacoes: Optional[str] = None
+
+
+class AvaliacaoResponse(AvaliacaoCreate):
+    id: str
+    profissional: Optional[str] = None
+    data: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, APIRouter, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -383,26 +384,154 @@ documentos_router = make_crud_router(
 medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"], fail_closed=True)
 prescricoes_router = make_crud_router(m.Prescricao, s.PrescricaoCreate, s.PrescricaoCreate, s.PrescricaoResponse, "/prescricoes", ["prescricoes"], fail_closed=True)
 tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
-# Additional entities: avaliacoes, sinais, intercorrencias, alertas
-# For brevity create direct routers via make_crud
-
-# We need simple schemas for those not yet via helper — reuse create for update where feasible
-from pydantic import BaseModel
-# Define adhoc routers manually for avaliacoes etc using same models
+# ===== Avaliacoes Router (F5A-3A1) =====
 
 avaliacoes_router = APIRouter(prefix="/avaliacoes", tags=["avaliacoes"])
-@avaliacoes_router.get("/", response_model=list[dict])
-async def list_avaliacoes(db: AsyncSession = Depends(get_db), _blocked: None = Depends(block_pending_permission_catalog)):
-    result = await db.execute(select(m.Avaliacao).order_by(m.Avaliacao.data.desc()))
-    return [{"id": r.id, "residente_id": r.residente_id, "tipo": r.tipo, "pontuacao": r.pontuacao, "classificacao": r.classificacao, "data": r.data.isoformat() if r.data else None} for r in result.scalars().all()]
 
-@avaliacoes_router.post("/", status_code=201)
-async def create_avaliacao(payload: dict, db: AsyncSession = Depends(get_db), _blocked: None = Depends(block_pending_permission_catalog)):
-    obj = m.Avaliacao(**payload)
+
+async def _resolve_profissional(db: AsyncSession, context: SecurityContext) -> str:
+    func = (
+        await db.execute(
+            select(m.Funcionario).where(
+                m.Funcionario.usuario_id == context.user.id,
+                m.Funcionario.ilpi_id == context.ilpi_id,
+                m.Funcionario.situacao == "ativo",
+            )
+        )
+    ).scalar_one_or_none()
+    if func is not None and func.nome:
+        return func.nome
+    return context.user.nome
+
+
+async def _ensure_avaliacao_parent(db: AsyncSession, data: dict, context: SecurityContext) -> None:
+    residente_id = data.get("residente_id")
+    if not residente_id:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    tenant = context.ilpi_id
+    parent = (
+        await db.execute(
+            select(m.Residente).where(
+                m.Residente.id == residente_id,
+                m.Residente.instituicao_id == tenant,
+            )
+        )
+    ).scalar_one_or_none()
+    if parent is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+
+
+@avaliacoes_router.get("/", response_model=list[s.AvaliacaoResponse])
+async def list_avaliacoes(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("avaliacoes:ler")),
+):
+    query = (
+        select(m.Avaliacao)
+        .where(m.Avaliacao.ilpi_id == context.ilpi_id)
+        .order_by(m.Avaliacao.data.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@avaliacoes_router.post("/", response_model=s.AvaliacaoResponse, status_code=201)
+async def create_avaliacao(
+    payload: s.AvaliacaoCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("avaliacoes:criar")),
+):
+    data = payload.model_dump(exclude_unset=True)
+    session_tenant = context.ilpi_id
+    data["ilpi_id"] = session_tenant
+    data["profissional"] = await _resolve_profissional(db, context)
+    await _ensure_avaliacao_parent(db, data, context)
+    if data.get("data") is None:
+        data["data"] = datetime.now(timezone.utc)
+    for k, v in list(data.items()):
+        if isinstance(v, str):
+            data[k] = v.strip()
+    obj = m.Avaliacao(**data)
     db.add(obj)
+    add_audit(
+        db,
+        acao="avaliacoes.criar",
+        entidade="avaliacoes",
+        registro_id=obj.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_posteriores={"residente_id": data.get("residente_id"), "tipo": data.get("tipo")},
+        request=request,
+    )
     await db.commit()
     await db.refresh(obj)
-    return {"id": obj.id, "residente_id": obj.residente_id, "tipo": obj.tipo, "pontuacao": obj.pontuacao}
+    return obj
+
+
+@avaliacoes_router.get("/{avaliacao_id}", response_model=s.AvaliacaoResponse)
+async def get_avaliacao(
+    avaliacao_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("avaliacoes:ler")),
+):
+    result = await db.execute(
+        select(m.Avaliacao).where(
+            m.Avaliacao.id == avaliacao_id,
+            m.Avaliacao.ilpi_id == context.ilpi_id,
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if not obj:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    return obj
+
+
+@avaliacoes_router.put("/{avaliacao_id}", response_model=s.AvaliacaoResponse)
+async def update_avaliacao(
+    avaliacao_id: str,
+    payload: s.AvaliacaoUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("avaliacoes:atualizar")),
+):
+    result = await db.execute(
+        select(m.Avaliacao).where(
+            m.Avaliacao.id == avaliacao_id,
+            m.Avaliacao.ilpi_id == context.ilpi_id,
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if not obj:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    data = payload.model_dump(exclude_unset=True)
+    data.pop("residente_id", None)
+    data.pop("ilpi_id", None)
+    data.pop("profissional", None)
+    for k, v in data.items():
+        if isinstance(v, str):
+            v = v.strip()
+            if v == "":
+                continue
+        setattr(obj, k, v)
+    add_audit(
+        db,
+        acao="avaliacoes.atualizar",
+        entidade="avaliacoes",
+        registro_id=obj.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_posteriores=data,
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
 
 sinais_router = make_crud_router(m.SinalVital, s.SinalVitalCreate, s.SinalVitalCreate, s.SinalVitalResponse, "/sinais-vitais", ["sinais-vitais"], fail_closed=True)
 intercorrencias_router = make_crud_router(m.Intercorrencia, s.IntercorrenciaCreate, s.IntercorrenciaCreate, s.IntercorrenciaResponse, "/intercorrencias", ["intercorrencias"], fail_closed=True)
