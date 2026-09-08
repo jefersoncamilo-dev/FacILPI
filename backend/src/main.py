@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import false, select, func
+from sqlalchemy.exc import IntegrityError, OperationalError
 import pathlib
 
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
@@ -533,6 +534,195 @@ async def update_avaliacao(
     return obj
 
 
+# ===== Graus de Dependencia (F5A-3A2: fonte única oficial) =====
+# Residente.grau_dependencia é legado congelado: nunca lido aqui, nunca
+# escrito aqui, sem sincronização, sem trigger. Avaliação SUGERE (via
+# leitura); somente a confirmação humana explícita persiste o grau.
+
+graus_router = APIRouter(prefix="/graus-dependencia", tags=["graus-dependencia"])
+
+GRAU_ATIVO_CONFLITO = "GRAU_ATIVO_CONFLITO"
+GRAU_NAO_ATIVO = "GRAU_NAO_ATIVO"
+
+
+async def _ensure_grau_parent(db: AsyncSession, residente_id: str, context: SecurityContext):
+    parent = (
+        await db.execute(
+            select(m.Residente).where(
+                m.Residente.id == residente_id,
+                m.Residente.instituicao_id == context.ilpi_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if parent is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    return parent
+
+
+@graus_router.get("/", response_model=list[s.GrauDependenciaResponse])
+async def list_graus(
+    residente_id: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("grau_dependencia:ler")),
+):
+    query = select(m.GrauDependencia).where(m.GrauDependencia.ilpi_id == context.ilpi_id)
+    if residente_id is not None:
+        await _ensure_grau_parent(db, residente_id, context)
+        query = query.where(m.GrauDependencia.residente_id == residente_id)
+    query = query.order_by(m.GrauDependencia.confirmado_em.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@graus_router.get("/ativo", response_model=s.GrauDependenciaResponse)
+async def get_grau_ativo(
+    residente_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("grau_dependencia:ler")),
+):
+    await _ensure_grau_parent(db, residente_id, context)
+    result = await db.execute(
+        select(m.GrauDependencia).where(
+            m.GrauDependencia.ilpi_id == context.ilpi_id,
+            m.GrauDependencia.residente_id == residente_id,
+            m.GrauDependencia.situacao == "ativo",
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    return obj
+
+
+@graus_router.post("/", response_model=s.GrauDependenciaResponse, status_code=201)
+async def confirm_grau(
+    payload: s.GrauDependenciaCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("grau_dependencia:criar")),
+):
+    data = payload.model_dump()
+    # Tenant e autoria vêm exclusivamente da sessão; o payload nunca decide.
+    data.pop("ilpi_id", None)
+    data.pop("instituicao_id", None)
+    data.pop("confirmado_por", None)
+    data.pop("profissional", None)
+    data.pop("usuario_id", None)
+    await _ensure_grau_parent(db, data["residente_id"], context)
+    sugestao = None
+    if data["origem"] == "avaliacao":
+        avaliacao = (
+            await db.execute(
+                select(m.Avaliacao).where(
+                    m.Avaliacao.id == data["avaliacao_id"],
+                    m.Avaliacao.ilpi_id == context.ilpi_id,
+                    m.Avaliacao.residente_id == data["residente_id"],
+                )
+            )
+        ).scalar_one_or_none()
+        if avaliacao is None:
+            raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+        sugestao = avaliacao.classificacao
+    obj = m.GrauDependencia(
+        ilpi_id=context.ilpi_id,
+        residente_id=data["residente_id"],
+        classificacao=data["classificacao"],
+        sugestao_classificacao=sugestao,
+        origem=data["origem"],
+        avaliacao_id=data.get("avaliacao_id"),
+        validade=data.get("validade"),
+        justificativa=data["justificativa"].strip(),
+        confirmado_por=context.user.id,
+        situacao="ativo",
+    )
+    try:
+        # Localiza o ativo anterior ANTES do INSERT: o SELECT dispara
+        # autoflush e veria a própria linha nova como "anterior".
+        previous = (
+            await db.execute(
+                select(m.GrauDependencia).where(
+                    m.GrauDependencia.ilpi_id == context.ilpi_id,
+                    m.GrauDependencia.residente_id == data["residente_id"],
+                    m.GrauDependencia.situacao == "ativo",
+                )
+            )
+        ).scalar_one_or_none()
+        if previous is not None:
+            previous.situacao = "substituido"
+            await db.flush()  # flip primeiro: nunca dois ativos, ordem estável
+        db.add(obj)
+        await db.flush()
+        if previous is not None:
+            previous.superseded_by = obj.id
+        add_audit(
+            db,
+            acao="graus_dependencia.criar",
+            entidade="graus_dependencia",
+            registro_id=obj.id,
+            usuario_id=context.user.id,
+            ilpi_id=context.ilpi_id,
+            valores_anteriores={"substituido_id": previous.id} if previous is not None else None,
+            valores_posteriores={
+                "residente_id": obj.residente_id,
+                "classificacao": obj.classificacao,
+                "origem": obj.origem,
+                "avaliacao_id": obj.avaliacao_id,
+            },
+            request=request,
+        )
+        await db.commit()
+    except (IntegrityError, OperationalError):
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail={"code": GRAU_ATIVO_CONFLITO, "message": "Conflito de confirmação: já existe grau ativo"},
+        )
+    await db.refresh(obj)
+    return obj
+
+
+@graus_router.post("/{grau_id}/revogar", response_model=s.GrauDependenciaResponse)
+async def revoke_grau(
+    grau_id: str,
+    payload: s.GrauDependenciaRevogar,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("grau_dependencia:criar")),
+):
+    result = await db.execute(
+        select(m.GrauDependencia).where(
+            m.GrauDependencia.id == grau_id,
+            m.GrauDependencia.ilpi_id == context.ilpi_id,
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    if obj.situacao != "ativo":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": GRAU_NAO_ATIVO, "message": "Somente grau ativo pode ser revogado"},
+        )
+    obj.situacao = "revogado"
+    obj.motivo_revogacao = payload.motivo.strip()
+    add_audit(
+        db,
+        acao="graus_dependencia.revogar",
+        entidade="graus_dependencia",
+        registro_id=obj.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_anteriores={"situacao": "ativo"},
+        valores_posteriores={"situacao": "revogado", "motivo": obj.motivo_revogacao},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
 sinais_router = make_crud_router(m.SinalVital, s.SinalVitalCreate, s.SinalVitalCreate, s.SinalVitalResponse, "/sinais-vitais", ["sinais-vitais"], fail_closed=True)
 intercorrencias_router = make_crud_router(m.Intercorrencia, s.IntercorrenciaCreate, s.IntercorrenciaCreate, s.IntercorrenciaResponse, "/intercorrencias", ["intercorrencias"], fail_closed=True)
 alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"], fail_closed=True)
@@ -575,6 +765,7 @@ app.include_router(medicamentos_router, prefix="/api")
 app.include_router(prescricoes_router, prefix="/api")
 app.include_router(tarefas_router, prefix="/api")
 app.include_router(avaliacoes_router, prefix="/api")
+app.include_router(graus_router, prefix="/api")
 app.include_router(sinais_router, prefix="/api")
 app.include_router(intercorrencias_router, prefix="/api")
 app.include_router(alertas_router, prefix="/api")

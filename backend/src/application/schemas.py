@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from typing import Literal, Optional
 from datetime import date, datetime
 import re
 from ..domain.validators import validate_cpf, validate_cnpj, validate_cns, validate_password
@@ -304,7 +304,9 @@ class ResidenteCreate(BaseModel):
     foto: Optional[str] = None
     data_admissao: Optional[date] = None
     situacao: Optional[str] = "Em admissao"
-    grau_dependencia: Optional[str] = None
+    # F5A-3A2: grau_dependencia REMOVIDO do contrato de escrita. O campo
+    # legado em Residente é congelado (sem escrita, sem sincronização);
+    # a fonte oficial é GrauDependencia. Extras enviados são ignorados.
     restricoes: Optional[str] = None
     alergias: Optional[str] = None
     necessidades_especiais: Optional[str] = None
@@ -346,7 +348,7 @@ class ResidenteUpdate(BaseModel):
     foto: Optional[str] = None
     data_admissao: Optional[date] = None
     situacao: Optional[str] = None
-    grau_dependencia: Optional[str] = None
+    # F5A-3A2: sem grau_dependencia no update (legado congelado).
     restricoes: Optional[str] = None
     alergias: Optional[str] = None
     necessidades_especiais: Optional[str] = None
@@ -354,6 +356,9 @@ class ResidenteUpdate(BaseModel):
 
 class ResidenteResponse(ResidenteCreate):
     id: str
+    # F5A-3A2: leitura do legado mantida por compatibilidade; escrita
+    # bloqueada (ausente em Create/Update). Fonte oficial: GrauDependencia.
+    grau_dependencia: Optional[str] = None
     created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
@@ -699,5 +704,66 @@ class AvaliacaoResponse(AvaliacaoCreate):
     profissional: Optional[str] = None
     data: Optional[datetime] = None
     created_at: Optional[datetime] = None
+    class Config:
+        from_attributes = True
+
+
+# ---- GrauDependencia (F5A-3A2: fonte única oficial) ----
+GRAU_CLASSIFICACOES = ("Grau I", "Grau II", "Grau III")
+
+class GrauDependenciaCreate(BaseModel):
+    # Confirmação humana explícita. confirmado_por/ilpi_id NUNCA vêm do
+    # payload: derivados de SecurityContext. origem=migracao rejeitada.
+    residente_id: str
+    classificacao: Literal["Grau I", "Grau II", "Grau III"]
+    origem: Literal["avaliacao", "manual"]
+    avaliacao_id: Optional[str] = None
+    validade: Optional[date] = None
+    justificativa: str = Field(..., min_length=1)
+
+    @field_validator("justificativa")
+    @classmethod
+    def justificativa_nao_vazia(cls, v):
+        texto = (v or "").strip()
+        if not texto:
+            raise ValueError("Justificativa obrigatória")
+        return texto
+
+    @model_validator(mode="after")
+    def coerencia_origem_avaliacao(self):
+        if self.origem == "avaliacao" and not self.avaliacao_id:
+            raise ValueError("origem=avaliacao exige avaliacao_id")
+        if self.origem == "manual" and self.avaliacao_id:
+            raise ValueError("origem=manual não aceita avaliacao_id")
+        return self
+
+
+class GrauDependenciaRevogar(BaseModel):
+    motivo: str = Field(..., min_length=1)
+
+    @field_validator("motivo")
+    @classmethod
+    def motivo_nao_vazio(cls, v):
+        texto = (v or "").strip()
+        if not texto:
+            raise ValueError("Motivo da revogação obrigatório")
+        return texto
+
+
+class GrauDependenciaResponse(BaseModel):
+    id: str
+    ilpi_id: str
+    residente_id: str
+    classificacao: str
+    sugestao_classificacao: Optional[str] = None
+    origem: str
+    avaliacao_id: Optional[str] = None
+    justificativa: str
+    confirmado_por: Optional[str] = None
+    confirmado_em: Optional[datetime] = None
+    validade: Optional[date] = None
+    situacao: str
+    superseded_by: Optional[str] = None
+    motivo_revogacao: Optional[str] = None
     class Config:
         from_attributes = True
