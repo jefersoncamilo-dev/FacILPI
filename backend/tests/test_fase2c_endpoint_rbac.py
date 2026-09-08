@@ -460,11 +460,14 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
     # F5A-3A1: Avaliações (GET/POST/PUT) usa RBAC real com isolamento de
     # tenant + autoria da sessão (cobertura em
     # test_fase5a3a1_avaliacoes_rbac_tenant.py); removida desta lista.
+    # C.3: Sinais Vitais (GET/POST) usa RBAC real com isolamento de tenant
+    # + autoria da sessão + histórico imutável (cobertura em
+    # test_fase5a3b_sinais_vitais_rbac_tenant.py); removida desta lista
+    # (sem PUT/DELETE: imutável, 405).
     clinical_list_routes = (
         "/api/medicamentos/",
         "/api/prescricoes/",
         "/api/tarefas/",
-        "/api/sinais-vitais/",
         "/api/intercorrencias/",
         "/api/alertas/",
     )
@@ -504,9 +507,7 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
         ("post", "/api/tarefas/", {"residente_id": resident_id, "descricao": "Tarefa"}),
         ("put", f"/api/tarefas/{_new_id()}", {"descricao": "Tarefa"}),
         ("delete", f"/api/tarefas/{_new_id()}", None),
-        ("post", "/api/sinais-vitais/", {"residente_id": resident_id}),
-        ("put", f"/api/sinais-vitais/{_new_id()}", {"residente_id": resident_id}),
-        ("delete", f"/api/sinais-vitais/{_new_id()}", None),
+        # C.3: Sinais Vitais liberado via RBAC (GET/POST); PUT/DELETE inexistentes (405).
         ("post", "/api/intercorrencias/", {"residente_id": resident_id, "tipo": "queda"}),
         ("put", f"/api/intercorrencias/{_new_id()}", {"residente_id": resident_id, "tipo": "queda"}),
         ("delete", f"/api/intercorrencias/{_new_id()}", None),

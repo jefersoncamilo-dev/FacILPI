@@ -469,22 +469,42 @@ class TarefaResponse(TarefaCreate):
     class Config:
         from_attributes = True
 
-# ---- Sinal Vital ----
+# ---- Sinal Vital (C.3: registro mínimo seguro, histórico imutável) ----
+# Modelo colunar mantido (temperatura, pressao_*, frequencias, saturacao,
+# glicemia, peso). Unidades implícitas por campo. Correção = novo INSERT;
+# sem PUT, sem DELETE. Tenant/autoria vêm da sessão; o payload nunca decide.
 class SinalVitalCreate(BaseModel):
     residente_id: str
     temperatura: Optional[float] = None
-    pressao_sistolica: Optional[int] = None
-    pressao_diastolica: Optional[int] = None
-    frequencia_cardiaca: Optional[int] = None
-    frequencia_respiratoria: Optional[int] = None
+    pressao_sistolica: Optional[int] = Field(None, ge=0)
+    pressao_diastolica: Optional[int] = Field(None, ge=0)
+    frequencia_cardiaca: Optional[int] = Field(None, ge=0)
+    frequencia_respiratoria: Optional[int] = Field(None, ge=0)
     saturacao: Optional[int] = Field(None, ge=0, le=100)
     glicemia: Optional[float] = Field(None, ge=0)
     peso: Optional[float] = Field(None, ge=0)
-    profissional: Optional[str] = None
+    data: Optional[datetime] = None
     observacao: Optional[str] = None
+
+    @model_validator(mode="after")
+    def pelo_menos_um_sinal(self):
+        vitais = (
+            self.temperatura,
+            self.pressao_sistolica,
+            self.pressao_diastolica,
+            self.frequencia_cardiaca,
+            self.frequencia_respiratoria,
+            self.saturacao,
+            self.glicemia,
+            self.peso,
+        )
+        if all(v is None for v in vitais):
+            raise ValueError("Informe pelo menos um sinal vital")
+        return self
 
 class SinalVitalResponse(SinalVitalCreate):
     id: str
+    profissional: Optional[str] = None
     data: Optional[datetime] = None
     class Config:
         from_attributes = True

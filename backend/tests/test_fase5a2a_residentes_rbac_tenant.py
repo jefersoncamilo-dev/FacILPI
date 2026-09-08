@@ -507,6 +507,9 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(residentes_db):
     F5A-3A1 libera Avaliações via RBAC (cobertura em
     test_fase5a3a1_avaliacoes_rbac_tenant.py); por isso Avaliações não
     consta mais desta lista.
+    C.3 libera Sinais Vitais via RBAC (cobertura em
+    test_fase5a3b_sinais_vitais_rbac_tenant.py); por isso Sinais Vitais não
+    consta mais desta lista.
     """
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
@@ -523,8 +526,6 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(residentes_db):
         still_blocked = (
             ("get", "/api/tarefas/", None),
             ("post", "/api/tarefas/", {"residente_id": _new_id(), "descricao": "X"}),
-            ("get", "/api/sinais-vitais/", None),
-            ("post", "/api/sinais-vitais/", {"residente_id": _new_id()}),
             ("get", "/api/medicamentos/", None),
             ("get", "/api/intercorrencias/", None),
             ("get", "/api/alertas/", None),
