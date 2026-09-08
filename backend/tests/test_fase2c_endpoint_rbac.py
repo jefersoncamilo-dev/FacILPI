@@ -468,7 +468,6 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
         "/api/medicamentos/",
         "/api/prescricoes/",
         "/api/tarefas/",
-        "/api/intercorrencias/",
         "/api/alertas/",
     )
     resident_id = _new_id()
@@ -508,9 +507,6 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
         ("put", f"/api/tarefas/{_new_id()}", {"descricao": "Tarefa"}),
         ("delete", f"/api/tarefas/{_new_id()}", None),
         # C.3: Sinais Vitais liberado via RBAC (GET/POST); PUT/DELETE inexistentes (405).
-        ("post", "/api/intercorrencias/", {"residente_id": resident_id, "tipo": "queda"}),
-        ("put", f"/api/intercorrencias/{_new_id()}", {"residente_id": resident_id, "tipo": "queda"}),
-        ("delete", f"/api/intercorrencias/{_new_id()}", None),
     )
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):

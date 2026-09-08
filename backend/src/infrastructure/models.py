@@ -450,7 +450,7 @@ class Intercorrencia(Base):
     ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     tipo: Mapped[str] = mapped_column(String(100), nullable=False)
     gravidade: Mapped[str] = mapped_column(String(50), nullable=True)
-    situacao: Mapped[str] = mapped_column(String(50), default="Aberta")
+    situacao: Mapped[str] = mapped_column(String(50), default="aberta")
     sbar_situacao: Mapped[str] = mapped_column(Text, nullable=True)
     sbar_contexto: Mapped[str] = mapped_column(Text, nullable=True)
     sbar_avaliacao: Mapped[str] = mapped_column(Text, nullable=True)

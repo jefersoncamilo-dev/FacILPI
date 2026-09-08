@@ -511,20 +511,61 @@ class SinalVitalResponse(SinalVitalCreate):
 
 # ---- Intercorrencia ----
 class IntercorrenciaCreate(BaseModel):
-    residente_id: str
-    tipo: str
-    gravidade: Optional[str] = None
-    situacao: Optional[str] = "Aberta"
+    residente_id: str = Field(min_length=1, max_length=36)
+    tipo: str = Field(min_length=1, max_length=100)
+    gravidade: Literal["leve", "moderada", "grave"]
+    situacao: Literal["aberta"] = "aberta"
     sbar_situacao: Optional[str] = None
     sbar_contexto: Optional[str] = None
     sbar_avaliacao: Optional[str] = None
     sbar_recomendacao: Optional[str] = None
     providencia: Optional[str] = None
-    desfecho: Optional[str] = None
-    responsavel: Optional[str] = None
+    desfecho: None = None
+
+    @field_validator("tipo")
+    @classmethod
+    def tipo_nao_vazio(cls, value):
+        if not value.strip():
+            raise ValueError("Tipo obrigatorio")
+        return value.strip()
+
+
+class IntercorrenciaUpdate(BaseModel):
+    tipo: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    gravidade: Optional[Literal["leve", "moderada", "grave"]] = None
+    sbar_situacao: Optional[str] = None
+    sbar_contexto: Optional[str] = None
+    sbar_avaliacao: Optional[str] = None
+    sbar_recomendacao: Optional[str] = None
+    providencia: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def correcao_controlada(cls, data):
+        if isinstance(data, dict):
+            if {"residente_id", "situacao", "desfecho"} & data.keys():
+                raise ValueError("Residente imutavel; encerramento exige operacao explicita")
+            for key in ("tipo", "gravidade"):
+                if key in data and (data[key] is None or not str(data[key]).strip()):
+                    raise ValueError(f"{key} nao pode ser vazio")
+        return data
+
+
+class IntercorrenciaEncerrar(BaseModel):
+    desfecho: str = Field(min_length=1)
+
+    @field_validator("desfecho")
+    @classmethod
+    def desfecho_nao_vazio(cls, value):
+        if not value.strip():
+            raise ValueError("Desfecho obrigatorio")
+        return value.strip()
 
 class IntercorrenciaResponse(IntercorrenciaCreate):
     id: str
+    situacao: Literal["aberta", "encerrada"]
+    desfecho: Optional[str] = None
+    responsavel: Optional[str] = None
     data: Optional[datetime] = None
     class Config:
         from_attributes = True
