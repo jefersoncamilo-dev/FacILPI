@@ -220,7 +220,7 @@ def test_07_roundtrip(migration_db):
 def test_08_idempotencia(migration_db):
     """Running upgrade 009 twice does not duplicate permissions."""
     _run_migration(migration_db, "009_f5a3a1_avaliacoes_rbac")
-    _run_migration(migration_db)
+    _run_migration(migration_db, "009_f5a3a1_avaliacoes_rbac")
     engine = create_async_engine(_database_url(migration_db), poolclass=NullPool)
 
     async def fn(db):

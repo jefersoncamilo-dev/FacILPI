@@ -258,6 +258,66 @@ class Avaliacao(Base):
     observacoes: Mapped[str] = mapped_column(Text, nullable=True)
 
 
+class GrauDependencia(Base):
+    # F5A-3A2: ÚNICA fonte oficial do grau de dependência. Histórico
+    # append-only (ativo/substituido/revogado); no máximo UM ativo por
+    # residente (índice único parcial). Residente.grau_dependencia é
+    # legado congelado: sem escrita, sem sincronização, sem trigger.
+    __tablename__ = "graus_dependencia"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_graus_residente_ilpi",
+        ),
+        CheckConstraint(
+            "classificacao IN ('Grau I','Grau II','Grau III')",
+            name="ck_graus_classificacao",
+        ),
+        CheckConstraint(
+            "origem IN ('avaliacao','manual','migracao')",
+            name="ck_graus_origem",
+        ),
+        CheckConstraint(
+            "situacao IN ('ativo','substituido','revogado')",
+            name="ck_graus_situacao",
+        ),
+        CheckConstraint(
+            "(origem = 'avaliacao' AND avaliacao_id IS NOT NULL) "
+            "OR (origem IN ('manual','migracao') AND avaliacao_id IS NULL)",
+            name="ck_graus_origem_avaliacao",
+        ),
+        CheckConstraint(
+            "(origem = 'migracao' OR confirmado_por IS NOT NULL)",
+            name="ck_graus_confirmado_por",
+        ),
+        Index(
+            "uq_graus_ativo_por_residente",
+            "residente_id",
+            unique=True,
+            sqlite_where=sa.text("situacao = 'ativo'"),
+            postgresql_where=sa.text("situacao = 'ativo'"),
+        ),
+        Index("ix_graus_ilpi_residente", "ilpi_id", "residente_id"),
+        Index("ix_graus_avaliacao", "avaliacao_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    classificacao: Mapped[str] = mapped_column(String(20), nullable=False)
+    sugestao_classificacao: Mapped[str] = mapped_column(String(100), nullable=True)
+    origem: Mapped[str] = mapped_column(String(20), nullable=False)
+    avaliacao_id: Mapped[str] = mapped_column(String(36), ForeignKey("avaliacoes.id"), nullable=True, index=True)
+    justificativa: Mapped[str] = mapped_column(Text, nullable=False)
+    confirmado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    confirmado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    validade: Mapped[date] = mapped_column(Date, nullable=True)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
+    superseded_by: Mapped[str] = mapped_column(String(36), ForeignKey("graus_dependencia.id"), nullable=True)
+    motivo_revogacao: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PlanoCuidados(Base):
     __tablename__ = "planos_cuidados"
     __table_args__ = (
