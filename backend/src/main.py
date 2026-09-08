@@ -723,7 +723,107 @@ async def revoke_grau(
     return obj
 
 
-sinais_router = make_crud_router(m.SinalVital, s.SinalVitalCreate, s.SinalVitalCreate, s.SinalVitalResponse, "/sinais-vitais", ["sinais-vitais"], fail_closed=True)
+# ===== Sinais Vitais (C.3: registro mínimo seguro, histórico imutável) =====
+# Modelo colunar mantido; correção = novo INSERT. Sem PUT, sem DELETE
+# (rotas ausentes retornam 405). Tenant e autoria vêm exclusivamente da
+# sessão (SecurityContext.ilpi_id + identidade autenticada). Unidades
+# implícitas por campo; sistolica<=diastolica NÃO bloqueada nesta fase.
+
+sinais_router = APIRouter(prefix="/sinais-vitais", tags=["sinais-vitais"])
+
+
+async def _ensure_sinal_parent(db: AsyncSession, residente_id: str, context: SecurityContext):
+    if not residente_id:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    parent = (
+        await db.execute(
+            select(m.Residente).where(
+                m.Residente.id == residente_id,
+                m.Residente.instituicao_id == context.ilpi_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if parent is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    return parent
+
+
+@sinais_router.get("/", response_model=list[s.SinalVitalResponse])
+async def list_sinais_vitais(
+    residente_id: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("sinais_vitais:ler")),
+):
+    query = select(m.SinalVital).where(m.SinalVital.ilpi_id == context.ilpi_id)
+    if residente_id is not None:
+        await _ensure_sinal_parent(db, residente_id, context)
+        query = query.where(m.SinalVital.residente_id == residente_id)
+    query = query.order_by(m.SinalVital.data.desc()).offset(skip).limit(limit)
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@sinais_router.post("/", response_model=s.SinalVitalResponse, status_code=201)
+async def create_sinal_vital(
+    payload: s.SinalVitalCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("sinais_vitais:criar")),
+):
+    data = payload.model_dump(exclude_unset=True)
+    # Tenant e autoria vêm exclusivamente da sessão; o payload nunca decide.
+    data.pop("ilpi_id", None)
+    data.pop("instituicao_id", None)
+    data.pop("profissional", None)
+    data.pop("usuario_id", None)
+    data.pop("autor", None)
+    data.pop("executor", None)
+    data["ilpi_id"] = context.ilpi_id
+    data["profissional"] = await _resolve_profissional(db, context)
+    await _ensure_sinal_parent(db, data.get("residente_id"), context)
+    if data.get("data") is None:
+        data["data"] = datetime.now(timezone.utc)
+    for k, v in list(data.items()):
+        if isinstance(v, str):
+            data[k] = v.strip()
+    obj = m.SinalVital(**data)
+    db.add(obj)
+    await db.flush()
+    add_audit(
+        db,
+        acao="sinais_vitais.criar",
+        entidade="sinais_vitais",
+        registro_id=obj.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_posteriores={"residente_id": data.get("residente_id"), "data": data.get("data")},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+@sinais_router.get("/{sinal_id}", response_model=s.SinalVitalResponse)
+async def get_sinal_vital(
+    sinal_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("sinais_vitais:ler")),
+):
+    result = await db.execute(
+        select(m.SinalVital).where(
+            m.SinalVital.id == sinal_id,
+            m.SinalVital.ilpi_id == context.ilpi_id,
+        )
+    )
+    obj = result.scalar_one_or_none()
+    if not obj:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    return obj
+
+
 intercorrencias_router = make_crud_router(m.Intercorrencia, s.IntercorrenciaCreate, s.IntercorrenciaCreate, s.IntercorrenciaResponse, "/intercorrencias", ["intercorrencias"], fail_closed=True)
 alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"], fail_closed=True)
 
