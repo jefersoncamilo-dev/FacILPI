@@ -457,11 +457,13 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
     # + vínculo seguro com Residente (cobertura em
     # test_fase5a2b_familiares_rbac_tenant.py); aqui permanece apenas o
     # DELETE de familiares, ainda fail-closed (BLOCKED_FOR_F5B).
+    # F5A-3A1: Avaliações (GET/POST/PUT) usa RBAC real com isolamento de
+    # tenant + autoria da sessão (cobertura em
+    # test_fase5a3a1_avaliacoes_rbac_tenant.py); removida desta lista.
     clinical_list_routes = (
         "/api/medicamentos/",
         "/api/prescricoes/",
         "/api/tarefas/",
-        "/api/avaliacoes/",
         "/api/sinais-vitais/",
         "/api/intercorrencias/",
         "/api/alertas/",
@@ -502,7 +504,6 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
         ("post", "/api/tarefas/", {"residente_id": resident_id, "descricao": "Tarefa"}),
         ("put", f"/api/tarefas/{_new_id()}", {"descricao": "Tarefa"}),
         ("delete", f"/api/tarefas/{_new_id()}", None),
-        ("post", "/api/avaliacoes/", {"residente_id": resident_id, "tipo": "Katz"}),
         ("post", "/api/sinais-vitais/", {"residente_id": resident_id}),
         ("put", f"/api/sinais-vitais/{_new_id()}", {"residente_id": resident_id}),
         ("delete", f"/api/sinais-vitais/{_new_id()}", None),

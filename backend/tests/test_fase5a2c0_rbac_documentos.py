@@ -209,7 +209,7 @@ def _run_upgrade_scenario(url: str) -> None:
     _assert_pre_007_baseline(url)
 
     # Upgrade to 007
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
 
     # Verify 4 new permissions added
     snap = {row["chave"]: row["id"] for row in asyncio.run(_query(url, "SELECT chave, id FROM permissoes"))}
@@ -256,7 +256,7 @@ def _run_future_clone_scenario(url: str) -> None:
 
 def _run_idempotency_scenario(url: str) -> None:
     """Re-upgrade does not duplicate permissions."""
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
     assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
     perms = asyncio.run(_query(url, "SELECT chave FROM permissoes"))
     assert len(perms) == BASELINE_POST_007
@@ -275,7 +275,7 @@ def _run_downgrade_scenario(url: str) -> None:
 
 def _run_reupgrade_scenario(url: str) -> None:
     """Re-upgrade after downgrade restores everything."""
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
     assert len(asyncio.run(_query(url, "SELECT chave FROM permissoes"))) == BASELINE_POST_007
     assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
     assert _grants(url, FUTURE_CLONE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
@@ -291,8 +291,13 @@ def _run_upgrade_downgrade_upgrade_scenario(url: str) -> None:
 
 
 def _run_downgrade_refusal_scenario(url: str) -> None:
-    """Downgrade refuses if external links exist."""
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    """Downgrade refuses if external links exist.
+
+    Runs from the 007 state (not 008/head): 007's downgrade raises before
+    any DELETE, so the refusal leaves the catalog untouched on every
+    backend (SQLite auto-commit of a later 008 DDL must not leak in).
+    """
+    _assert_success(_run_alembic(url, "upgrade", "007_expandir_rbac_documentos"))
     asyncio.run(_exec(url, "INSERT INTO perfis (id, ilpi_id, nome, chave, descricao, escopo, situacao) VALUES (:id, NULL, 'Perfil externo', 'perfil_externo', 'fixture', 'global', 'ativo')", {"id": CUSTOM_PROFILE_ID}))
     asyncio.run(_exec(url, "INSERT INTO perfil_permissoes (perfil_id, permissao_id) VALUES (:pid, :mid)", {"pid": CUSTOM_PROFILE_ID, "mid": EXPECTED_DOC_PERMISSION_IDS[0]}))
     refused = _run_alembic(url, "downgrade", "006_catalogo_clinico_rbac")
@@ -305,9 +310,9 @@ def _run_downgrade_refusal_scenario(url: str) -> None:
 
 def _run_unique_constraint_scenario(url: str) -> None:
     """Verify UNIQUE constraints on permissoes (chave, modulo+acao) are preserved."""
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
     # Second upgrade should be idempotent (no error, no duplicate)
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
     assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
     perms = asyncio.run(_query(url, "SELECT chave FROM permissoes"))
     assert len(perms) == BASELINE_POST_007, "idempotency preserved"
@@ -316,8 +321,8 @@ def _run_unique_constraint_scenario(url: str) -> None:
 def _run_idempotency_only(url: str) -> None:
     """Standalone idempotency test on a fresh database."""
     _assert_success(_run_alembic(url, "upgrade", "006_catalogo_clinico_rbac"))
-    _assert_success(_run_alembic(url, "upgrade", "head"))
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
     assert _grants(url, TEMPLATE_ID) == EXPECTED_ADMIN_22 | set(EXPECTED_CLINICAL_14) | set(EXPECTED_DOC_KEYS) | set(EXPECTED_F5A2D_KEYS)
     perms = asyncio.run(_query(url, "SELECT chave FROM permissoes"))
     assert len(perms) == BASELINE_POST_007, "idempotency preserved"
@@ -333,7 +338,7 @@ def _run_conflict_detection_scenario(url: str) -> None:
         {"id": "fac11000-0000-4000-8000-999999999999"},
     ))
     # Upgrade should detect the conflict and fail
-    result = _run_alembic(url, "upgrade", "head")
+    result = _run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos")
     assert result.returncode != 0, "upgrade should fail on chave conflict"
     assert "conflito" in (result.stdout + result.stderr).lower() or "007" in (result.stdout + result.stderr)
 
@@ -341,7 +346,7 @@ def _run_conflict_detection_scenario(url: str) -> None:
 def _run_security_block_scenario(url: str) -> None:
     """Verify platform_superuser is blocked from documentos permissions at runtime."""
     _setup_state_after_006(url)
-    _assert_success(_run_alembic(url, "upgrade", "head"))
+    _assert_success(_run_alembic(url, "upgrade", "008_f5a2d_quartos_leitos"))
     # The _CLINICAL_MODULES set already contains 'documentos'
     security = SECURITY.read_text(encoding="utf-8")
     assert '"documentos"' in security, "documentos not in _CLINICAL_MODULES"

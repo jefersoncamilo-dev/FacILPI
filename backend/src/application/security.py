@@ -96,6 +96,9 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "ausencias:ler",
         "ausencias:criar",
         "ausencias:atualizar",
+        "avaliacoes:ler",
+        "avaliacoes:criar",
+        "avaliacoes:atualizar",
     }
 )
 _CLINICAL_MODULES = frozenset(

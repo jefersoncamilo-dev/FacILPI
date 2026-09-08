@@ -56,7 +56,7 @@ def _assert_disposable_database(database_ref: pathlib.Path | str) -> None:
         assert "storage/app.db" not in database_ref
 
 
-def _run_migration(database_ref: pathlib.Path | str, direction: str = "upgrade head") -> None:
+def _run_migration(database_ref: pathlib.Path | str, direction: str = "upgrade 008_f5a2d_quartos_leitos") -> None:
     _assert_disposable_database(database_ref)
     url = _database_url(database_ref)
     environment = os.environ.copy()
@@ -313,19 +313,19 @@ def test_ausencias_tipo_check(migration_db):
 
 def test_downgrade_safe_empty(migration_db):
     """Downgrade on empty tables should succeed."""
-    _run_migration(migration_db, "downgrade -1")
+    _run_migration(migration_db, "downgrade 007_expandir_rbac_documentos")
     # Verify permissions reverted
     rows = asyncio.run(_query(migration_db, "SELECT COUNT(*) FROM permissoes"))
     assert rows[0][0] == 44
     # Re-upgrade for subsequent tests
-    _run_migration(migration_db, "upgrade head")
+    _run_migration(migration_db, "upgrade 008_f5a2d_quartos_leitos")
 
 
 def test_round_trip(migration_db):
     """Full upgrade → downgrade → upgrade cycle must succeed."""
-    _run_migration(migration_db, "downgrade -1")
+    _run_migration(migration_db, "downgrade 007_expandir_rbac_documentos")
     rows = asyncio.run(_query(migration_db, "SELECT COUNT(*) FROM permissoes"))
     assert rows[0][0] == 44
-    _run_migration(migration_db, "upgrade head")
+    _run_migration(migration_db, "upgrade 008_f5a2d_quartos_leitos")
     rows = asyncio.run(_query(migration_db, "SELECT COUNT(*) FROM permissoes"))
     assert rows[0][0] == 51
