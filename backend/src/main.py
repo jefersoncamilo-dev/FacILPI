@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import false, select, func
+from sqlalchemy import false, select, func, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pathlib
 
@@ -824,7 +824,138 @@ async def get_sinal_vital(
     return obj
 
 
-intercorrencias_router = make_crud_router(m.Intercorrencia, s.IntercorrenciaCreate, s.IntercorrenciaCreate, s.IntercorrenciaResponse, "/intercorrencias", ["intercorrencias"], fail_closed=True)
+intercorrencias_router = APIRouter(prefix="/intercorrencias", tags=["intercorrencias"])
+
+
+async def _ensure_intercorrencia_parent(db: AsyncSession, residente_id: str, context: SecurityContext):
+    parent = (await db.execute(select(m.Residente.id).where(
+        m.Residente.id == residente_id,
+        m.Residente.instituicao_id == context.ilpi_id,
+    ))).scalar_one_or_none()
+    if parent is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso nao encontrado"})
+
+
+@intercorrencias_router.get("/", response_model=list[s.IntercorrenciaResponse])
+async def list_intercorrencias(
+    residente_id: str | None = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("intercorrencias:ler")),
+):
+    query = select(m.Intercorrencia).where(m.Intercorrencia.ilpi_id == context.ilpi_id)
+    if residente_id is not None:
+        await _ensure_intercorrencia_parent(db, residente_id, context)
+        query = query.where(m.Intercorrencia.residente_id == residente_id)
+    result = await db.execute(query.order_by(m.Intercorrencia.data.desc(), m.Intercorrencia.id).offset(max(0, skip)).limit(max(1, min(limit, 100))))
+    return result.scalars().all()
+
+
+@intercorrencias_router.post("/", response_model=s.IntercorrenciaResponse, status_code=201)
+async def create_intercorrencia(
+    payload: s.IntercorrenciaCreate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("intercorrencias:criar")),
+):
+    await _ensure_intercorrencia_parent(db, payload.residente_id, context)
+    # Schemas ignore extra fields: neither tenant nor authorship comes from JSON.
+    obj = m.Intercorrencia(
+        **payload.model_dump(),
+        ilpi_id=context.ilpi_id,
+        responsavel=await _resolve_profissional(db, context),
+    )
+    db.add(obj)
+    await db.flush()
+    add_audit(
+        db, acao="intercorrencias.criar", entidade="intercorrencias",
+        registro_id=obj.id, usuario_id=context.user.id, ilpi_id=context.ilpi_id,
+        valores_posteriores=s.IntercorrenciaResponse.model_validate(obj).model_dump(),
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
+@intercorrencias_router.get("/{intercorrencia_id}", response_model=s.IntercorrenciaResponse)
+async def get_intercorrencia(
+    intercorrencia_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("intercorrencias:ler")),
+):
+    obj = (await db.execute(select(m.Intercorrencia).where(
+        m.Intercorrencia.id == intercorrencia_id,
+        m.Intercorrencia.ilpi_id == context.ilpi_id,
+    ))).scalar_one_or_none()
+    if obj is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso nao encontrado"})
+    return obj
+
+
+async def _change_intercorrencia(db, context, intercorrencia_id, changes, action, request):
+    obj = await get_intercorrencia(intercorrencia_id, db, context)
+    if obj.situacao != "aberta":
+        raise HTTPException(status_code=409, detail={"code": "INTERCORRENCIA_NAO_ABERTA", "message": "Intercorrencia nao esta aberta"})
+    if not changes:
+        raise HTTPException(status_code=422, detail="Informe ao menos um campo de correcao")
+    before = {key: getattr(obj, key) for key in changes}
+    # Compare-and-swap protects SQLite and PostgreSQL, including close vs correction.
+    # Audit and mutation commit together; a stale writer never records false history.
+    statement = update(m.Intercorrencia).where(
+        m.Intercorrencia.id == obj.id,
+        m.Intercorrencia.ilpi_id == context.ilpi_id,
+        m.Intercorrencia.situacao == "aberta",
+        *(getattr(m.Intercorrencia, key) == value for key, value in before.items()),
+    ).values(**changes).execution_options(synchronize_session=False)
+    try:
+        result = await db.execute(statement)
+        if result.rowcount != 1:
+            await db.rollback()
+            raise HTTPException(status_code=409, detail={"code": "INTERCORRENCIA_CONFLITO", "message": "Registro alterado; consulte novamente"})
+        add_audit(
+            db, acao=action, entidade="intercorrencias", registro_id=obj.id,
+            usuario_id=context.user.id, ilpi_id=context.ilpi_id,
+            valores_anteriores=before, valores_posteriores=changes, request=request,
+        )
+        await db.commit()
+    except OperationalError:
+        await db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "INTERCORRENCIA_CONFLITO", "message": "Conflito de escrita; tente novamente"})
+    await db.refresh(obj)
+    return obj
+
+
+@intercorrencias_router.patch("/{intercorrencia_id}", response_model=s.IntercorrenciaResponse)
+async def correct_intercorrencia(
+    intercorrencia_id: str,
+    payload: s.IntercorrenciaUpdate,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("intercorrencias:atualizar")),
+):
+    changes = payload.model_dump(exclude_unset=True)
+    if "tipo" in changes:
+        changes["tipo"] = changes["tipo"].strip()
+    return await _change_intercorrencia(db, context, intercorrencia_id, changes, "intercorrencias.corrigir", request)
+
+
+@intercorrencias_router.post("/{intercorrencia_id}/encerrar", response_model=s.IntercorrenciaResponse)
+async def close_intercorrencia(
+    intercorrencia_id: str,
+    payload: s.IntercorrenciaEncerrar,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("intercorrencias:atualizar")),
+):
+    return await _change_intercorrencia(
+        db, context, intercorrencia_id,
+        {"situacao": "encerrada", "desfecho": payload.desfecho},
+        "intercorrencias.encerrar", request,
+    )
+
+
 alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"], fail_closed=True)
 
 # Upload handler generic: storage/<entity_id>/

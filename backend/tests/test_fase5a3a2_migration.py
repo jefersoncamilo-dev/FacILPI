@@ -141,7 +141,7 @@ def test_01_baseline_009_counts(migration_db):
 
 def test_02_upgrade_010_counts(migration_db):
     """After 010: catalog 56, ilpi_admin 52, platform 15."""
-    _alembic(migration_db, "upgrade", "head")
+    _alembic(migration_db, "upgrade", REV_010)
     engine, factory = _session_factory(migration_db)
     try:
         async def check():
@@ -166,7 +166,7 @@ def test_02_upgrade_010_counts(migration_db):
 
 def test_03_table_constraints_indexes(migration_db):
     """graus_dependencia exists with checks + partial unique active index."""
-    _alembic(migration_db, "upgrade", "head")
+    _alembic(migration_db, "upgrade", REV_010)
     engine, factory = _session_factory(migration_db)
     try:
         async def check():
@@ -229,7 +229,7 @@ def test_04_backfill_exact_matches_only(migration_db):
                 await db.commit()
                 return residentes
         residentes = asyncio.run(seed())
-        _alembic(migration_db, "upgrade", "head")
+        _alembic(migration_db, "upgrade", REV_010)
 
         async def check():
             async with factory() as db:
@@ -255,7 +255,7 @@ def test_04_backfill_exact_matches_only(migration_db):
 
 def test_05_downgrade_roundtrip(migration_db):
     """Downgrade 010->009 removes table + grants; re-upgrade restores."""
-    _alembic(migration_db, "upgrade", "head")
+    _alembic(migration_db, "upgrade", REV_010)
     _alembic(migration_db, "downgrade", REV_009)
     engine, factory = _session_factory(migration_db)
     try:
@@ -271,7 +271,7 @@ def test_05_downgrade_roundtrip(migration_db):
         asyncio.run(check_down())
     finally:
         asyncio.run(engine.dispose())
-    _alembic(migration_db, "upgrade", "head")
+    _alembic(migration_db, "upgrade", REV_010)
     engine, factory = _session_factory(migration_db)
     try:
         async def check_up():
@@ -283,9 +283,9 @@ def test_05_downgrade_roundtrip(migration_db):
 
 
 def test_06_upgrade_idempotent(migration_db):
-    """Running upgrade head twice is a no-op with stable counts."""
-    _alembic(migration_db, "upgrade", "head")
-    _alembic(migration_db, "upgrade", "head")
+    """Running upgrade 010 twice is a no-op with stable counts."""
+    _alembic(migration_db, "upgrade", REV_010)
+    _alembic(migration_db, "upgrade", REV_010)
     engine, factory = _session_factory(migration_db)
     try:
         async def check():

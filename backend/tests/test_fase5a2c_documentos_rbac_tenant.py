@@ -635,7 +635,6 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(documentos_db):
             ("get", "/api/tarefas/", None),
             ("post", "/api/tarefas/", {"residente_id": _new_id(), "descricao": "X"}),
             ("post", "/api/prescricoes/", {"residente_id": _new_id(), "medicamento_id": _new_id(), "prescritor": "X", "dose": "1", "inicio": "2026-01-01"}),
-            ("get", "/api/intercorrencias/", None),
             ("get", "/api/alertas/", None),
         )
         for method, route, payload in still_blocked:
