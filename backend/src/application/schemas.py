@@ -1404,3 +1404,31 @@ class PlantaoItem(BaseModel):
     descricao: str
     previsto_em: Optional[datetime] = None
     prioridade: Optional[str] = None
+
+
+# ---- Matriz institucional (S.1) ----
+# Atribuição explícita de perfis institucionais. Profissão/cargo nunca
+# concede permissão; anti-escalation no endpoint ("só conceda o que possui").
+class S1Input(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+S1_PERFIL_CHAVES = Literal["cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"]
+
+
+class MatrizAtribuir(S1Input):
+    usuario_id: str
+    perfil_chave: S1_PERFIL_CHAVES
+
+
+class MatrizRevogar(S1Input):
+    usuario_id: str
+    perfil_chave: S1_PERFIL_CHAVES
+
+
+class MatrizPerfilResponse(BaseModel):
+    chave: str
+    nome: str
+    descricao: Optional[str] = None
+    clone_id: Optional[str] = None
+    permissoes: list[str] = []
