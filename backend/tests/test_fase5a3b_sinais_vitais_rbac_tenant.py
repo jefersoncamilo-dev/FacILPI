@@ -1348,11 +1348,11 @@ def test_47_banco_oficial_intacto(sinais_db):
 
 
 def test_48_catalogo_sem_novas_permissoes(sinais_db):
-    """D.1 adiciona 6 permissões planos_cuidados; HEAD tem 75 pela migration 013."""
+    """D.2 adiciona 10 permissões rotina/plantão; HEAD tem 85 pela migration 014."""
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         total = (await db.execute(select(func.count(m.Permissao.id)))).scalar_one()
-        assert total == 75
+        assert total == 85
         novas = (
             await db.execute(
                 select(m.Permissao).where(
