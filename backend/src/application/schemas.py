@@ -2,6 +2,11 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from typing import Literal, Optional
 from datetime import date, datetime
 import re
+from decimal import Decimal, InvalidOperation
+from typing import Annotated
+from unicodedata import normalize
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from pydantic import AwareDatetime, ConfigDict
 from ..domain.validators import validate_cpf, validate_cnpj, validate_cns, validate_password
 
 # ---- User / Auth ----
@@ -439,6 +444,258 @@ class PrescricaoResponse(PrescricaoCreate):
     id: str
     class Config:
         from_attributes = True
+
+# ---- C5: independent contracts; legacy schemas above remain unchanged ----
+C5Text = Annotated[str, Field(min_length=1, max_length=255)]
+C5ShortText = Annotated[str, Field(min_length=1, max_length=50)]
+
+
+class C5Input(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class C5MedicamentoCreate(C5Input):
+    nome: C5Text
+    principio_ativo: Optional[C5Text] = None
+    apresentacao: Optional[Annotated[str, Field(min_length=1, max_length=100)]] = None
+    concentracao: Optional[Annotated[str, Field(min_length=1, max_length=100)]] = None
+    unidade: Optional[C5ShortText] = None
+    fabricante: Optional[C5Text] = None
+    situacao: Literal["ativo", "inativo"] = "ativo"
+
+
+class C5MedicamentoPatch(C5Input):
+    nome: Optional[C5Text] = None
+    principio_ativo: Optional[C5Text] = None
+    apresentacao: Optional[Annotated[str, Field(min_length=1, max_length=100)]] = None
+    concentracao: Optional[Annotated[str, Field(min_length=1, max_length=100)]] = None
+    unidade: Optional[C5ShortText] = None
+    fabricante: Optional[C5Text] = None
+    situacao: Optional[Literal["ativo", "inativo"]] = None
+
+    @model_validator(mode="after")
+    def required_when_present(self):
+        for key in ("nome", "situacao"):
+            if key in self.model_fields_set and getattr(self, key) is None:
+                raise ValueError(f"{key} nao pode ser nulo")
+        return self
+
+
+class C5PrescricaoCreate(C5Input):
+    residente_id: C5ShortText
+    medicamento_id: C5ShortText
+    prescritor_nome: C5Text
+    prescritor_categoria: C5ShortText
+    prescritor_conselho: Optional[C5ShortText] = None
+    prescritor_numero: Optional[C5ShortText] = None
+    prescritor_uf: Optional[Annotated[str, Field(min_length=2, max_length=2)]] = None
+    dose: C5ShortText
+    unidade: C5ShortText
+    via: C5ShortText
+    frequencia: Optional[C5ShortText] = None
+    inicio: date
+    termino: Optional[date] = None
+    orientacoes: Optional[str] = None
+
+    @field_validator("dose")
+    @classmethod
+    def positive_dose(cls, value):
+        try:
+            number = Decimal(value)
+        except InvalidOperation:
+            raise ValueError("Dose deve ser decimal positivo")
+        if not number.is_finite() or number <= 0:
+            raise ValueError("Dose deve ser decimal positivo")
+        return value
+
+    @field_validator("frequencia")
+    @classmethod
+    def supported_frequency(cls, value):
+        if value:
+            text = normalize("NFKD", value).encode("ascii", "ignore").decode().lower()
+            if re.search(r"\b(prn|sos)\b|se\s+necessari|\d\s*/\s*\d|\b(?:a\s+)?cada\s+\d|\b\d+\s*(?:h|horas?)\b", text):
+                raise ValueError("PRN/SOS e intervalos nao suportados; informe horarios fixos na ativacao")
+        return value
+
+    @model_validator(mode="after")
+    def clinical_fields(self):
+        council = (self.prescritor_conselho, self.prescritor_numero, self.prescritor_uf)
+        if any(council) and not all(council):
+            raise ValueError("Informe conselho, numero e UF juntos")
+        if self.termino is not None and self.termino < self.inicio:
+            raise ValueError("Termino anterior ao inicio")
+        if self.termino == date.max:
+            raise ValueError("Termino fora do intervalo suportado")
+        return self
+
+
+class C5Ativacao(C5Input):
+    horarios: list[Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")]] = Field(min_length=1, max_length=1440)
+    timezone: Annotated[str, Field(min_length=1, max_length=100)]
+    vigencia_inicio: AwareDatetime
+    vigencia_fim: Optional[AwareDatetime] = None
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Timezone IANA indisponivel ou invalida")
+        return value
+
+    @model_validator(mode="after")
+    def valid_schedule(self):
+        if len(set(self.horarios)) != len(self.horarios):
+            raise ValueError("Horarios duplicados")
+        if self.vigencia_fim is not None and self.vigencia_fim <= self.vigencia_inicio:
+            raise ValueError("Fim deve ser posterior ao inicio")
+        return self
+
+
+class C5Motivo(C5Input):
+    motivo: Annotated[str, Field(min_length=1)]
+
+
+class C5Substituicao(C5Motivo):
+    prescricao: C5PrescricaoCreate
+    programacao: C5Ativacao
+
+
+class C5Resultado(C5Input):
+    resultado: Literal["administrada", "recusada", "omitida"]
+    ocorrido_em: AwareDatetime
+    quantidade_realizada: Optional[Annotated[Decimal, Field(gt=0, max_digits=14, decimal_places=4)]] = None
+    justificativa: Optional[Annotated[str, Field(min_length=1)]] = None
+    observacao: Optional[str] = None
+
+    @model_validator(mode="after")
+    def outcome_fields(self):
+        if self.resultado == "administrada" and self.quantidade_realizada is None:
+            raise ValueError("Quantidade realizada obrigatoria")
+        if self.resultado != "administrada" and not self.justificativa:
+            raise ValueError("Justificativa obrigatoria para recusa ou omissao")
+        return self
+
+
+class C5AdministracaoCreate(C5Resultado):
+    dose_prevista_id: C5ShortText
+
+
+class C5Estorno(C5Motivo):
+    substituto: Optional[C5Resultado] = None
+
+
+class C5MedicamentoResponse(C5MedicamentoCreate):
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
+    id: str
+    ilpi_id: str
+    autor_id: Optional[str] = None
+    created_at: datetime
+
+
+class C5ProgramacaoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    prescricao_id: str
+    horarios: list[str]
+    timezone: str
+    vigencia_inicio: datetime
+    vigencia_fim: Optional[datetime]
+    cobertura_ate: Optional[datetime]
+    situacao: str
+    autor_id: str
+    created_at: datetime
+
+
+class C5PrescricaoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    medicamento_id: str
+    autor_id: Optional[str]
+    prescritor: str
+    prescritor_nome: Optional[str]
+    prescritor_categoria: Optional[str]
+    prescritor_conselho: Optional[str]
+    prescritor_numero: Optional[str]
+    prescritor_uf: Optional[str]
+    dose: str
+    unidade: Optional[str]
+    via: Optional[str]
+    frequencia: Optional[str]
+    inicio: date
+    termino: Optional[date]
+    orientacoes: Optional[str]
+    medicamento_snapshot: Optional[dict]
+    situacao: str
+    anterior_id: Optional[str]
+    motivo_versao: Optional[str]
+    ativado_por: Optional[str]
+    ativado_em: Optional[datetime]
+    suspenso_por: Optional[str]
+    suspenso_em: Optional[datetime]
+    motivo_suspensao: Optional[str]
+    encerrado_por: Optional[str]
+    encerrado_em: Optional[datetime]
+    motivo_encerramento: Optional[str]
+    substituido_em: Optional[datetime]
+    created_at: datetime
+    programacao: Optional[C5ProgramacaoResponse] = None
+
+
+class C5DoseResponse(BaseModel):
+    id: str
+    ilpi_id: str
+    residente_id: str
+    prescricao_id: str
+    programacao_id: str
+    previsto_em: datetime
+    situacao: str
+    pendente: bool
+    cancelado_em: Optional[datetime]
+    cancelado_por: Optional[str]
+    motivo_cancelamento: Optional[str]
+    created_at: datetime
+
+
+class C5AdministracaoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    prescricao_id: str
+    dose_prevista_id: str
+    resultado: str
+    ocorrido_em: datetime
+    registrado_em: datetime
+    executor_id: str
+    quantidade_realizada: Optional[Decimal] = None
+    justificativa: Optional[str] = None
+    observacao: Optional[str] = None
+    estornado_em: Optional[datetime] = None
+    estornado_por: Optional[str] = None
+    motivo_estorno: Optional[str] = None
+    substitui_id: Optional[str] = None
+    substituto: Optional["C5AdministracaoResponse"] = None
+
+    @field_validator("quantidade_realizada", mode="before")
+    @classmethod
+    def _normalize_qty(cls, v):
+        if isinstance(v, Decimal):
+            # Strip trailing zeros but keep at least one decimal normalization via normalize.
+            # Quantize to remove fixed scale 4 from Numeric(14,4).
+            try:
+                normalized = v.normalize()
+                # normalize() may use exponent; force plain fixed string then back to Decimal
+                return Decimal(format(normalized, "f"))
+            except Exception:
+                return v
+        return v
+
 
 # ---- Tarefa ----
 class TarefaCreate(BaseModel):

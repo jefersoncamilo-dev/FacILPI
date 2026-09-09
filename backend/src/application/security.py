@@ -104,6 +104,16 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "intercorrencias:ler",
         "intercorrencias:criar",
         "intercorrencias:atualizar",
+        "medicamentos:ler",
+        "medicamentos:criar",
+        "medicamentos:atualizar",
+        "prescricoes:ler",
+        "prescricoes:criar",
+        "prescricoes:atualizar",
+        "doses_previstas:ler",
+        "administracoes:ler",
+        "administracoes:criar",
+        "administracoes:corrigir",
     }
 )
 _CLINICAL_MODULES = frozenset(
@@ -120,6 +130,8 @@ _CLINICAL_MODULES = frozenset(
         "cuidados_diarios",
         "medicamentos",
         "prescricoes",
+        "doses_previstas",
+        "administracoes",
         "sinais_vitais",
         "intercorrencias",
         "agenda",
