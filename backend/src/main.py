@@ -14,6 +14,12 @@ from .infrastructure import models as m
 from .application import schemas as s
 from .application.auth import hash_password, verify_password, get_current_user, check_rate_limit, revoke_user_refresh_tokens
 from .application.audit import add_audit
+from .application.medicacao import (
+    medicamentos_router,
+    prescricoes_router,
+    doses_previstas_router,
+    administracoes_router,
+)
 from .application.fase3a import (
     auth_session_router,
     bootstrap_router,
@@ -382,8 +388,6 @@ documentos_router = make_crud_router(
         "tenant_column": "instituicao_id",
     },
 )
-medicamentos_router = make_crud_router(m.Medicamento, s.MedicamentoCreate, s.MedicamentoUpdate, s.MedicamentoResponse, "/medicamentos", ["medicamentos"], fail_closed=True)
-prescricoes_router = make_crud_router(m.Prescricao, s.PrescricaoCreate, s.PrescricaoCreate, s.PrescricaoResponse, "/prescricoes", ["prescricoes"], fail_closed=True)
 tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
 # ===== Avaliacoes Router (F5A-3A1) =====
 
@@ -994,6 +998,8 @@ app.include_router(familiares_router, prefix="/api")
 app.include_router(documentos_router, prefix="/api")
 app.include_router(medicamentos_router, prefix="/api")
 app.include_router(prescricoes_router, prefix="/api")
+app.include_router(doses_previstas_router, prefix="/api")
+app.include_router(administracoes_router, prefix="/api")
 app.include_router(tarefas_router, prefix="/api")
 app.include_router(avaliacoes_router, prefix="/api")
 app.include_router(graus_router, prefix="/api")

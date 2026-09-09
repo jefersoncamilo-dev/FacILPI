@@ -465,8 +465,6 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
     # test_fase5a3b_sinais_vitais_rbac_tenant.py); removida desta lista
     # (sem PUT/DELETE: imutável, 405).
     clinical_list_routes = (
-        "/api/medicamentos/",
-        "/api/prescricoes/",
         "/api/tarefas/",
         "/api/alertas/",
     )
@@ -477,32 +475,7 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
         ("delete", f"/api/residentes/{resident_id}", None),
         # F5A-2B: GET/POST/PUT de familiares liberados via RBAC; DELETE segue fail-closed.
         ("delete", f"/api/familiares/{_new_id()}", None),
-        ("post", "/api/medicamentos/", {"nome": "Medicamento"}),
-        ("put", f"/api/medicamentos/{medication_id}", {"nome": "Medicamento"}),
-        ("delete", f"/api/medicamentos/{medication_id}", None),
-        (
-            "post",
-            "/api/prescricoes/",
-            {
-                "residente_id": resident_id,
-                "medicamento_id": medication_id,
-                "prescritor": "Profissional",
-                "dose": "1 comprimido",
-                "inicio": "2026-01-01",
-            },
-        ),
-        (
-            "put",
-            f"/api/prescricoes/{_new_id()}",
-            {
-                "residente_id": resident_id,
-                "medicamento_id": medication_id,
-                "prescritor": "Profissional",
-                "dose": "1 comprimido",
-                "inicio": "2026-01-01",
-            },
-        ),
-        ("delete", f"/api/prescricoes/{_new_id()}", None),
+        # C5: medicamentos/prescricoes agora RBAC real (PERMISSION_DENIED, não CATALOG_PENDING) — removidos desta lista fail-closed.
         ("post", "/api/tarefas/", {"residente_id": resident_id, "descricao": "Tarefa"}),
         ("put", f"/api/tarefas/{_new_id()}", {"descricao": "Tarefa"}),
         ("delete", f"/api/tarefas/{_new_id()}", None),

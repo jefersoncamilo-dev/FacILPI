@@ -1207,7 +1207,6 @@ def test_41_outros_modulos_clinicos_continuam_fail_closed(sinais_db):
         still_blocked = (
             ("get", "/api/tarefas/", None),
             ("post", "/api/tarefas/", {"residente_id": _new_id(), "descricao": "X"}),
-            ("get", "/api/medicamentos/", None),
             ("get", "/api/alertas/", None),
         )
         for method, route, payload in still_blocked:
@@ -1349,11 +1348,11 @@ def test_47_banco_oficial_intacto(sinais_db):
 
 
 def test_48_catalogo_sem_novas_permissoes(sinais_db):
-    """Sinais Vitais não adicionou permissões; HEAD tem 59 pela migration 011 de Intercorrências."""
+    """C5 adiciona 10 permissões; HEAD tem 69 pela migration 012 de Medicação."""
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         total = (await db.execute(select(func.count(m.Permissao.id)))).scalar_one()
-        assert total == 59
+        assert total == 69
         novas = (
             await db.execute(
                 select(m.Permissao).where(
