@@ -1085,3 +1085,182 @@ class GrauDependenciaResponse(BaseModel):
     motivo_revogacao: Optional[str] = None
     class Config:
         from_attributes = True
+
+
+# ---- PAIS / Plano de Cuidados (D.1) ----
+# Fonte única: planos_cuidados + pais_necessidades/metas/intervencoes.
+# Tenant e autoria vêm da sessão; payload nunca decide ilpi/autor.
+class D1Input(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class PlanoCuidadosCreate(D1Input):
+    residente_id: str
+    data_inicial: date
+    data_final: Optional[date] = None
+    objetivos: Optional[str] = None
+
+    @model_validator(mode="after")
+    def datas_coerentes(self):
+        if self.data_final is not None and self.data_final < self.data_inicial:
+            raise ValueError("data_final anterior a data_inicial")
+        return self
+
+
+class PlanoCuidadosPatch(D1Input):
+    # Edição controlada de rascunho/em_elaboracao. situacao aqui só permite
+    # a promoção rascunho -> em_elaboracao; demais transições são ações.
+    data_inicial: Optional[date] = None
+    data_final: Optional[date] = None
+    objetivos: Optional[str] = None
+    situacao: Optional[Literal["em_elaboracao"]] = None
+
+
+class FuncionarioRef(D1Input):
+    funcionario_id: Annotated[str, Field(min_length=1, max_length=36)]
+
+
+class MotivoEncerramento(D1Input):
+    motivo: Annotated[str, Field(min_length=1)]
+    funcionario_id: Annotated[str, Field(min_length=1, max_length=36)]
+
+
+class NovaVersao(D1Input):
+    motivo: Annotated[str, Field(min_length=1)]
+
+
+class NecessidadeCreate(D1Input):
+    descricao: Annotated[str, Field(min_length=1)]
+    categoria: Optional[Annotated[str, Field(max_length=100)]] = None
+    gravidade: Optional[Annotated[str, Field(max_length=50)]] = None
+    evidencias: Optional[str] = None
+    origem: Literal["manual", "avaliacao", "grau_dependencia", "intercorrencia"] = "manual"
+    referencia_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def referencia_coerente(self):
+        if self.origem == "manual" and self.referencia_id:
+            raise ValueError("origem=manual não aceita referencia_id")
+        if self.origem != "manual" and not self.referencia_id:
+            raise ValueError("origem referenciada exige referencia_id")
+        return self
+
+
+class NecessidadePatch(D1Input):
+    descricao: Optional[Annotated[str, Field(min_length=1)]] = None
+    categoria: Optional[Annotated[str, Field(max_length=100)]] = None
+    gravidade: Optional[Annotated[str, Field(max_length=50)]] = None
+    evidencias: Optional[str] = None
+    situacao: Optional[Literal["ativa", "inativa"]] = None
+
+
+class MetaCreate(D1Input):
+    descricao: Annotated[str, Field(min_length=1)]
+    indicador: Optional[Annotated[str, Field(max_length=255)]] = None
+    valor_esperado: Optional[Annotated[str, Field(max_length=255)]] = None
+    prazo: Optional[date] = None
+    responsavel_funcionario_id: Optional[str] = None
+
+
+class MetaPatch(D1Input):
+    descricao: Optional[Annotated[str, Field(min_length=1)]] = None
+    indicador: Optional[Annotated[str, Field(max_length=255)]] = None
+    valor_esperado: Optional[Annotated[str, Field(max_length=255)]] = None
+    prazo: Optional[date] = None
+    responsavel_funcionario_id: Optional[str] = None
+    situacao: Optional[Literal["ativa", "inativa"]] = None
+
+
+class IntervencaoCreate(D1Input):
+    descricao: Annotated[str, Field(min_length=1)]
+    necessidade_id: Optional[str] = None
+    frequencia: Optional[Annotated[str, Field(max_length=100)]] = None
+    horario: Optional[Annotated[str, Field(max_length=20)]] = None
+    perfil_responsavel: Optional[Annotated[str, Field(max_length=100)]] = None
+    profissional_designado_id: Optional[str] = None
+    prioridade: Optional[Annotated[str, Field(max_length=20)]] = None
+    instrucoes: Optional[str] = None
+
+
+class IntervencaoPatch(D1Input):
+    descricao: Optional[Annotated[str, Field(min_length=1)]] = None
+    necessidade_id: Optional[str] = None
+    frequencia: Optional[Annotated[str, Field(max_length=100)]] = None
+    horario: Optional[Annotated[str, Field(max_length=20)]] = None
+    perfil_responsavel: Optional[Annotated[str, Field(max_length=100)]] = None
+    profissional_designado_id: Optional[str] = None
+    prioridade: Optional[Annotated[str, Field(max_length=20)]] = None
+    instrucoes: Optional[str] = None
+    situacao: Optional[Literal["ativa", "inativa"]] = None
+
+
+class NecessidadeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    plano_id: str
+    categoria: Optional[str] = None
+    descricao: str
+    gravidade: Optional[str] = None
+    evidencias: Optional[str] = None
+    origem: str
+    situacao: str
+    created_at: Optional[datetime] = None
+
+
+class MetaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    plano_id: str
+    descricao: str
+    indicador: Optional[str] = None
+    valor_esperado: Optional[str] = None
+    prazo: Optional[date] = None
+    responsavel_funcionario_id: Optional[str] = None
+    situacao: str
+    created_at: Optional[datetime] = None
+
+
+class IntervencaoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    plano_id: str
+    necessidade_id: Optional[str] = None
+    descricao: str
+    frequencia: Optional[str] = None
+    horario: Optional[str] = None
+    perfil_responsavel: Optional[str] = None
+    profissional_designado_id: Optional[str] = None
+    prioridade: Optional[str] = None
+    instrucoes: Optional[str] = None
+    situacao: str
+    created_at: Optional[datetime] = None
+
+
+class PlanoCuidadosResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    versao: int
+    objetivos: Optional[str] = None
+    data_inicial: date
+    data_final: Optional[date] = None
+    situacao: str
+    autor_id: Optional[str] = None
+    revisor_funcionario_id: Optional[str] = None
+    aprovador_funcionario_id: Optional[str] = None
+    revisado_em: Optional[datetime] = None
+    aprovado_em: Optional[datetime] = None
+    motivo_encerramento: Optional[str] = None
+    encerrado_em: Optional[datetime] = None
+    anterior_id: Optional[str] = None
+    motivo_versao: Optional[str] = None
+    superseded_by: Optional[str] = None
+    lock_version: int = 0
+    created_at: Optional[datetime] = None
+    necessidades: list[NecessidadeResponse] = []
+    metas: list[MetaResponse] = []
+    intervencoes: list[IntervencaoResponse] = []

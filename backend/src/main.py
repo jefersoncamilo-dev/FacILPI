@@ -20,6 +20,7 @@ from .application.medicacao import (
     doses_previstas_router,
     administracoes_router,
 )
+from .application.pais import planos_router
 from .application.fase3a import (
     auth_session_router,
     bootstrap_router,
@@ -1003,6 +1004,7 @@ app.include_router(administracoes_router, prefix="/api")
 app.include_router(tarefas_router, prefix="/api")
 app.include_router(avaliacoes_router, prefix="/api")
 app.include_router(graus_router, prefix="/api")
+app.include_router(planos_router, prefix="/api")
 app.include_router(sinais_router, prefix="/api")
 app.include_router(intercorrencias_router, prefix="/api")
 app.include_router(alertas_router, prefix="/api")
