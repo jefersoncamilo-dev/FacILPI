@@ -1264,3 +1264,143 @@ class PlanoCuidadosResponse(BaseModel):
     necessidades: list[NecessidadeResponse] = []
     metas: list[MetaResponse] = []
     intervencoes: list[IntervencaoResponse] = []
+
+
+# ---- Rotina assistencial (D.2) ----
+# Programação nasce SOMENTE de ação humana explícita sobre Intervenção do
+# PAIS vigente. Tenant/autor/executor vêm da sessão; payload nunca decide.
+class D2Input(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ProgramacaoCreate(D2Input):
+    plano_id: str
+    intervencao_id: str
+    horarios: list[Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")]] = Field(min_length=1, max_length=48)
+    timezone: Annotated[str, Field(min_length=1, max_length=100)]
+    vigencia_inicio: AwareDatetime
+    vigencia_fim: Optional[AwareDatetime] = None
+    perfil_responsavel: Optional[Annotated[str, Field(max_length=100)]] = None
+    funcionario_designado_id: Optional[str] = None
+    prioridade: Literal["baixa", "media", "alta"] = "media"
+
+    @field_validator("timezone")
+    @classmethod
+    def valid_timezone(cls, value):
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ValueError("Timezone IANA indisponivel ou invalida")
+        return value
+
+    @model_validator(mode="after")
+    def valid_schedule(self):
+        if len(set(self.horarios)) != len(self.horarios):
+            raise ValueError("Horarios duplicados")
+        if self.vigencia_fim is not None and self.vigencia_fim <= self.vigencia_inicio:
+            raise ValueError("Fim deve ser posterior ao inicio")
+        return self
+
+
+class ProgramacaoPatch(D2Input):
+    # Edição controlada da programacao ativa. horarios/timezone são
+    # imutáveis após a criação (nova programação em vez de reescrita).
+    vigencia_fim: Optional[AwareDatetime] = None
+    perfil_responsavel: Optional[Annotated[str, Field(max_length=100)]] = None
+    funcionario_designado_id: Optional[str] = None
+    prioridade: Optional[Literal["baixa", "media", "alta"]] = None
+
+
+class ProgramacaoCancel(D2Input):
+    motivo: Annotated[str, Field(min_length=1)]
+
+
+class OcorrenciaCancel(D2Input):
+    motivo: Annotated[str, Field(min_length=1)]
+
+
+class ExecucaoCreate(D2Input):
+    ocorrencia_id: str
+    resultado: Literal["executada", "recusada", "omitida"]
+    ocorrido_em: AwareDatetime
+    observacao: Optional[str] = None
+    justificativa: Optional[Annotated[str, Field(min_length=1)]] = None
+
+    @model_validator(mode="after")
+    def outcome_fields(self):
+        if self.resultado != "executada" and not self.justificativa:
+            raise ValueError("Justificativa obrigatoria para recusa ou omissao")
+        return self
+
+
+class ExecucaoEstorno(D2Input):
+    motivo: Annotated[str, Field(min_length=1)]
+    substituto: Optional[ExecucaoCreate] = None
+
+
+class ProgramacaoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    plano_id: str
+    intervencao_id: str
+    autor_id: str
+    horarios: list[str]
+    timezone: str
+    vigencia_inicio: datetime
+    vigencia_fim: Optional[datetime] = None
+    cobertura_ate: Optional[datetime] = None
+    perfil_responsavel: Optional[str] = None
+    funcionario_designado_id: Optional[str] = None
+    prioridade: str
+    situacao: str
+    lock_version: int = 0
+    created_at: Optional[datetime] = None
+
+
+class OcorrenciaResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    plano_id: str
+    intervencao_id: str
+    programacao_id: str
+    previsto_em: datetime
+    situacao: str
+    pendente: bool = True
+    cancelado_em: Optional[datetime] = None
+    cancelado_por: Optional[str] = None
+    motivo_cancelamento: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+
+class ExecucaoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    programacao_id: str
+    ocorrencia_id: str
+    resultado: str
+    ocorrido_em: datetime
+    registrado_em: datetime
+    executor_id: str
+    observacao: Optional[str] = None
+    justificativa: Optional[str] = None
+    estornado_em: Optional[datetime] = None
+    estornado_por: Optional[str] = None
+    motivo_estorno: Optional[str] = None
+    substitui_id: Optional[str] = None
+    substituto: Optional["ExecucaoResponse"] = None
+    created_at: Optional[datetime] = None
+
+
+class PlantaoItem(BaseModel):
+    origem: Literal["cuidado", "medicacao", "intercorrencia"]
+    registro_id: str
+    residente_id: str
+    descricao: str
+    previsto_em: Optional[datetime] = None
+    prioridade: Optional[str] = None

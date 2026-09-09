@@ -21,6 +21,12 @@ from .application.medicacao import (
     administracoes_router,
 )
 from .application.pais import planos_router
+from .application.rotina import (
+    execucoes_router,
+    ocorrencias_router,
+    plantao_router,
+    programacoes_router,
+)
 from .application.fase3a import (
     auth_session_router,
     bootstrap_router,
@@ -1005,6 +1011,10 @@ app.include_router(tarefas_router, prefix="/api")
 app.include_router(avaliacoes_router, prefix="/api")
 app.include_router(graus_router, prefix="/api")
 app.include_router(planos_router, prefix="/api")
+app.include_router(programacoes_router, prefix="/api")
+app.include_router(ocorrencias_router, prefix="/api")
+app.include_router(execucoes_router, prefix="/api")
+app.include_router(plantao_router, prefix="/api")
 app.include_router(sinais_router, prefix="/api")
 app.include_router(intercorrencias_router, prefix="/api")
 app.include_router(alertas_router, prefix="/api")

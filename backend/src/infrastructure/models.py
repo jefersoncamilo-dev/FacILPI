@@ -468,6 +468,141 @@ class PaisIntervencao(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class ProgramacaoCuidado(Base):
+    # D.2: programação operacional de uma Intervenção do PAIS vigente.
+    # Horários fixos confirmados por ação humana; texto livre de
+    # frequencia/horario da Intervenção é só intenção, nunca regra.
+    __tablename__ = "programacoes_cuidado"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_progcuidado_residente",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["plano_id", "ilpi_id"],
+            ["planos_cuidados.id", "planos_cuidados.ilpi_id"],
+            name="fk_progcuidado_plano",
+            ondelete="RESTRICT",
+        ),
+        ForeignKeyConstraint(
+            ["intervencao_id", "ilpi_id", "plano_id"],
+            ["pais_intervencoes.id", "pais_intervencoes.ilpi_id", "pais_intervencoes.plano_id"],
+            name="fk_progcuidado_intervencao",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "ilpi_id", "residente_id", name="uq_progcuidado_cadeia"),
+        CheckConstraint("situacao IN ('ativa','cancelada')", name="ck_progcuidado_situacao"),
+        Index("ix_progcuidado_ilpi_residente", "ilpi_id", "residente_id"),
+        Index("ix_progcuidado_intervencao", "intervencao_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=False, index=True)
+    intervencao_id: Mapped[str] = mapped_column(String(36), ForeignKey("pais_intervencoes.id"), nullable=False, index=True)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    horarios: Mapped[list] = mapped_column(sa.JSON, nullable=False)
+    timezone: Mapped[str] = mapped_column(String(100), nullable=False)
+    vigencia_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    vigencia_fim: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    cobertura_ate: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    perfil_responsavel: Mapped[str] = mapped_column(String(100), nullable=True)
+    funcionario_designado_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
+    prioridade: Mapped[str] = mapped_column(String(20), nullable=False, default="media")
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
+
+
+class OcorrenciaCuidado(Base):
+    # D.2: ocorrência prevista persistida. pendente/atrasada são DERIVADOS
+    # (projeção); nunca colunas. Sem em_execucao/concluida/recusada/omitida.
+    __tablename__ = "ocorrencias_cuidado"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["programacao_id", "ilpi_id", "residente_id"],
+            ["programacoes_cuidado.id", "programacoes_cuidado.ilpi_id", "programacoes_cuidado.residente_id"],
+            name="fk_ocorr_programacao",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "ilpi_id", "residente_id", "programacao_id", name="uq_ocorr_cadeia"),
+        UniqueConstraint("programacao_id", "previsto_em", name="uq_ocorr_programacao_horario"),
+        CheckConstraint("situacao IN ('prevista','cancelada')", name="ck_ocorr_situacao"),
+        CheckConstraint(
+            "(situacao = 'prevista' AND cancelado_em IS NULL AND cancelado_por IS NULL AND motivo_cancelamento IS NULL) "
+            "OR (situacao = 'cancelada' AND cancelado_em IS NOT NULL AND cancelado_por IS NOT NULL "
+            "AND motivo_cancelamento IS NOT NULL AND length(trim(motivo_cancelamento)) > 0)",
+            name="ck_ocorr_cancelamento",
+        ),
+        Index("ix_ocorr_ilpi_residente_previsto", "ilpi_id", "residente_id", "previsto_em"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=False, index=True)
+    intervencao_id: Mapped[str] = mapped_column(String(36), ForeignKey("pais_intervencoes.id"), nullable=False, index=True)
+    programacao_id: Mapped[str] = mapped_column(String(36), ForeignKey("programacoes_cuidado.id"), nullable=False, index=True)
+    previsto_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="prevista")
+    cancelado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    motivo_cancelamento: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ExecucaoCuidado(Base):
+    # D.2: execução append-only. Correção = estorno + substituto.
+    __tablename__ = "execucoes_cuidado"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["ocorrencia_id", "ilpi_id", "residente_id", "programacao_id"],
+            ["ocorrencias_cuidado.id", "ocorrencias_cuidado.ilpi_id", "ocorrencias_cuidado.residente_id", "ocorrencias_cuidado.programacao_id"],
+            name="fk_exec_ocorrencia",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "ilpi_id", "residente_id", "programacao_id", "ocorrencia_id", name="uq_exec_cadeia"),
+        ForeignKeyConstraint(
+            ["substitui_id", "ilpi_id", "residente_id", "programacao_id", "ocorrencia_id"],
+            ["execucoes_cuidado.id", "execucoes_cuidado.ilpi_id", "execucoes_cuidado.residente_id", "execucoes_cuidado.programacao_id", "execucoes_cuidado.ocorrencia_id"],
+            name="fk_exec_substitui",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("resultado IN ('executada','recusada','omitida')", name="ck_exec_resultado"),
+        CheckConstraint(
+            "resultado = 'executada' OR (justificativa IS NOT NULL AND length(trim(justificativa)) > 0)",
+            name="ck_exec_justificativa",
+        ),
+        CheckConstraint(
+            "(estornado_em IS NULL AND estornado_por IS NULL AND motivo_estorno IS NULL) "
+            "OR (estornado_em IS NOT NULL AND estornado_por IS NOT NULL "
+            "AND motivo_estorno IS NOT NULL AND length(trim(motivo_estorno)) > 0)",
+            name="ck_exec_estorno",
+        ),
+        Index("uq_exec_ocorrencia_vigente", "ocorrencia_id", unique=True, sqlite_where=sa.text("estornado_em IS NULL"), postgresql_where=sa.text("estornado_em IS NULL")),
+        Index("uq_exec_substitui", "substitui_id", unique=True, sqlite_where=sa.text("substitui_id IS NOT NULL"), postgresql_where=sa.text("substitui_id IS NOT NULL")),
+        Index("ix_exec_ilpi_residente_ocorrido", "ilpi_id", "residente_id", "ocorrido_em"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
+    programacao_id: Mapped[str] = mapped_column(String(36), ForeignKey("programacoes_cuidado.id"), nullable=False, index=True)
+    ocorrencia_id: Mapped[str] = mapped_column(String(36), ForeignKey("ocorrencias_cuidado.id"), nullable=False, index=True)
+    resultado: Mapped[str] = mapped_column(String(20), nullable=False)
+    ocorrido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    registrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    executor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    observacao: Mapped[str] = mapped_column(Text, nullable=True)
+    justificativa: Mapped[str] = mapped_column(Text, nullable=True)
+    estornado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    estornado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    motivo_estorno: Mapped[str] = mapped_column(Text, nullable=True)
+    substitui_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Tarefa(Base):
     __tablename__ = "tarefas"
     __table_args__ = (
