@@ -143,7 +143,7 @@ def test_empty_roundtrip_catalog_no_automatic_grants(c5_migration_db):
     _migrate(ref, target=REV_011)
     before = asyncio.run(_connection(ref, _state))
     assert before["counts"] == (59, 55, 15)
-    _migrate(ref, target="head")
+    _migrate(ref, target=REV_012)
     after = asyncio.run(_connection(ref, _state))
     assert after["revision"] == REV_012
     assert after["counts"] == (69, 55, 15)

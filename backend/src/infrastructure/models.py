@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 import sqlalchemy as sa
 from sqlalchemy import String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint, CheckConstraint, Index, ForeignKeyConstraint
@@ -320,6 +320,12 @@ class GrauDependencia(Base):
 
 
 class PlanoCuidados(Base):
+    # D.1: fonte única oficial do planejamento assistencial (PAIS). Filhas
+    # pais_necessidades/pais_metas/pais_intervencoes; Tarefa NÃO é fonte.
+    # Residente.grau_dependencia nunca é lido aqui (fonte: graus_dependencia
+    # ativo). Texto livre legado (responsaveis/revisor/aprovador) preservado
+    # para compatibilidade histórica; autoridade clínica é Funcionario ativo
+    # do tenant. Sem automação clínica (D.2+).
     __tablename__ = "planos_cuidados"
     __table_args__ = (
         Index("ix_planos_cuidados_ilpi_id", "ilpi_id"),
@@ -328,19 +334,137 @@ class PlanoCuidados(Base):
             ["residentes.id", "residentes.instituicao_id"],
             name="fk_planos_residente_ilpi",
         ),
+        UniqueConstraint("id", "ilpi_id", name="uq_planos_id_ilpi"),
+        CheckConstraint(
+            "situacao IN ('rascunho','em_elaboracao','em_revisao','aprovado','vigente','encerrado','substituido')",
+            name="ck_planos_situacao",
+        ),
+        Index(
+            "uq_planos_vigente_por_residente",
+            "residente_id",
+            unique=True,
+            sqlite_where=sa.text("situacao = 'vigente'"),
+            postgresql_where=sa.text("situacao = 'vigente'"),
+        ),
+        Index("ix_planos_ilpi_residente", "ilpi_id", "residente_id"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False, index=True)
-    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
-    versao: Mapped[int] = mapped_column(Integer, default=1)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    versao: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     objetivos: Mapped[str] = mapped_column(Text, nullable=True)
     data_inicial: Mapped[date] = mapped_column(Date, nullable=False)
     data_final: Mapped[date] = mapped_column(Date, nullable=True)
-    situacao: Mapped[str] = mapped_column(String(50), default="Rascunho")
+    situacao: Mapped[str] = mapped_column(String(50), default="rascunho", nullable=False)
     responsaveis: Mapped[str] = mapped_column(Text, nullable=True)
     revisor: Mapped[str] = mapped_column(String(255), nullable=True)
     aprovador: Mapped[str] = mapped_column(String(255), nullable=True)
     data_aprovacao: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    revisor_funcionario_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
+    aprovador_funcionario_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
+    revisado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    aprovado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    motivo_encerramento: Mapped[str] = mapped_column(Text, nullable=True)
+    encerrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    anterior_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=True)
+    motivo_versao: Mapped[str] = mapped_column(Text, nullable=True)
+    superseded_by: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=True)
+    lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Python-side updated_at: server onupdate expiraria o atributo no flush
+    # e quebraria o acesso assíncrono (MissingGreenlet).
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
+
+
+class PaisNecessidade(Base):
+    # D.1: necessidade assistencial do PAIS. origem é referência/evidência
+    # (manual/avaliacao/grau_dependencia/intercorrencia) — sem automação.
+    __tablename__ = "pais_necessidades"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["plano_id", "ilpi_id"],
+            ["planos_cuidados.id", "planos_cuidados.ilpi_id"],
+            name="fk_pais_necessidades_plano",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "ilpi_id", "plano_id", name="uq_pais_necessidades_cadeia"),
+        CheckConstraint(
+            "origem IN ('manual','avaliacao','grau_dependencia','intercorrencia')",
+            name="ck_pais_necessidades_origem",
+        ),
+        CheckConstraint("situacao IN ('ativa','inativa')", name="ck_pais_necessidades_situacao"),
+        Index("ix_pais_necessidades_plano", "plano_id"),
+        Index("ix_pais_necessidades_ilpi_plano", "ilpi_id", "plano_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=False, index=True)
+    categoria: Mapped[str] = mapped_column(String(100), nullable=True)
+    descricao: Mapped[str] = mapped_column(Text, nullable=False)
+    gravidade: Mapped[str] = mapped_column(String(50), nullable=True)
+    evidencias: Mapped[str] = mapped_column(Text, nullable=True)
+    origem: Mapped[str] = mapped_column(String(50), nullable=False)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaisMeta(Base):
+    # D.1: meta assistencial do PAIS. Sem prazo padrão institucional.
+    __tablename__ = "pais_metas"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["plano_id", "ilpi_id"],
+            ["planos_cuidados.id", "planos_cuidados.ilpi_id"],
+            name="fk_pais_metas_plano",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "ilpi_id", "plano_id", name="uq_pais_metas_cadeia"),
+        CheckConstraint("situacao IN ('ativa','inativa')", name="ck_pais_metas_situacao"),
+        Index("ix_pais_metas_plano", "plano_id"),
+        Index("ix_pais_metas_ilpi_plano", "ilpi_id", "plano_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=False, index=True)
+    descricao: Mapped[str] = mapped_column(Text, nullable=False)
+    indicador: Mapped[str] = mapped_column(String(255), nullable=True)
+    valor_esperado: Mapped[str] = mapped_column(String(255), nullable=True)
+    prazo: Mapped[date] = mapped_column(Date, nullable=True)
+    responsavel_funcionario_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PaisIntervencao(Base):
+    # D.1: intervenção assistencial (intenção). frequencia/horario NÃO geram
+    # programação, tarefa, ocorrência ou execução (D.2).
+    __tablename__ = "pais_intervencoes"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["plano_id", "ilpi_id"],
+            ["planos_cuidados.id", "planos_cuidados.ilpi_id"],
+            name="fk_pais_intervencoes_plano",
+            ondelete="RESTRICT",
+        ),
+        UniqueConstraint("id", "ilpi_id", "plano_id", name="uq_pais_intervencoes_cadeia"),
+        CheckConstraint("situacao IN ('ativa','inativa')", name="ck_pais_intervencoes_situacao"),
+        Index("ix_pais_intervencoes_plano", "plano_id"),
+        Index("ix_pais_intervencoes_ilpi_plano", "ilpi_id", "plano_id"),
+        Index("ix_pais_intervencoes_necessidade", "necessidade_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False, index=True)
+    plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=False, index=True)
+    necessidade_id: Mapped[str] = mapped_column(String(36), ForeignKey("pais_necessidades.id"), nullable=True, index=True)
+    descricao: Mapped[str] = mapped_column(Text, nullable=False)
+    frequencia: Mapped[str] = mapped_column(String(100), nullable=True)
+    horario: Mapped[str] = mapped_column(String(20), nullable=True)
+    perfil_responsavel: Mapped[str] = mapped_column(String(100), nullable=True)
+    profissional_designado_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
+    prioridade: Mapped[str] = mapped_column(String(20), nullable=True)
+    instrucoes: Mapped[str] = mapped_column(Text, nullable=True)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
