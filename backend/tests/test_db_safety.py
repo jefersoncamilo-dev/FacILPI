@@ -204,6 +204,58 @@ def test_guard_allows_pathlike_registered_temp(tmp_path):
     con.close()
 
 
+# ── P1: bytes fail-closed + dbapi2 parity + restore ────────────────────
+
+def test_guard_rejects_bytes_official_connect():
+    with pytest.raises(AssertionError, match="official"):
+        sqlite3.connect(os.fsencode(str(OFFICIAL_DB)))
+
+
+def test_guard_allows_bytes_registered_temp(tmp_path):
+    from tests.db_safety import register_temp_root
+    root = register_temp_root(tmp_path / "guard-bytes")
+    target = root / "ok.db"
+    con = sqlite3.connect(os.fsencode(str(target)))
+    con.close()
+
+
+def test_guard_allows_bytes_memory():
+    con = sqlite3.connect(b":memory:")
+    con.close()
+
+
+def test_dbapi2_rejects_official_connect():
+    with pytest.raises(AssertionError, match="official"):
+        sqlite3.dbapi2.connect(str(OFFICIAL_DB))
+
+
+def test_dbapi2_allows_registered_temp(tmp_path):
+    from tests.db_safety import register_temp_root
+    root = register_temp_root(tmp_path / "guard-dbapi2")
+    target = root / "ok.db"
+    con = sqlite3.dbapi2.connect(str(target))
+    con.close()
+
+
+def test_guard_entrypoints_do_not_diverge_and_restore_intact():
+    import tests.conftest as conftest
+
+    assert sqlite3.connect is conftest._guarded_connect
+    assert sqlite3.dbapi2.connect is conftest._guarded_connect
+    assert conftest._ORIGINAL_CONNECT is not conftest._guarded_connect
+    try:
+        conftest.pytest_unconfigure(None)
+        assert sqlite3.connect is conftest._ORIGINAL_CONNECT
+        assert sqlite3.dbapi2.connect is conftest._ORIGINAL_DBAPI2_CONNECT
+    finally:
+        sqlite3.connect = conftest._guarded_connect
+        sqlite3.dbapi2.connect = conftest._guarded_connect
+    with pytest.raises(AssertionError, match="official"):
+        sqlite3.connect(str(OFFICIAL_DB))
+    with pytest.raises(AssertionError, match="official"):
+        sqlite3.dbapi2.connect(str(OFFICIAL_DB))
+
+
 def test_guard_active_during_collection_import():
     """Prove the guard is installed before test-module import (collection phase).
 

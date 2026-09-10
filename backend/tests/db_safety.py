@@ -54,9 +54,15 @@ def _sqlite_path(url: str) -> pathlib.Path | None:
     return pathlib.Path(unquote(database)).resolve()
 
 
-def validate_sqlite_path(path: str | os.PathLike) -> pathlib.Path:
-    """Validate a raw SQLite path (str or PathLike, not a URL). Rejects official DB and non-disposable targets."""
-    resolved = pathlib.Path(os.fspath(path)).resolve()
+def validate_sqlite_path(path: str | bytes | os.PathLike) -> pathlib.Path:
+    """Validate a raw SQLite path (str, bytes or PathLike, not a URL). Rejects official DB and non-disposable targets."""
+    raw = os.fspath(path)
+    if isinstance(raw, bytes):
+        try:
+            raw = os.fsdecode(raw)
+        except Exception:
+            raise AssertionError("SQLite target is not disposable")
+    resolved = pathlib.Path(raw).resolve()
     assert resolved not in {OFFICIAL_DB, BACKEND_OFFICIAL_DB}, "official SQLite database is forbidden"
     assert not _is_under(resolved, ROOT / "storage"), "repository storage is forbidden"
     assert not _is_under(resolved, ROOT / "backend" / "storage"), "backend storage is forbidden"
