@@ -297,6 +297,68 @@ UF_VALIDAS = {
 }
 
 # ---- Residente ----
+class D3Input(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class AdmissaoCreate(D3Input):
+    residente_id: str = Field(min_length=1, max_length=36)
+    responsavel_funcionario_id: Optional[str] = Field(None, min_length=1, max_length=36)
+
+
+class AdmissaoAcao(D3Input):
+    lock_version: int = Field(ge=0, strict=True)
+
+
+class AdmissaoAvancar(AdmissaoAcao):
+    etapa_destino: Literal["triagem", "documentacao", "avaliacoes", "contrato", "quarto_leito", "pais", "concluida"]
+
+
+class AdmissaoMotivo(AdmissaoAcao):
+    motivo: str = Field(min_length=1, max_length=2000)
+
+
+class AdmissaoResponsavel(AdmissaoMotivo):
+    responsavel_funcionario_id: Optional[str] = Field(..., min_length=1, max_length=36)
+
+
+class AdmissaoContrato(AdmissaoMotivo):
+    documento_id: Optional[str] = Field(None, min_length=1, max_length=36)
+
+
+class AdmissaoRequisitoAvaliacao(D3Input):
+    # Requisito do processo, nao respostas nem decisao clinica.
+    tipo: str = Field(min_length=1, max_length=50)
+    instrumento: Optional[str] = Field(None, min_length=1, max_length=100)
+    origem: str = Field(min_length=1, max_length=255)
+
+
+class AdmissaoRequisitos(AdmissaoMotivo):
+    avaliacoes_requeridas: list[AdmissaoRequisitoAvaliacao] = Field(max_length=50)
+
+
+class AdmissaoResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: str
+    ilpi_id: str
+    residente_id: str
+    situacao: str
+    autor_id: str
+    responsavel_funcionario_id: Optional[str]
+    iniciada_em: datetime
+    concluida_em: Optional[datetime]
+    cancelada_em: Optional[datetime]
+    desistencia_em: Optional[datetime]
+    motivo_cancelamento: Optional[str]
+    motivo_desistencia: Optional[str]
+    contrato_registrado_em: Optional[datetime]
+    contrato_documento_id: Optional[str]
+    avaliacoes_requeridas: list[AdmissaoRequisitoAvaliacao]
+    lock_version: int
+    created_at: datetime
+    updated_at: datetime
+
+
 class ResidenteCreate(BaseModel):
     instituicao_id: Optional[str] = None
     nome: str = Field(..., min_length=2)
