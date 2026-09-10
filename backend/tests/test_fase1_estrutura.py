@@ -12,29 +12,35 @@ import sys
 import tempfile
 import uuid
 
+import pytest
+
+from tests.db_safety import run_alembic
+
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 
 
-def _prepare_fase1_db():
-    path = pathlib.Path(tempfile.mkdtemp(prefix="facilpi-fase1-")) / "fase1-structure.db"
-    env = os.environ.copy()
-    env["DATABASE_URL"] = f"sqlite+aiosqlite:///{path.resolve().as_posix()}"
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "002_fase1_isolamento"],
-        cwd=BACKEND,
-        env=env,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+def _prepare_fase1_db(path):
+    result = run_alembic(
+        f"sqlite+aiosqlite:///{path.resolve().as_posix()}",
+        "upgrade",
+        "002_fase1_isolamento",
     )
     assert result.returncode == 0, result.stdout + result.stderr
     return path
 
 
-DB_PATH = _prepare_fase1_db()
+DB_PATH = None
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _fase1_database(tmp_path_factory):
+    global DB_PATH
+    DB_PATH = _prepare_fase1_db(tmp_path_factory.mktemp("facilpi-fase1") / "fase1-structure.db")
+    return DB_PATH
 
 def _connect(db_path=DB_PATH):
+    if db_path is None:
+        db_path = DB_PATH
     con = sqlite3.connect(str(db_path))
     con.execute("PRAGMA foreign_keys=ON")
     return con

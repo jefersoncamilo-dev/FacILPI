@@ -8,7 +8,6 @@ Documentos — isso pertence à F5A-2C.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import importlib.util
 import os
 import pathlib
@@ -19,10 +18,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tests.db_safety import run_alembic, validate_target
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "backend"
-OFFICIAL_DB = ROOT / "storage" / "app.db"
 MIGRATION_007 = BACKEND / "alembic" / "versions" / "007_expandir_rbac_documentos.py"
 MIGRATION_006 = BACKEND / "alembic" / "versions" / "006_catalogo_clinico_rbac.py"
 SECURITY = BACKEND / "src" / "application" / "security.py"
@@ -92,26 +92,15 @@ def _async_url(url: str) -> str:
 
 
 def _assert_disposable_url(url: str) -> None:
-    if "sqlite" in url:
-        path = pathlib.Path(url.split("///", 1)[1].split("?", 1)[0]).resolve()
-        assert path != OFFICIAL_DB.resolve(), "test must never write the official database"
-    else:
-        assert "storage/app.db" not in url, "test must never write the official database"
+    validate_target(url)
 
 
 def _run_alembic(url: str, *arguments: str) -> subprocess.CompletedProcess[str]:
-    _assert_disposable_url(url)
-    environment = os.environ.copy()
-    environment["DATABASE_URL"] = url
-    environment.pop("APP_DATABASE_URL", None)
-    return subprocess.run(
-        [sys.executable, "-m", "alembic", "-x", f"database_url={url}", *arguments],
-        cwd=BACKEND, env=environment,
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-    )
+    return run_alembic(url, *arguments)
 
 
 async def _reset_postgres(url: str) -> None:
+    validate_target(url)
     engine = create_async_engine(_async_url(url), poolclass=NullPool)
     try:
         async with engine.connect() as connection:
@@ -153,17 +142,6 @@ def _grants(url: str, profile_id: str) -> set:
 
 def _assert_success(result: subprocess.CompletedProcess[str]) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
-
-
-def _official_snapshot() -> str | None:
-    try:
-        digest = hashlib.sha256()
-        with OFFICIAL_DB.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                digest.update(chunk)
-        return digest.hexdigest().upper()
-    except OSError:
-        return None
 
 
 def _load_migration_007():
@@ -430,7 +408,6 @@ def test_fase5a2c0_rbac_documentos(tmp_path):
     for key in EXPECTED_DOC_KEYS:
         assert f'"{key}"' in security, key
 
-    official_before = _official_snapshot()
     targets = [("sqlite", _sqlite_url(tmp_path / "fase5a2c0_rbac.db"))]
     postgres_url = os.getenv("FASE3A_TEST_POSTGRES_URL")
     if postgres_url:
@@ -443,5 +420,3 @@ def test_fase5a2c0_rbac_documentos(tmp_path):
         _run_full_catalog_scenario(tmp_path, backend, url)
         if backend == "postgresql":
             asyncio.run(_reset_postgres(url))
-    if official_before is not None:
-        assert _official_snapshot() == official_before
