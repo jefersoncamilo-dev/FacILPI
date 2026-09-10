@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import importlib.util
 import os
 import pathlib
-import sqlite3
 import subprocess
 import sys
 
@@ -16,10 +14,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tests.db_safety import run_alembic, validate_target
+
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 BACKEND = ROOT / "backend"
-OFFICIAL_DB = ROOT / "storage" / "app.db"
 MIGRATION = BACKEND / "alembic" / "versions" / "004_catalogo_permissoes_rbac.py"
 
 PERMISSION_COLUMNS = ("id", "modulo", "acao", "chave", "descricao")
@@ -156,28 +155,15 @@ def _async_url(url: str) -> str:
 
 
 def _assert_disposable_url(url: str) -> None:
-    if "sqlite" in url:
-        path = pathlib.Path(url.split("///", 1)[1].split("?", 1)[0]).resolve()
-        assert path != OFFICIAL_DB.resolve(), "test must never write the official database"
+    validate_target(url)
 
 
 def _run_alembic(url: str, *arguments: str) -> subprocess.CompletedProcess[str]:
-    _assert_disposable_url(url)
-    environment = os.environ.copy()
-    environment["DATABASE_URL"] = url
-    environment.pop("APP_DATABASE_URL", None)
-    return subprocess.run(
-        [sys.executable, "-m", "alembic", "-x", f"database_url={url}", *arguments],
-        cwd=BACKEND,
-        env=environment,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
+    return run_alembic(url, *arguments)
 
 
 async def _reset_postgres(url: str) -> None:
+    validate_target(url)
     engine = create_async_engine(_async_url(url), poolclass=NullPool)
     try:
         async with engine.connect() as connection:
@@ -460,24 +446,6 @@ async def _mutate_permission(url: str, mode: str) -> None:
         await engine.dispose()
 
 
-def _sha256(path: pathlib.Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest().upper()
-
-
-def _assert_official_readable_only() -> None:
-    connection = sqlite3.connect(
-        f"file:{OFFICIAL_DB.resolve().as_posix()}?mode=ro", uri=True
-    )
-    try:
-        assert connection.execute("SELECT 1").fetchone()[0] == 1
-    finally:
-        connection.close()
-
-
 def _load_migration():
     spec = importlib.util.spec_from_file_location("phase2_catalog_migration", MIGRATION)
     assert spec is not None and spec.loader is not None
@@ -561,9 +529,6 @@ def test_fase2_catalogo_rbac_em_bancos_descartaveis(tmp_path):
     assert migration.revision == "004_catalogo_permissoes_rbac"
     assert migration.down_revision == "003_correcoes_fase1"
 
-    official_before = _sha256(OFFICIAL_DB)
-    _assert_official_readable_only()
-
     targets = [("sqlite", _sqlite_url(tmp_path / "fase2_catalogo.db"))]
     postgres_url = os.getenv("FASE2_TEST_POSTGRES_URL")
     if postgres_url:
@@ -583,6 +548,3 @@ def test_fase2_catalogo_rbac_em_bancos_descartaveis(tmp_path):
             else:
                 conflict_url = _sqlite_url(tmp_path / f"fase2_adulteration_{mode}.db")
             _run_adulteration_scenario(conflict_url, mode)
-
-    _assert_official_readable_only()
-    assert _sha256(OFFICIAL_DB) == official_before

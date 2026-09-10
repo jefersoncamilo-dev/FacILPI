@@ -4,31 +4,22 @@ Valida correções pós-57d25fe. Não cria ILPI real, não faz bootstrap, não a
 """
 import os
 import pathlib
-import shutil
 import sqlite3
-import subprocess
-import sys
 import uuid
 
-# Helper to get official DB path via database.py resolution (should be root)
-def _official_db():
-    # Usa Path resolvido independente de CWD, conforme database.py
-    # backend/tests/test_... -> parents[2] = <raiz>
-    root = pathlib.Path(__file__).resolve().parents[2]
-    return root / "storage" / "app.db"
+import pytest
 
-
-def _readonly_official():
-    path = _official_db().resolve()
-    con = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
-    con.execute("PRAGMA foreign_keys=ON")
-    return con
-
+from tests.db_safety import run_alembic, validate_target
 
 def _disposable_db(tmp_path):
-    """Copy the official schema/data to an isolated disposable test database."""
+    """Create the Phase 1 corrections schema in a disposable database."""
     destination = tmp_path / "fase1-disposable.db"
-    shutil.copy2(_official_db(), destination)
+    result = run_alembic(
+        f"sqlite+aiosqlite:///{destination.resolve().as_posix()}",
+        "upgrade",
+        "003_correcoes_fase1",
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
     return destination
 
 
@@ -72,39 +63,25 @@ def _null_ilpi_counts(con):
 
 
 def _run_alembic(db_path, *arguments):
-    env = os.environ.copy()
-    env["DATABASE_URL"] = f"sqlite+aiosqlite:///{db_path.resolve().as_posix()}"
-    env.pop("APP_DATABASE_URL", None)
-    return subprocess.run(
-        [sys.executable, "-m", "alembic", *arguments],
-        cwd=pathlib.Path(__file__).resolve().parents[1],
-        env=env,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
+    return run_alembic(
+        f"sqlite+aiosqlite:///{db_path.resolve().as_posix()}",
+        *arguments,
     )
 
 def test_database_url_independente_cwd():
-    """B: DATABASE_URL deve resolver para <raiz>/storage/app.db independente de CWD"""
+    """O alvo importado pela suíte deve ser descartável e independente do CWD."""
     from src.infrastructure.database import DATABASE_URL
-    # deve conter storage/app.db
-    assert "storage/app.db" in DATABASE_URL
-    # deve ser absoluto (com 3 slashes e caminho)
-    assert DATABASE_URL.startswith("sqlite+aiosqlite:///")
-    # deve apontar para raiz/storage, não backend/storage
-    assert "backend/storage" not in DATABASE_URL
-    # arquivo oficial deve existir (ou parent)
-    p = _official_db()
-    assert p.parent.exists()
+    validate_target(DATABASE_URL)
+    assert "storage/app.db" not in DATABASE_URL
+    assert "backend/storage/app.db" not in DATABASE_URL
 
 def test_alembic_compartilha_database_url():
-    """B: alembic env.py prioriza APP_DATABASE_URL"""
+    """Alembic aceita URL explícita antes de qualquer fallback."""
     root = pathlib.Path(__file__).resolve().parents[2]
     text = (root / "backend" / "alembic" / "env.py").read_text(encoding="utf-8")
     assert "APP_DATABASE_URL or config.get_main_option" in text or "APP_DATABASE_URL or" in text
     ini = (root / "backend" / "alembic.ini").read_text()
-    assert "../storage/app.db" in ini or "storage/app.db" in ini
+    assert "sqlalchemy.url" in ini
 
 def test_default_ilpi_rascunho(tmp_path):
     """I: modelo e banco devem usar ILPI_RASCUNHO"""
@@ -145,15 +122,15 @@ def test_create_all_desabilitado_por_padrao():
     if tmp.exists():
         tmp.unlink()
 
-def test_sqlite_pragma_foreign_keys():
+def test_sqlite_pragma_foreign_keys(tmp_path):
     """H: PRAGMA foreign_keys=ON na conexão real"""
-    # database.py deve ter event listener
     root = pathlib.Path(__file__).resolve().parents[2]
     txt = (root / "backend" / "src" / "infrastructure" / "database.py").read_text(encoding="utf-8")
     assert "PRAGMA foreign_keys=ON" in txt
     assert "event.listens_for" in txt or "listens_for" in txt
-    # teste prático: conexão via sqlite3 com FK ON rejeita FK inválida
-    con = _readonly_official()
+    path = tmp_path / "pragma-test.db"
+    con = sqlite3.connect(str(path))
+    con.execute("PRAGMA foreign_keys=ON")
     cur = con.cursor()
     cur.execute("PRAGMA foreign_keys")
     assert cur.fetchone()[0] == 1
@@ -230,9 +207,12 @@ def test_fk_composta_rejeita_cross_tenant(tmp_path):
     con.commit()
     con.close()
 
-def test_quartos_fk_composta():
+def test_quartos_fk_composta(tmp_path):
     """C: quartos_leitos(residente_atual_id, instituicao_id) -> residentes(id, instituicao_id)"""
-    con = sqlite3.connect(str(_official_db()))
+    db = tmp_path / "quartos-test.db"
+    result = _run_alembic(db, "upgrade", "003_correcoes_fase1")
+    assert result.returncode == 0, result.stdout + result.stderr
+    con = _connect(db)
     cur = con.cursor()
     cur.execute("SELECT sql FROM sqlite_master WHERE name='quartos_leitos'")
     sql = cur.fetchone()[0]
@@ -248,15 +228,62 @@ def test_migration_upgrade_downgrade_upgrade():
     txt = ini.read_text()
     assert "fk_tarefas_residente_ilpi" in txt
 
-def test_estado_oficial_pos_saneamento():
-    """F: banco oficial saneado, sem residentes ou filhos sem ILPI."""
-    con = _readonly_official()
+def test_fixture_saneada_preserva_invariantes_fase1(tmp_path):
+    """F: fixture saneada com dados sintéticos preserva invariantes do contrato Fase 1."""
+    con = _connect(_disposable_db(tmp_path))
     cur = con.cursor()
-    assert cur.execute(
-        "SELECT COUNT(*) FROM residentes WHERE instituicao_id IS NULL"
-    ).fetchone()[0] == 0
+
+    assert cur.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+
+    ilpi_a = str(uuid.uuid4())
+    ilpi_b = str(uuid.uuid4())
+    cur.execute(
+        "INSERT INTO instituicoes (id, razao_social, situacao) VALUES (?, 'ILPI Saneada A', 'ILPI_RASCUNHO')",
+        (ilpi_a,),
+    )
+    cur.execute(
+        "INSERT INTO instituicoes (id, razao_social, situacao) VALUES (?, 'ILPI Saneada B', 'ILPI_RASCUNHO')",
+        (ilpi_b,),
+    )
+
+    res_a = str(uuid.uuid4())
+    res_b = str(uuid.uuid4())
+    cur.execute(
+        "INSERT INTO residentes (id, instituicao_id, nome, data_nascimento) VALUES (?, ?, 'Residente A', '1940-01-01')",
+        (res_a, ilpi_a),
+    )
+    cur.execute(
+        "INSERT INTO residentes (id, instituicao_id, nome, data_nascimento) VALUES (?, ?, 'Residente B', '1940-06-15')",
+        (res_b, ilpi_b),
+    )
+    con.commit()
+
+    task_ok = str(uuid.uuid4())
+    cur.execute(
+        "INSERT INTO tarefas (id, residente_id, ilpi_id, descricao) VALUES (?, ?, ?, 'Tarefa same-tenant')",
+        (task_ok, res_a, ilpi_a),
+    )
+    con.commit()
+
+    try:
+        cur.execute(
+            "INSERT INTO tarefas (id, residente_id, ilpi_id, descricao) VALUES (?, ?, ?, 'Tarefa cross-tenant')",
+            (str(uuid.uuid4()), res_a, ilpi_b),
+        )
+        con.commit()
+        assert False, "FK composta deveria rejeitar cross-tenant"
+    except sqlite3.IntegrityError:
+        con.rollback()
+
+    assert cur.execute("SELECT COUNT(*) FROM residentes WHERE instituicao_id IS NULL").fetchone()[0] == 0
     assert all(count == 0 for count in _null_ilpi_counts(con).values())
     assert cur.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert cur.execute("SELECT version_num FROM alembic_version").fetchone()[0] == "003_correcoes_fase1"
+
+    cur.execute("DELETE FROM tarefas WHERE id=?", (task_ok,))
+    cur.execute("DELETE FROM residentes WHERE id IN (?, ?)", (res_a, res_b))
+    cur.execute("DELETE FROM instituicoes WHERE id IN (?, ?)", (ilpi_a, ilpi_b))
+    con.commit()
     con.close()
 
 
