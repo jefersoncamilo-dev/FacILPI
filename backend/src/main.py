@@ -22,6 +22,7 @@ from .application.medicacao import (
 )
 from .application.pais import planos_router
 from .application.matriz import matriz_router
+from .application.admissoes import admissoes_router
 from .application.rotina import (
     execucoes_router,
     ocorrencias_router,
@@ -1013,6 +1014,7 @@ app.include_router(avaliacoes_router, prefix="/api")
 app.include_router(graus_router, prefix="/api")
 app.include_router(planos_router, prefix="/api")
 app.include_router(matriz_router, prefix="/api")
+app.include_router(admissoes_router, prefix="/api")
 app.include_router(programacoes_router, prefix="/api")
 app.include_router(ocorrencias_router, prefix="/api")
 app.include_router(execucoes_router, prefix="/api")
