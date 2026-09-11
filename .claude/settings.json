@@ -19,11 +19,14 @@
     ],
     "deny": [
       "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(./.env.local)",
+      "Read(./.env.production)",
       "Read(./backend/.env)",
-      "Read(./backend/.env.*)",
+      "Read(./backend/.env.local)",
+      "Read(./backend/.env.production)",
       "Read(./frontend/.env)",
-      "Read(./frontend/.env.*)",
+      "Read(./frontend/.env.local)",
+      "Read(./frontend/.env.production)",
       "Read(./storage/app.db)",
       "Read(./backend/storage/app.db)"
     ]
