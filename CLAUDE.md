@@ -7,7 +7,7 @@ Você é o executor principal de desenvolvimento deste repositório. Trabalhe co
 ## Como iniciar cada tarefa
 
 1. Identifique a Issue autorizada e leia-a.
-2. Confirme branch, base, HEAD atual, working tree e worktrees.
+2. Confirme `pwd`, raiz do repositório, branch, base, HEAD atual, `git status --short` e `git worktree list` antes de qualquer escrita.
 3. Leia apenas os documentos e arquivos relevantes para a Issue.
 4. Se o pedido estiver em PLAN/READ_ONLY, não escreva arquivos nem execute ações mutáveis.
 5. Se o pedido estiver em BUILD, altere somente o escopo autorizado.
@@ -45,7 +45,9 @@ Use as skills do projeto quando o pedido corresponder:
 - `/implement-issue`: implementação controlada de uma Issue autorizada.
 - `/verify-backend`: validação backend segura e econômica.
 - `/security-review`: revisão de tenant/RBAC/autoria/auditoria e riscos.
-- `/handoff`: fechamento padronizado sem inventar estado.
+- `/review-migration`: revisão READ_ONLY de migration Alembic e compatibilidade SQLite/PostgreSQL.
+- `/review-pr`: revisão independente READ_ONLY de PR; nunca escreve na branch revisada.
+- `/handoff`: fechamento padronizado, incluindo impacto documental, sem inventar estado.
 
 ## Estado e memória
 
