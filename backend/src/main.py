@@ -40,6 +40,7 @@ from .application.fase3a import (
     usuarios_router,
     issue_session_response,
 )
+from .application.prontuario import prontuario_router
 from .application.fase5a2d import (
     quartos_leitos_router,
     ausencias_router,
@@ -1026,6 +1027,7 @@ app.include_router(uploads_router, prefix="/api")
 app.include_router(quartos_leitos_router, prefix="/api")
 app.include_router(ausencias_router, prefix="/api")
 app.include_router(ocupacao_historico_router, prefix="/api")
+app.include_router(prontuario_router, prefix="/api")
 
 @app.get("/")
 async def root():
