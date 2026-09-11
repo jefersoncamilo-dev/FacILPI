@@ -60,6 +60,10 @@ _GLOBAL_ONLY_PERMISSIONS = frozenset(
 )
 _ILPI_ONLY_PERMISSIONS = frozenset(
     {
+        # Administrative password reset is an institutional capability.
+        # A global profile must never be able to take over the credential
+        # of a user that belongs to an ILPI.
+        "usuarios:redefinir_senha",
         "funcionarios:ler",
         "funcionarios:criar",
         "funcionarios:atualizar",

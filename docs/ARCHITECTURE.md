@@ -27,6 +27,8 @@ Autoria técnica, executor assistencial/clínico e usuário que realiza ações 
 
 Permissões são verificadas no backend. Profissão não implica permissão automática. Perfis clínicos/institucionais devem ser atribuídos explicitamente. Platform Superuser administra a plataforma, mas não recebe acesso clínico implícito a tenants.
 
+A separação entre administração de plataforma e acesso institucional também vale para credenciais. Redefinição administrativa de senha é capacidade institucional: exige contexto ILPI da sessão e vínculo ativo entre o usuário alvo e essa ILPI, validado incondicionalmente. Escopo global não redefine senha de usuário institucional, porque isso equivaleria a assumir sua identidade operacional e sua autoria clínica.
+
 ## Fontes de verdade
 
 Preserve uma única fonte oficial para estados críticos. Evite dual-write e cópias derivadas que possam divergir.
