@@ -41,6 +41,7 @@ Não use testes como alvo a ser burlado. Corrija a causa raiz. Se um teste parec
 
 Use as skills do projeto quando o pedido corresponder:
 - `/plan-issue`: análise READ_ONLY de uma Issue antes do BUILD.
+- `/recover-worktree`: diagnóstico seguro antes de sincronizar worktree/branch com mudanças locais.
 - `/implement-issue`: implementação controlada de uma Issue autorizada.
 - `/verify-backend`: validação backend segura e econômica.
 - `/security-review`: revisão de tenant/RBAC/autoria/auditoria e riscos.
