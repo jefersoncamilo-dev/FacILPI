@@ -994,21 +994,24 @@ async def reset_password_usuario(
     db: AsyncSession = Depends(get_db),
     context: SecurityContext = Depends(require_permission("usuarios:redefinir_senha")),
 ):
+    # The institutional context is required before the target is read, so a
+    # global profile cannot use this route to probe which user ids exist.
+    _require_ilpi_context(context)
     target = (await db.execute(select(m.User).where(m.User.id == user_id))).scalar_one_or_none()
     if target is None:
         raise _http_error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Usuário não encontrado")
-    if context.scope == ILPI_SCOPE:
-        link_exists = (
-            await db.execute(
-                select(func.count()).select_from(m.UsuarioIlpiPerfil).where(
-                    m.UsuarioIlpiPerfil.usuario_id == target.id,
-                    m.UsuarioIlpiPerfil.ilpi_id == context.ilpi_id,
-                    m.UsuarioIlpiPerfil.situacao == "ativo",
-                )
+    # The link check is unconditional: it must not depend on the caller scope.
+    link_exists = (
+        await db.execute(
+            select(func.count()).select_from(m.UsuarioIlpiPerfil).where(
+                m.UsuarioIlpiPerfil.usuario_id == target.id,
+                m.UsuarioIlpiPerfil.ilpi_id == context.ilpi_id,
+                m.UsuarioIlpiPerfil.situacao == "ativo",
             )
-        ).scalar_one()
-        if link_exists == 0:
-            raise _http_error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Usuário não encontrado")
+        )
+    ).scalar_one()
+    if link_exists == 0:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Usuário não encontrado")
     temp_password = _temporary_password()
     target.password_hash = hash_password(temp_password)
     target.exige_troca_senha = True
