@@ -18,17 +18,21 @@
       "Bash(alembic downgrade *)"
     ],
     "deny": [
-      "Read(./.env)",
-      "Read(./.env.local)",
-      "Read(./.env.production)",
-      "Read(./backend/.env)",
-      "Read(./backend/.env.local)",
-      "Read(./backend/.env.production)",
-      "Read(./frontend/.env)",
-      "Read(./frontend/.env.local)",
-      "Read(./frontend/.env.production)",
       "Read(./storage/app.db)",
       "Read(./backend/storage/app.db)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-env-files.sh"
+          }
+        ]
+      }
     ]
   }
 }

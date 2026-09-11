@@ -25,6 +25,10 @@ Trabalhe READ_ONLY salvo autorização explícita posterior para uma Issue de co
 
 Não corrija achados durante a revisão. Para cada problema, forneça evidência, gravidade, impacto, arquivos envolvidos, teste que deveria comprovar a correção e proposta de Issue separada.
 
+## Critério de parada e anti-loop
+
+Não refaça a auditoria inteira a cada achado novo; registre o achado e continue cobrindo o restante do escopo. Não reabra ou reverifique uma evidência já confirmada nesta revisão sem fato novo. Ao cobrir todos os itens de "Verifique" e registrar os achados correspondentes, finalize a revisão. Se algo não puder ser confirmado após uma tentativa razoável, marque `NÃO CONFIRMADO` e siga para a conclusão em vez de insistir.
+
 ## Saída
 
 Classifique cada achado como P0/P1/P2/P3 ou `SEM_ACHADO`, sem dramatizar. Diferencie falha confirmada, risco provável e oportunidade de melhoria.
