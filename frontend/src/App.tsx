@@ -7,6 +7,7 @@ import { PrimeiroAcesso } from './pages/PrimeiroAcesso'
 import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { Residentes } from './pages/Residentes'
+import { ResidenteProntuario } from './pages/ResidenteProntuario'
 import { MeuPlantao } from './pages/MeuPlantao'
 import { Placeholder } from './pages/Placeholder'
 import { Equipe } from './pages/Equipe'
@@ -26,6 +27,7 @@ export default function App() {
           <Route path="/" element={<Protected><Dashboard /></Protected>} />
           <Route path="/plantao" element={<Protected><MeuPlantao /></Protected>} />
           <Route path="/residentes" element={<Protected><Residentes /></Protected>} />
+          <Route path="/residentes/:id" element={<Protected><ResidenteProntuario /></Protected>} />
           <Route path="/admissoes" element={<Protected><Placeholder title="Admissões" desc="Fluxo Pré-cadastro → Triagem → Documentação → Avaliações → Contrato → Quarto → Plano → Concluída" /></Protected>} />
           <Route path="/avaliacoes" element={<Protected><Placeholder title="Avaliações" desc="Katz, Lawton, Braden, Morse — com grau de dependência e histórico" /></Protected>} />
           <Route path="/plano" element={<Protected><Placeholder title="Plano de Cuidados / PAIS" desc="Rascunho → Em revisão → Aprovado → Vigente → Encerrado, com versão e aprovações" /></Protected>} />
