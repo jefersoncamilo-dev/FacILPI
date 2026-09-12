@@ -125,6 +125,11 @@ class Documento(Base):
     obrigatorio: Mapped[bool] = mapped_column(Boolean, default=False)
     situacao: Mapped[str] = mapped_column(String(50), default="pendente")
     responsavel_envio: Mapped[str] = mapped_column(String(255), nullable=True)
+    # Autoria/timestamp da validação humana (POST /documentos/{id}/validar).
+    # Nullable para compatibilidade com documentos legados já validados
+    # antes desta coluna existir (grandfathered no gate de Admissão).
+    validado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    validado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

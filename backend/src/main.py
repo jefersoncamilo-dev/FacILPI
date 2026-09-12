@@ -290,12 +290,34 @@ def make_crud_router(
     @router.put("/{item_id}", response_model=response_schema)
     async def update_item(item_id: str, payload: update_schema, db: AsyncSession = Depends(get_db), context = Depends(guard("update"))):
         ensure_resource_scope(context, item_id)
-        result = await db.execute(select(model).where(model.id == item_id))
+        data = payload.model_dump(exclude_unset=True)
+        query = select(model).where(model.id == item_id)
+        situacao_e_documento = model is m.Documento and "situacao" in data
+        if situacao_e_documento:
+            # Issue #25: lock de linha quando suportado (PostgreSQL) para
+            # serializar com POST /documentos/{id}/validar. No SQLite o
+            # dialeto ignora FOR UPDATE (compilação verificada: mesmo SQL
+            # com ou sem a cláusula) — a corretude nesse caso vem do UPDATE
+            # condicional abaixo, não do lock.
+            query = query.with_for_update()
+        result = await db.execute(query)
         obj = result.scalar_one_or_none()
         if not obj:
             raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
         ensure_clinical_tenant(context, obj)
-        data = payload.model_dump(exclude_unset=True)
+        if situacao_e_documento:
+            # Decide o bloqueio com o MESMO valor normalizado que seria
+            # persistido (o .strip() abaixo), não o valor cru do payload —
+            # caso contrário " validado "/"validado\t" escapam do guard.
+            situacao_normalizada = data["situacao"].strip() if isinstance(data["situacao"], str) else data["situacao"]
+            if situacao_normalizada == "validado" or obj.situacao == "validado":
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": DOCUMENTO_TRANSICAO_PROTEGIDA,
+                        "message": "Transição de situação protegida; use POST /documentos/{id}/validar.",
+                    },
+                )
         if tenant_column is not None:
             # Troca de tenant via update é proibida: ignora o tenant do cliente.
             data.pop("instituicao_id", None)
@@ -304,12 +326,34 @@ def make_crud_router(
             # Vínculo pai é imutável via PUT genérico: ignora o valor do
             # cliente. Troca de vínculo exige fluxo próprio, auditável.
             data.pop(parent_check["id_field"], None)
+        update_values = {}
         for k, v in data.items():
             if isinstance(v, str):
                 v = v.strip()
                 if v == "":
                     continue
-            setattr(obj, k, v)
+            update_values[k] = v
+        if situacao_e_documento:
+            if update_values:
+                # Persistência atômica: se uma validação concorrente
+                # concluiu entre a leitura acima e este UPDATE, a condição
+                # não bate e a transição é recusada em vez de sobrescrever.
+                exec_result = await db.execute(
+                    update(model)
+                    .where(model.id == item_id, model.situacao != "validado")
+                    .values(**update_values)
+                )
+                if exec_result.rowcount != 1:
+                    raise HTTPException(
+                        status_code=422,
+                        detail={
+                            "code": DOCUMENTO_TRANSICAO_PROTEGIDA,
+                            "message": "Transição de situação protegida; use POST /documentos/{id}/validar.",
+                        },
+                    )
+        else:
+            for k, v in update_values.items():
+                setattr(obj, k, v)
         await db.commit()
         await db.refresh(obj)
         return obj
@@ -377,6 +421,8 @@ familiares_router = make_crud_router(
 # instituicao_id) + vínculo seguro com Residente (validado no POST;
 # residente_id imutável no PUT). DELETE permanece fail-closed (físico;
 # documentos:inativar NÃO autoriza DELETE físico).
+DOCUMENTO_TRANSICAO_PROTEGIDA = "DOCUMENTO_TRANSICAO_PROTEGIDA"
+DOCUMENTO_JA_VALIDADO = "DOCUMENTO_JA_VALIDADO"
 documentos_router = make_crud_router(
     m.Documento,
     s.DocumentoCreate,
@@ -398,6 +444,66 @@ documentos_router = make_crud_router(
         "tenant_column": "instituicao_id",
     },
 )
+
+
+# Issue #25: ato dedicado de validação documental. Fecha o bypass do PUT
+# genérico (situacao="validado" sem autoria/timestamp/auditoria próprios).
+# Permissão exclusiva "documentos:validar" (ILPI-only); tenant da sessão;
+# autoria e timestamp do backend, nunca do payload; sem invalidar/revalidar.
+@documentos_router.post("/{item_id}/validar", response_model=s.DocumentoResponse)
+async def validar_documento(
+    item_id: str,
+    payload: s.DocumentoValidar,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("documentos:validar")),
+):
+    result = await db.execute(
+        select(m.Documento)
+        .where(
+            m.Documento.id == item_id,
+            m.Documento.instituicao_id == context.ilpi_id,
+        )
+        .with_for_update()
+    )
+    obj = result.scalar_one_or_none()
+    if not obj:
+        # Inexistente e cross-tenant preservam o mesmo contrato 404.
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    if obj.situacao == "validado":
+        raise HTTPException(status_code=409, detail={"code": DOCUMENTO_JA_VALIDADO, "message": "Documento já validado"})
+    before = {"situacao": obj.situacao, "validado_por": obj.validado_por, "validado_em": None}
+    now = datetime.now(timezone.utc)
+    # Escrita atômica e condicional: se outra requisição validou entre a
+    # leitura acima e este UPDATE, a condição não bate (rowcount == 0) e
+    # devolvemos 409 em vez de sobrescrever/duplicar auditoria.
+    exec_result = await db.execute(
+        update(m.Documento)
+        .where(
+            m.Documento.id == item_id,
+            m.Documento.instituicao_id == context.ilpi_id,
+            m.Documento.situacao != "validado",
+        )
+        .values(situacao="validado", validado_por=context.user.id, validado_em=now)
+    )
+    if exec_result.rowcount != 1:
+        raise HTTPException(status_code=409, detail={"code": DOCUMENTO_JA_VALIDADO, "message": "Documento já validado"})
+    add_audit(
+        db,
+        acao="documentos.validar",
+        entidade="documentos",
+        registro_id=obj.id,
+        usuario_id=context.user.id,
+        ilpi_id=context.ilpi_id,
+        valores_anteriores=before,
+        valores_posteriores={"situacao": "validado", "validado_por": context.user.id, "validado_em": now.isoformat()},
+        request=request,
+    )
+    await db.commit()
+    await db.refresh(obj)
+    return obj
+
+
 tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
 # ===== Avaliacoes Router (F5A-3A1) =====
 
