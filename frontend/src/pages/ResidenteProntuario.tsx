@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { api } from '../services/api'
-import { getProntuario, ProntuarioConsultaParams, ProntuarioEvento } from '../services/prontuario'
+import {
+  fimDoDiaISO,
+  getProntuario,
+  inicioDoDiaISO,
+  ProntuarioConsultaParams,
+  ProntuarioEvento,
+} from '../services/prontuario'
 import { ResidenteCabecalho, ResidenteResumo } from '../components/prontuario/ResidenteCabecalho'
 import { FILTROS_INICIAIS, FiltrosValue, ProntuarioFiltros } from '../components/prontuario/ProntuarioFiltros'
 import { ProntuarioLinhaDoTempo } from '../components/prontuario/ProntuarioLinhaDoTempo'
@@ -11,17 +17,18 @@ function paramsDeFiltros(f: FiltrosValue, cursor?: string): ProntuarioConsultaPa
   return {
     categoria: f.categoria,
     origem: f.origem,
-    desde: f.desde ? `${f.desde}T00:00:00` : undefined,
-    ate: f.ate ? `${f.ate}T23:59:59` : undefined,
+    desde: f.desde ? inicioDoDiaISO(f.desde) : undefined,
+    ate: f.ate ? fimDoDiaISO(f.ate) : undefined,
     incluir_movimentacoes: f.incluirMovimentacoes,
     limit: 20,
     cursor,
   }
 }
 
-// Mapeia só os status realmente distintos do endpoint (403/404/422) — ver
+// Mapeia só os status realmente distintos do endpoint (400/403/404/422) — ver
 // backend/src/application/prontuario.py. Qualquer outro erro cai no genérico.
 function mensagemErro(status?: number): string {
+  if (status === 400) return 'A navegação expirou. Reaplique os filtros para continuar.'
   if (status === 403) return 'Você não tem permissão para ver estes registros.'
   if (status === 404) return 'Residente não encontrado.'
   if (status === 422) return 'Os filtros informados são inválidos.'
@@ -47,6 +54,10 @@ export function ResidenteProntuario() {
   // do BUILD: 403 ao trocar filtro preserva a lista anterior).
   const [erroFiltro, setErroFiltro] = useState<string | null>(null)
 
+  // Só a requisição mais recente pode escrever no estado: os filtros do desktop disparam a cada
+  // alteração e, sem isso, uma resposta antiga chega depois e contradiz o filtro exibido.
+  const requisicaoRef = useRef(0)
+
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [carregandoMais, setCarregandoMais] = useState(false)
@@ -65,6 +76,11 @@ export function ResidenteProntuario() {
   const carregar = useCallback(
     async (filtrosAtuais: FiltrosValue) => {
       if (!id) return
+      const requisicao = ++requisicaoRef.current
+      // A paginação pertence ao conjunto que está sendo substituído: mantê-la deixaria o botão
+      // clicável durante a troca e anexaria uma página do filtro anterior à lista nova.
+      setNextCursor(null)
+      setHasMore(false)
       setErroFiltro(null)
       const jaTinhaEventos = eventosRef.current.length > 0
       if (!jaTinhaEventos) {
@@ -73,10 +89,13 @@ export function ResidenteProntuario() {
       }
       try {
         const resposta = await getProntuario(id, paramsDeFiltros(filtrosAtuais))
+        if (requisicao !== requisicaoRef.current) return
         setEventos(resposta.items)
         setHasMore(resposta.has_more)
         setNextCursor(resposta.next_cursor)
+        setErroPaginacao(null)
       } catch (e: any) {
+        if (requisicao !== requisicaoRef.current) return
         const msg = mensagemErro(e.response?.status)
         if (jaTinhaEventos) {
           setErroFiltro(msg)
@@ -84,7 +103,8 @@ export function ResidenteProntuario() {
           setErroCarga(msg)
         }
       } finally {
-        setCarregandoInicial(false)
+        // Uma carga superada não apaga o "carregando" da carga que a sucedeu.
+        if (requisicao === requisicaoRef.current) setCarregandoInicial(false)
       }
     },
     [id],
@@ -102,15 +122,26 @@ export function ResidenteProntuario() {
 
   async function carregarMais() {
     if (!id || !nextCursor || carregandoMais) return
+    // Uma troca de filtro durante o append invalida esta página: ela pertence ao filtro anterior.
+    const requisicao = requisicaoRef.current
     setCarregandoMais(true)
     setErroPaginacao(null)
     try {
       const resposta = await getProntuario(id, paramsDeFiltros(filtros, nextCursor))
+      if (requisicao !== requisicaoRef.current) return
       setEventos(prev => [...prev, ...resposta.items])
       setHasMore(resposta.has_more)
       setNextCursor(resposta.next_cursor)
     } catch (e: any) {
-      setErroPaginacao(mensagemErro(e.response?.status))
+      if (requisicao !== requisicaoRef.current) return
+      const status = e.response?.status
+      setErroPaginacao(mensagemErro(status))
+      // Cursor inválido: sem limpar, o botão repetiria a mesma requisição indefinidamente.
+      // Falha transitória mantém o cursor para permitir nova tentativa.
+      if (status === 400) {
+        setNextCursor(null)
+        setHasMore(false)
+      }
     } finally {
       setCarregandoMais(false)
     }

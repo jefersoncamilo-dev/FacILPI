@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Residentes } from '../pages/Residentes'
@@ -276,5 +276,164 @@ describe('ResidenteProntuario', () => {
     await user.click(screen.getByRole('button', { name: 'Carregando…' }))
     resolver({ data: { items: [], next_cursor: null, has_more: false } })
     await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(3))
+  })
+
+  it('20. trocar filtro reseta o cursor e substitui a lista', async () => {
+    const user = userEvent.setup()
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({
+      data: { items: [evento()], next_cursor: 'cursor-1', has_more: true },
+    } as any)
+    renderTela()
+    await screen.findByText('Avaliação funcional')
+
+    mockGet.mockResolvedValueOnce({
+      data: { items: [evento({ registro_id: 'ev2', resumo: 'Segunda avaliação' })], next_cursor: 'cursor-2', has_more: true },
+    } as any)
+    await user.click(screen.getByRole('button', { name: 'Carregar mais' }))
+    await screen.findByText('Segunda avaliação')
+
+    mockGet.mockResolvedValueOnce({
+      data: { items: [evento({ registro_id: 'ev3', resumo: 'Após o filtro' })], next_cursor: null, has_more: false },
+    } as any)
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'medicacao')
+    await screen.findByText('Após o filtro')
+
+    // params exatos: cursor volta a ausente e nada de tenant/autoria/executor é enviado
+    expect(mockGet).toHaveBeenLastCalledWith('/residentes/r1/prontuario', {
+      params: {
+        categoria: 'medicacao',
+        origem: undefined,
+        desde: undefined,
+        ate: undefined,
+        incluir_movimentacoes: true,
+        limit: 20,
+        cursor: undefined,
+      },
+    })
+    // lista substituída, não anexada
+    expect(screen.queryByText('Avaliação funcional')).toBeNull()
+    expect(screen.queryByText('Segunda avaliação')).toBeNull()
+  })
+
+  it('21. período vira o instante UTC do dia em São Paulo, sem deslocar o dia', async () => {
+    const vazio = { data: { items: [], next_cursor: null, has_more: false } }
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce(vazio as any) // carga inicial
+    mockGet.mockResolvedValueOnce(vazio as any) // troca de "De"
+    mockGet.mockResolvedValueOnce(vazio as any) // troca de "Até"
+    renderTela()
+    await screen.findByText('Nenhum evento encontrado')
+
+    fireEvent.change(screen.getAllByLabelText('De')[0], { target: { value: '2026-05-10' } })
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenLastCalledWith(
+        '/residentes/r1/prontuario',
+        expect.objectContaining({ params: expect.objectContaining({ desde: '2026-05-10T03:00:00.000Z' }) }),
+      ),
+    )
+
+    fireEvent.change(screen.getAllByLabelText('Até')[0], { target: { value: '2026-05-10' } })
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenLastCalledWith(
+        '/residentes/r1/prontuario',
+        expect.objectContaining({ params: expect.objectContaining({ ate: '2026-05-11T02:59:59.999Z' }) }),
+      ),
+    )
+  })
+
+  it('22. resposta fora de ordem não sobrescreve o filtro mais recente', async () => {
+    const user = userEvent.setup()
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({ data: { items: [evento()], next_cursor: null, has_more: false } } as any)
+    renderTela()
+    await screen.findByText('Avaliação funcional')
+
+    // primeira troca de filtro fica pendente
+    let resolverPrimeira: (v: any) => void = () => {}
+    mockGet.mockImplementationOnce(() => new Promise(r => { resolverPrimeira = r }))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'clinico')
+
+    // segunda troca responde antes
+    mockGet.mockResolvedValueOnce({
+      data: { items: [evento({ registro_id: 'ev-final', resumo: 'Resultado do último filtro' })], next_cursor: null, has_more: false },
+    } as any)
+    await user.selectOptions(screen.getAllByRole('combobox')[1], 'sinal_vital')
+    await screen.findByText('Resultado do último filtro')
+
+    // a requisição superada responde por último e deve ser descartada
+    resolverPrimeira({
+      data: { items: [evento({ registro_id: 'ev-obsoleto', resumo: 'Resultado obsoleto' })], next_cursor: null, has_more: false },
+    })
+    await new Promise(r => setTimeout(r, 0))
+    expect(screen.queryByText('Resultado obsoleto')).toBeNull()
+    expect(screen.getByText('Resultado do último filtro')).toBeTruthy()
+  })
+
+  it('23. cursor inválido (400) limpa a paginação e impede repetir a chamada', async () => {
+    const user = userEvent.setup()
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({
+      data: { items: [evento()], next_cursor: 'cursor-1', has_more: true },
+    } as any)
+    renderTela()
+    await screen.findByText('Avaliação funcional')
+
+    mockGet.mockRejectedValueOnce({ response: { status: 400 } })
+    await user.click(screen.getByRole('button', { name: 'Carregar mais' }))
+
+    expect(await screen.findByText('A navegação expirou. Reaplique os filtros para continuar.')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Carregar mais' })).toBeNull()
+    expect(screen.getByText('Avaliação funcional')).toBeTruthy()
+  })
+
+  it('24. falha transitória (500) na paginação mantém o botão para nova tentativa', async () => {
+    const user = userEvent.setup()
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({
+      data: { items: [evento()], next_cursor: 'cursor-1', has_more: true },
+    } as any)
+    renderTela()
+    await screen.findByText('Avaliação funcional')
+
+    mockGet.mockRejectedValueOnce({ response: { status: 500 } })
+    await user.click(screen.getByRole('button', { name: 'Carregar mais' }))
+
+    expect(await screen.findByText('Não foi possível carregar o prontuário agora.')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Carregar mais' })).toBeTruthy()
+  })
+
+  it('25. paginação fica indisponível durante a troca de filtro e volta com o cursor novo', async () => {
+    const user = userEvent.setup()
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({
+      data: { items: [evento()], next_cursor: 'cursor-1', has_more: true },
+    } as any)
+    renderTela()
+    await screen.findByText('Avaliação funcional')
+    expect(screen.getByRole('button', { name: 'Carregar mais' })).toBeTruthy()
+
+    // troca de filtro em voo: a lista anterior continua visível, mas a paginação dela não vale mais
+    let resolver: (v: any) => void = () => {}
+    mockGet.mockImplementationOnce(() => new Promise(r => { resolver = r }))
+    await user.selectOptions(screen.getAllByRole('combobox')[0], 'medicacao')
+
+    expect(screen.getByText('Avaliação funcional')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Carregar mais' })).toBeNull()
+
+    resolver({
+      data: { items: [evento({ registro_id: 'ev2', resumo: 'Resultado filtrado' })], next_cursor: 'cursor-2', has_more: true },
+    })
+    await screen.findByText('Resultado filtrado')
+
+    // a paginação volta ligada ao novo conjunto, nunca ao cursor anterior
+    mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
+    await user.click(screen.getByRole('button', { name: 'Carregar mais' }))
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenLastCalledWith(
+        '/residentes/r1/prontuario',
+        expect.objectContaining({ params: expect.objectContaining({ cursor: 'cursor-2' }) }),
+      ),
+    )
   })
 })
