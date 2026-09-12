@@ -21,14 +21,18 @@ from src.infrastructure import models as m
 
 ALL = {f"admissoes:{a}" for a in ("ler", "criar", "atualizar", "avancar", "reabrir", "concluir", "cancelar")}
 DOMAIN = PAIS6 | {"residentes:ler", "residentes:criar", "documentos:ler", "documentos:criar", "documentos:atualizar",
-                 "avaliacoes:criar", "quartos_leitos:criar", "quartos_leitos:atualizar"}
+                 "documentos:validar", "avaliacoes:criar", "quartos_leitos:criar", "quartos_leitos:atualizar"}
 URL = "/api/admissoes/"
+# Issue #25 (H0-3): DOMAIN exige documentos:validar, que so existe a partir
+# da migration 017. d3_db precisa migrar ate 017 (nao mais o HEAD "016" de
+# test_d3_admissao_migration) para o catalogo/grants ficarem consistentes.
+HEAD_017 = "017_h03_documentos_validar"
 
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def d3_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref)
+    _migrate(ref, target=HEAD_017)
     return ref
 
 
@@ -83,7 +87,7 @@ async def _ready(client, db, *, documents=True):
     if documents:
         r = await client.post("/api/documentos/", headers=h, json={"residente_id": resident.id, "tipo": "Identificacao", "obrigatorio": True})
         assert r.status_code == 201, r.text
-        r = await client.put(f"/api/documentos/{r.json()['id']}", headers=h, json={"situacao": "validado"})
+        r = await client.post(f"/api/documentos/{r.json()['id']}/validar", headers=h, json={})
         assert r.status_code == 200, r.text
     obj = await _until(client, h, obj, "contrato")
     obj = await _action(client, h, obj, "contrato", motivo="Marco confirmado presencialmente")

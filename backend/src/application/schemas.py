@@ -936,9 +936,17 @@ class DocumentoResponse(BaseModel):
     obrigatorio: Optional[bool] = None
     situacao: Optional[str] = None
     responsavel_envio: Optional[str] = None
+    validado_por: Optional[str] = None
+    validado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
+
+
+class DocumentoValidar(BaseModel):
+    # Ato dedicado (H0-3): não recebe dado de domínio do cliente. Tenant,
+    # autoria e timestamp vêm exclusivamente da sessão/backend.
+    model_config = ConfigDict(extra="forbid")
 
 
 # ---- QuartoLeito (F5A-2D) ----

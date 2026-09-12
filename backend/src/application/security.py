@@ -100,6 +100,7 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "documentos:criar",
         "documentos:atualizar",
         "documentos:inativar",
+        "documentos:validar",
         "quartos_leitos:ler",
         "quartos_leitos:criar",
         "quartos_leitos:atualizar",

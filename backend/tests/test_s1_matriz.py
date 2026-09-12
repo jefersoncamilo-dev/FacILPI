@@ -218,7 +218,7 @@ async def _user_keys(db, user_id):
 
 def test_01_templates_e_baseline(s1_db):
     async def op(client, db):
-        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 92
+        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 93
         templates = (await db.execute(select(m.Perfil).where(
             m.Perfil.ilpi_id.is_(None), m.Perfil.chave.in_(
                 ["cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"])))).scalars().all()
