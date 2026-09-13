@@ -54,30 +54,41 @@ export function Residentes() {
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(r => (
-          <Link
-            key={r.id}
-            to={`/residentes/${r.id}`}
-            className="card hover:shadow-cardHover transition block focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
-          >
-            <div className="flex gap-3">
-              {/* Decorativa: sem aria-hidden, o nome acessível do link começa com a inicial
-                  duplicada ("M Maria Aparecida..."). */}
-              <div aria-hidden="true" className="w-12 h-12 rounded-full bg-primaryLight flex items-center justify-center font-bold text-primary text-lg">{r.nome[0]}</div>
+          // relative: é o bloco de contenção do overlay do link (after:inset-0). min-w-0 impede
+          // que o `truncate` do nome (white-space: nowrap) eleve o min-content da coluna, estique
+          // o card além do viewport e gere rolagem lateral na página.
+          <div key={r.id} className="card hover:shadow-cardHover transition min-w-0 relative">
+            {/* O link envolve só identificação e navegação: alergias, grau e CPF ficam fora dele
+                para não inflar o nome acessível. O `after:inset-0` devolve ao card inteiro a área
+                de toque que o link visível perdeu — sem ele, só ~30% da altura do card navegava,
+                embora o card inteiro sinalizasse clique pela sombra de hover. O anel de foco vai
+                no mesmo overlay, coincidindo com a área clicável real. Efeito colateral aceito:
+                o texto do card deixa de ser selecionável. */}
+            <Link
+              to={`/residentes/${r.id}`}
+              className="flex gap-3 after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-primary/40"
+            >
+              {/* Decorativa: sem aria-hidden, o nome acessível começa com a inicial duplicada. */}
+              <div aria-hidden="true" className="w-12 h-12 rounded-full bg-primaryLight flex items-center justify-center font-bold text-primary text-lg shrink-0">{r.nome[0]}</div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{r.nome}</div>
-                <div className="text-xs text-textMuted">{r.situacao} • {formatDate(r.data_nascimento)} • {r.sexo || '—'}</div>
+                <div className="text-xs text-textMuted truncate">
+                  {r.situacao} • {formatDate(r.data_nascimento)}
+                  {/* Sexo não identifica o residente e fica fora do nome acessível. */}
+                  <span aria-hidden="true"> • {r.sexo || '—'}</span>
+                </div>
               </div>
-            </div>
+            </Link>
             {(r.alergias || r.restricoes) && (
               <div className="mt-3 p-2 rounded-xl bg-red-50 border border-red-100 text-xs text-danger flex gap-2">
-                <span>⚠️</span> <span className="truncate">{r.alergias || r.restricoes}</span>
+                <span aria-hidden="true">⚠️</span> <span className="truncate">{r.alergias || r.restricoes}</span>
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
               <span className="badge-success">{r.grau_dependencia || 'Sem grau'}</span>
               {r.cpf && <span className="px-2 py-1 bg-slate-100 rounded-full">CPF {r.cpf}</span>}
             </div>
-          </Link>
+          </div>
         ))}
         {filtered.length===0 && <div className="col-span-full py-16 text-center text-textMuted card">Nenhum residente encontrado</div>}
       </div>
