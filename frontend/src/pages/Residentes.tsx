@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api, formatDate } from '../services/api'
 import { Modal } from '../components/Modal'
 
@@ -53,7 +54,11 @@ export function Residentes() {
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(r => (
-          <div key={r.id} className="card hover:shadow-cardHover transition">
+          <Link
+            key={r.id}
+            to={`/residentes/${r.id}`}
+            className="card hover:shadow-cardHover transition block focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
+          >
             <div className="flex gap-3">
               <div className="w-12 h-12 rounded-full bg-primaryLight flex items-center justify-center font-bold text-primary text-lg">{r.nome[0]}</div>
               <div className="flex-1 min-w-0">
@@ -70,7 +75,7 @@ export function Residentes() {
               <span className="badge-success">{r.grau_dependencia || 'Sem grau'}</span>
               {r.cpf && <span className="px-2 py-1 bg-slate-100 rounded-full">CPF {r.cpf}</span>}
             </div>
-          </div>
+          </Link>
         ))}
         {filtered.length===0 && <div className="col-span-full py-16 text-center text-textMuted card">Nenhum residente encontrado</div>}
       </div>
