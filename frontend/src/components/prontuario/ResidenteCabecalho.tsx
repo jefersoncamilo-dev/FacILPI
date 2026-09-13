@@ -29,7 +29,8 @@ export function ResidenteCabecalho({ residente }: { residente: ResidenteResumo |
             o card em vez de truncar. */}
         <div className="min-w-0 lg:self-stretch">
           {/* Trunca só a partir de lg, onde a coluna lateral é fixa em 280px; abaixo disso o
-              cabeçalho ocupa a largura toda e o nome pode quebrar em duas linhas. O title
+              cabeçalho ocupa a largura toda e o nome pode quebrar em quantas linhas forem
+              necessárias. O title
               cobre o caso truncado, já que em desktop existe hover. */}
           <h1 className="text-lg lg:text-xl font-bold text-textMain lg:truncate" title={residente.nome}>{residente.nome}</h1>
           <p className="text-sm text-textMuted">
