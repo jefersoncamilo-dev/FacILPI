@@ -77,7 +77,11 @@ jobs:
   backend-postgres:
     name: Backend (PostgreSQL)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # A matriz PostgreSQL nunca chegou a rodar inteira: no primeiro ciclo as
+    # fixtures erravam cedo por alvo divergente. Os 45 min anteriores foram
+    # dimensionados sobre esse tempo artificial. Recalibrar apos o primeiro
+    # ciclo que de fato exercitar PostgreSQL de ponta a ponta.
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: backend
@@ -88,10 +92,16 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: facilpi_qa_test
-        # 55486 e o valor do PG_MANIFEST em backend/tests/db_safety.py, que valida
-        # host, porta, database e usuario por igualdade exata antes de conectar.
-        # Mapear a porta preserva o manifesto e mantem o mesmo comando valido local.
+        # Os testes fixam porta E database por igualdade exata: db_safety.PG_MANIFEST
+        # valida 55486/facilpi_qa_test, e cada fase tem o seu proprio assert local
+        # (por exemplo `url.port == 55485 and url.database == "facilpi_d1_test"`).
+        # Sao 3 portas e 8 databases. Um unico servidor atende a todos: publicar as
+        # tres portas do host sobre o mesmo 5432 do container honra os contratos sem
+        # tocar em teste algum, e o isolamento continua sendo por database, que e o
+        # que o `DROP SCHEMA public CASCADE` das fixtures exige.
         ports:
+          - 55484:5432
+          - 55485:5432
           - 55486:5432
         options: >-
           --health-cmd pg_isready
@@ -109,46 +119,142 @@ jobs:
 
       - run: pip install -r requirements-dev.txt
 
-      # Cada arquivo de teste le a sua propria variavel, no padrao
-      # ["sqlite"] + (["postgresql"] if os.getenv(...) else []). Variavel ausente
-      # nao gera erro nem skip: o backend apenas nao entra na matriz. Definir as 11
-      # a partir de uma unica fonte evita cobertura parcial silenciosa.
-      - name: Exportar as 11 variaveis de PostgreSQL
-        run: |
-          URL="postgresql://postgres:postgres@127.0.0.1:55486/facilpi_qa_test"
-          for PREFIXO in C4 C5 D1 D2 D3 D4 FASE2 FASE3A FASE3B P0 S1; do
-            echo "${PREFIXO}_TEST_POSTGRES_URL=${URL}" >> "$GITHUB_ENV"
-          done
-
-      - name: Conferir que a matriz PostgreSQL esta completa
-        run: |
-          FALTANDO=""
-          for PREFIXO in C4 C5 D1 D2 D3 D4 FASE2 FASE3A FASE3B P0 S1; do
-            NOME="${PREFIXO}_TEST_POSTGRES_URL"
-            if [ -z "${!NOME}" ]; then FALTANDO="${FALTANDO} ${NOME}"; fi
-          done
-          if [ -n "${FALTANDO}" ]; then
-            echo "::error::matriz PostgreSQL incompleta, ausentes:${FALTANDO}"
-            exit 1
-          fi
-          echo "11 variaveis definidas"
-
       # Sem isto, um servico que nao subiu viraria skip dentro dos testes e o job
-      # terminaria verde tendo rodado so SQLite.
-      - name: Conferir conectividade com o PostgreSQL descartavel
+      # terminaria verde tendo rodado so SQLite. As tres portas sao conferidas
+      # porque um mapeamento ausente e indistinguivel de servico fora do ar.
+      - name: Conferir conectividade nas tres portas descartaveis
         run: |
           python - <<'PY'
           import socket, sys
-          s = socket.socket()
-          s.settimeout(10)
-          try:
-              s.connect(("127.0.0.1", 55486))
-          except OSError as erro:
-              print(f"::error::PostgreSQL descartavel inacessivel em 127.0.0.1:55486 ({erro})")
+
+          inacessiveis = []
+          for porta in (55484, 55485, 55486):
+              conector = socket.socket()
+              conector.settimeout(10)
+              try:
+                  conector.connect(("127.0.0.1", porta))
+              except OSError as erro:
+                  inacessiveis.append(f"{porta} ({erro})")
+              finally:
+                  conector.close()
+
+          if inacessiveis:
+              print("::error::PostgreSQL descartavel inacessivel em 127.0.0.1: " + ", ".join(inacessiveis))
               sys.exit(1)
-          finally:
-              s.close()
-          print("PostgreSQL descartavel acessivel")
+          print("PostgreSQL descartavel acessivel em 55484, 55485 e 55486")
+          PY
+
+      # O service container so cria POSTGRES_DB. Os outros sete precisam existir
+      # antes do pytest: fixture que nao consegue conectar vira skip, e skip em
+      # massa e exatamente o buraco de cobertura que este job existe para fechar.
+      - name: Criar os oito databases descartaveis
+        run: |
+          python - <<'PY'
+          import asyncio
+
+          import asyncpg
+
+          DATABASES = [
+              "facilpi_c4_test",
+              "facilpi_c5_test",
+              "facilpi_d1_test",
+              "facilpi_d2_test",
+              "facilpi_d3_test",
+              "facilpi_d4_test",
+              "facilpi_qa_test",
+              "facilpi_s1_test",
+          ]
+
+
+          async def principal() -> None:
+              conexao = await asyncpg.connect(
+                  host="127.0.0.1",
+                  port=55486,
+                  user="postgres",
+                  password="postgres",
+                  database="postgres",
+              )
+              try:
+                  for nome in DATABASES:
+                      existe = await conexao.fetchval(
+                          "SELECT 1 FROM pg_database WHERE datname = $1", nome
+                      )
+                      if existe:
+                          print(f"{nome}: ja existia")
+                          continue
+                      await conexao.execute(f'CREATE DATABASE "{nome}"')
+                      print(f"{nome}: criado")
+              finally:
+                  await conexao.close()
+
+
+          asyncio.run(principal())
+          PY
+
+      # Cada arquivo de teste le a sua propria variavel, no padrao
+      # ["sqlite"] + (["postgresql"] if os.getenv(...) else []). Variavel ausente
+      # nao gera erro nem skip: o backend apenas nao entra na matriz. Definir as 11
+      # evita cobertura parcial silenciosa, mas cada uma precisa apontar para o par
+      # porta/database que o teste correspondente exige, nao para um alvo unico.
+      - name: Exportar as 11 variaveis de PostgreSQL
+        run: |
+          BASE="postgresql://postgres:postgres@127.0.0.1"
+          exportar() { echo "$1=${BASE}:$2/$3" >> "$GITHUB_ENV"; }
+          exportar C4_TEST_POSTGRES_URL     55484 facilpi_c4_test
+          exportar C5_TEST_POSTGRES_URL     55485 facilpi_c5_test
+          exportar D1_TEST_POSTGRES_URL     55485 facilpi_d1_test
+          exportar D2_TEST_POSTGRES_URL     55485 facilpi_d2_test
+          exportar S1_TEST_POSTGRES_URL     55485 facilpi_s1_test
+          exportar D3_TEST_POSTGRES_URL     55486 facilpi_d3_test
+          exportar D4_TEST_POSTGRES_URL     55486 facilpi_d4_test
+          exportar FASE2_TEST_POSTGRES_URL  55486 facilpi_qa_test
+          exportar FASE3A_TEST_POSTGRES_URL 55486 facilpi_qa_test
+          exportar FASE3B_TEST_POSTGRES_URL 55486 facilpi_qa_test
+          exportar P0_TEST_POSTGRES_URL     55486 facilpi_qa_test
+
+      # Conferir presenca nao basta: o primeiro ciclo tinha as 11 definidas e ainda
+      # assim apontando para o alvo errado. O que precisa ser verificado e o par
+      # porta/database de cada uma.
+      - name: Conferir que a matriz PostgreSQL esta completa e correta
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          from urllib.parse import urlsplit
+
+          ESPERADO = {
+              "C4_TEST_POSTGRES_URL": (55484, "facilpi_c4_test"),
+              "C5_TEST_POSTGRES_URL": (55485, "facilpi_c5_test"),
+              "D1_TEST_POSTGRES_URL": (55485, "facilpi_d1_test"),
+              "D2_TEST_POSTGRES_URL": (55485, "facilpi_d2_test"),
+              "S1_TEST_POSTGRES_URL": (55485, "facilpi_s1_test"),
+              "D3_TEST_POSTGRES_URL": (55486, "facilpi_d3_test"),
+              "D4_TEST_POSTGRES_URL": (55486, "facilpi_d4_test"),
+              "FASE2_TEST_POSTGRES_URL": (55486, "facilpi_qa_test"),
+              "FASE3A_TEST_POSTGRES_URL": (55486, "facilpi_qa_test"),
+              "FASE3B_TEST_POSTGRES_URL": (55486, "facilpi_qa_test"),
+              "P0_TEST_POSTGRES_URL": (55486, "facilpi_qa_test"),
+          }
+
+          problemas = []
+          for nome, alvo in ESPERADO.items():
+              bruto = os.environ.get(nome)
+              if not bruto:
+                  problemas.append(f"{nome}: ausente")
+                  continue
+              partes = urlsplit(bruto)
+              obtido = (partes.port, partes.path.lstrip("/"))
+              if obtido != alvo:
+                  problemas.append(f"{nome}: {obtido[0]}/{obtido[1]} difere de {alvo[0]}/{alvo[1]}")
+
+          if problemas:
+              for problema in problemas:
+                  print(f"::error::matriz PostgreSQL divergente, {problema}")
+              sys.exit(1)
+
+          portas = {alvo[0] for alvo in ESPERADO.values()}
+          databases = {alvo[1] for alvo in ESPERADO.values()}
+          print(f"11 variaveis conferidas: {len(portas)} portas, {len(databases)} databases")
           PY
 
       - name: pytest
