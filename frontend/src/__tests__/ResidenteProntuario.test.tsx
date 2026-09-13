@@ -436,4 +436,66 @@ describe('ResidenteProntuario', () => {
       ),
     )
   })
+
+  it('26. nome do residente so trunca a partir de lg e tem o nome completo em title', async () => {
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
+    renderTela()
+    const titulo = await screen.findByRole('heading', { name: 'Maria da Silva' })
+
+    // Em telas estreitas o nome quebra em vez de cortar; o corte fica restrito a lg.
+    expect(titulo.className).not.toMatch(/(^|\s)truncate(\s|$)/)
+    expect(titulo.className).toContain('lg:truncate')
+    // Alternativa de leitura quando o corte acontece na coluna lateral fixa.
+    expect(titulo.getAttribute('title')).toBe('Maria da Silva')
+  })
+
+  it('27. link de retorno tem alvo de toque de 44px', async () => {
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
+    renderTela()
+    await screen.findByText('Nenhum evento encontrado')
+
+    const voltar = screen.getByText('← Residentes')
+    expect(voltar.className).toContain('min-h-[44px]')
+    expect(voltar.className).toContain('items-center')
+  })
+
+  it('28. inicial decorativa do cabecalho e marcada como aria-hidden', async () => {
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
+    const { container } = renderTela()
+
+    // O h1 continua acessivel: o avatar e irmao dele, nao ancestral.
+    expect(await screen.findByRole('heading', { name: 'Maria da Silva' })).toBeTruthy()
+    const avatar = container.querySelector('[aria-hidden="true"]')
+    expect(avatar?.textContent).toBe('M')
+  })
+
+  it('29. nome acessivel do card nao comeca com a inicial duplicada', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE] } as any)
+    render(
+      <MemoryRouter initialEntries={['/residentes']}>
+        <Routes>
+          <Route path="/residentes" element={<Residentes />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    // Ancorado no inicio: sem aria-hidden o nome acessivel seria "MMaria da Silva...".
+    const card = await screen.findByRole('link', { name: /^Maria da Silva/ })
+    expect(card.getAttribute('href')).toBe('/residentes/r1')
+  })
+
+  it('30. container do nome estica na coluna lateral para o truncate poder atuar', async () => {
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
+    renderTela()
+    const titulo = await screen.findByRole('heading', { name: 'Maria da Silva' })
+
+    // Em lg o container e flex-col com items-start: sem self-stretch o filho dimensiona pelo
+    // conteudo, o min-w-0 nao constrange e o h1 transborda o card em vez de truncar.
+    const containerDoNome = titulo.parentElement!
+    expect(containerDoNome.className).toContain('min-w-0')
+    expect(containerDoNome.className).toContain('lg:self-stretch')
+  })
 })
