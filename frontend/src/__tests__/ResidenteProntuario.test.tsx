@@ -542,10 +542,9 @@ describe('ResidenteProntuario', () => {
     // getByRole computa o nome acessivel de verdade (respeita aria-hidden), ao contrario de
     // textContent. O que DEVE entrar:
     expect(screen.getByRole('link', { name: /ativo/ })).toBe(link)
-    // Data em formato numerico. Regex frouxa de proposito: formatDate desloca datas-so-data em
-    // um dia por fuso (Issue #35), defeito pre-existente e fora do escopo da Issue #34. Travar o
-    // valor aqui congelaria o bug no teste; apertar esta regex depende de corrigir a #35 antes.
-    expect(screen.getByRole('link', { name: /\d{2}\/\d{2}\/1938/ })).toBe(link)
+    // Data em formato numerico. A regex era frouxa de proposito enquanto formatDate deslocava
+    // datas-so-data em um dia por fuso; corrigido na Issue #35, o valor exato pode ser travado.
+    expect(screen.getByRole('link', { name: /21\/03\/1938/ })).toBe(link)
 
     // O que NAO pode entrar:
     expect(screen.queryByRole('link', { name: /CPF/ })).toBeNull()
@@ -628,5 +627,22 @@ describe('ResidenteProntuario', () => {
     // pseudo-elemento: um anel so na faixa visivel indicaria uma area menor que a clicavel.
     expect(link.className).toContain('focus-visible:after:ring-2')
     expect(link.className).not.toMatch(/(^|\s)focus-visible:ring-2/)
+  })
+
+  // Issue #35 — data de calendario nao pode sofrer conversao de fuso
+
+  it('38. data de nascimento no cabecalho e a cadastrada, sem deslocar o dia', async () => {
+    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
+    mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
+    renderTela()
+    const titulo = await screen.findByRole('heading', { name: 'Maria da Silva' })
+    // Escopo no card do cabecalho: `screen` varreria a tela inteira e o teste passaria com a
+    // data vindo de qualquer outro lugar, afirmando mais do que verifica.
+    const cabecalho = titulo.closest<HTMLElement>('.card')!
+
+    // RESIDENTE.data_nascimento e '1940-05-10'. Antes da #35 o cabecalho exibia 09/05/1940:
+    // formatDate convertia a data-so-data para Sao Paulo e recuava um dia. Diferente do teste
+    // 32, que cobre a lista, este cobre ResidenteCabecalho.tsx — o segundo consumidor.
+    expect(within(cabecalho).getByText(/10\/05\/1940/)).toBeTruthy()
   })
 })
