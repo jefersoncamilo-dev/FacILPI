@@ -67,10 +67,20 @@ export function mensagemDeErro(e: unknown, padrao: string): string {
 export const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 
+// O backend serializa colunas `Date` como "YYYY-MM-DD", sem hora, e o JS interpreta essa forma
+// como meia-noite UTC (ES2015+). Formatar esse instante em São Paulo (UTC−3) cai às 21:00 do dia
+// anterior e imprime o dia errado — era o defeito da Issue #35.
+const SOMENTE_DATA = /^\d{4}-\d{2}-\d{2}$/
+
 export const formatDate = (iso?: string | null) => {
   if (!iso) return '—'
   try {
-    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeZone: 'America/Sao_Paulo' }).format(new Date(iso))
+    // Uma data de calendário — nascimento, admissão, validade — é a mesma em qualquer fuso, então
+    // 'UTC' aqui não converte: neutraliza a conversão e devolve o dia que veio na string. O outro
+    // ramo continua necessário porque Dashboard.tsx passa um instante completo
+    // (new Date().toISOString()), em que converter para São Paulo é o comportamento correto.
+    const timeZone = SOMENTE_DATA.test(iso) ? 'UTC' : 'America/Sao_Paulo'
+    return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeZone }).format(new Date(iso))
   } catch { return iso }
 }
 export const formatDateTime = (iso?: string | null) => {
