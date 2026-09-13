@@ -149,7 +149,8 @@ export function ResidenteProntuario() {
 
   return (
     <div className="space-y-4">
-      <Link to="/residentes" className="text-sm text-primary hover:underline inline-block">← Residentes</Link>
+      {/* min-h-[44px]: alvo de toque, mesma convenção de ContextPicker e FuncionarioCard. */}
+      <Link to="/residentes" className="text-sm text-primary hover:underline inline-flex items-center min-h-[44px]">← Residentes</Link>
 
       {residenteErro ? (
         <ProntuarioErro mensagem={residenteErro} onRetry={() => window.location.reload()} />

@@ -60,7 +60,9 @@ export function Residentes() {
             className="card hover:shadow-cardHover transition block focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:outline-none"
           >
             <div className="flex gap-3">
-              <div className="w-12 h-12 rounded-full bg-primaryLight flex items-center justify-center font-bold text-primary text-lg">{r.nome[0]}</div>
+              {/* Decorativa: sem aria-hidden, o nome acessível do link começa com a inicial
+                  duplicada ("M Maria Aparecida..."). */}
+              <div aria-hidden="true" className="w-12 h-12 rounded-full bg-primaryLight flex items-center justify-center font-bold text-primary text-lg">{r.nome[0]}</div>
               <div className="flex-1 min-w-0">
                 <div className="font-semibold truncate">{r.nome}</div>
                 <div className="text-xs text-textMuted">{r.situacao} • {formatDate(r.data_nascimento)} • {r.sexo || '—'}</div>
