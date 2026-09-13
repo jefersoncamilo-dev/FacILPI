@@ -11,9 +11,12 @@ import { api } from '../services/api'
 import { contextApi } from '../services/context'
 import { TOKEN_KEY, USER_KEY } from '../types/context'
 
-vi.mock('../services/api', () => ({
-  api: { post: vi.fn(), get: vi.fn(), put: vi.fn() },
-}))
+// Preserva os helpers reais do módulo (mensagemDeErro, formatDate…): substituir o módulo
+// inteiro deixaria essas funções indefinidas nas telas sob teste.
+vi.mock('../services/api', async () => {
+  const actual = await vi.importActual<typeof import('../services/api')>('../services/api')
+  return { ...actual, api: { post: vi.fn(), get: vi.fn(), put: vi.fn() } }
+})
 
 vi.mock('../services/context', () => ({
   contextApi: { selectContext: vi.fn(), listInstitutions: vi.fn(), listPerfis: vi.fn() },

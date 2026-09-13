@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, formatDate } from '../services/api'
+import { api, formatDate, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
 
 export function Residentes() {
@@ -31,7 +31,7 @@ export function Residentes() {
       setForm({ nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M', situacao: 'Em admissao' })
       load()
     } catch (e: any) {
-      setMsg(e.response?.data?.detail || JSON.stringify(e.response?.data) || 'Erro ao salvar')
+      setMsg(mensagemDeErro(e, 'Erro ao salvar'))
     }
   }
 
