@@ -498,4 +498,129 @@ describe('ResidenteProntuario', () => {
     expect(containerDoNome.className).toContain('min-w-0')
     expect(containerDoNome.className).toContain('lg:self-stretch')
   })
+
+  // Issue #34 — lista de residentes
+  const RESIDENTE_LONGO = {
+    id: 'r9',
+    nome: 'Maria das Gracas Conceicao Albuquerque dos Santos Nascimento',
+    situacao: 'ativo',
+    data_nascimento: '1938-03-21',
+    sexo: 'F',
+    cpf: '12345678901',
+    grau_dependencia: 'Grau II',
+    alergias: 'Alergia a dipirona',
+  }
+
+  function renderListaResidentes() {
+    return render(
+      <MemoryRouter initialEntries={['/residentes']}>
+        <Routes>
+          <Route path="/residentes" element={<Residentes />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('31. card do residente tem min-w-0 para nao esticar a coluna do grid', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
+    renderListaResidentes()
+    const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
+
+    // O item do grid e o card, ancestral do link. Sem min-w-0 o `truncate` do nome eleva o
+    // min-content da coluna e a pagina ganha rolagem lateral (jsdom nao mede isso: ver Issue).
+    const card = link.parentElement!
+    expect(card.className).toContain('card')
+    expect(card.className).toContain('min-w-0')
+  })
+
+  it('32. nome acessivel do link traz so nome, situacao e data numerica', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
+    renderListaResidentes()
+    const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
+
+    // getByRole computa o nome acessivel de verdade (respeita aria-hidden), ao contrario de
+    // textContent. O que DEVE entrar:
+    expect(screen.getByRole('link', { name: /ativo/ })).toBe(link)
+    // Data em formato numerico. Regex frouxa de proposito: formatDate desloca datas-so-data em
+    // um dia por fuso, defeito pre-existente e fora do escopo desta Issue — travar o valor aqui
+    // congelaria o bug no teste.
+    expect(screen.getByRole('link', { name: /\d{2}\/\d{2}\/1938/ })).toBe(link)
+
+    // O que NAO pode entrar:
+    expect(screen.queryByRole('link', { name: /CPF/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Grau II/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /[Aa]lergia/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /• F/ })).toBeNull()
+  })
+
+  it('33. alergia fica fora do link, porem visivel e acessivel', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
+    renderListaResidentes()
+    const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
+
+    // Informacao clinica de seguranca: nao pode receber aria-hidden nem sumir do leitor de tela.
+    const alergia = screen.getByText('Alergia a dipirona')
+    expect(alergia.closest('a')).toBeNull()
+    expect(alergia.closest('[aria-hidden="true"]')).toBeNull()
+    expect(link.contains(alergia)).toBe(false)
+  })
+
+  it('34. sexo e icone de alerta ficam marcados como decorativos', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
+    renderListaResidentes()
+    await screen.findByRole('link', { name: /^Maria das Gracas/ })
+
+    const decorativos = [...document.querySelectorAll('[aria-hidden="true"]')].map(e => e.textContent?.trim())
+    expect(decorativos).toContain('M')        // avatar
+    expect(decorativos).toContain('• F')      // sexo
+    expect(decorativos).toContain('⚠️')        // icone de alerta
+  })
+
+  // Os tres testes abaixo travam a area clicavel do card. jsdom nao faz layout, entao nenhum
+  // deles mede pixels: o que travam e a estrutura que produz a area (overlay absoluto ancorado
+  // no card). A medicao real foi feita no navegador e esta registrada na Issue #34.
+
+  it('35. o link cobre o card inteiro por overlay, nao so a faixa de identificacao', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
+    renderListaResidentes()
+    const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
+    const card = link.parentElement!
+
+    // O overlay so cobre o card se o card for o bloco de contencao do absolute.
+    expect(card.className).toContain('relative')
+    expect(link.className).toContain('after:absolute')
+    expect(link.className).toContain('after:inset-0')
+    // ...e se nada entre o link e o card criar um bloco de contencao intermediario.
+    expect(link.parentElement).toBe(card)
+
+    // O conteudo que saiu do link continua dentro do card e, portanto, sob o overlay:
+    // clicar na alergia ou no badge de grau navega, como acontecia antes da Issue #34.
+    expect(card.contains(screen.getByText('Alergia a dipirona'))).toBe(true)
+    expect(card.contains(screen.getByText('Grau II'))).toBe(true)
+  })
+
+  it('36. a sombra de hover do card so existe onde o card inteiro navega', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
+    renderListaResidentes()
+    const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
+    const card = link.parentElement!
+
+    // hover:shadow-cardHover em area nao clicavel e falsa affordance: sinaliza clique onde
+    // nada acontece. Se a sombra existir, a cobertura tem de existir junto.
+    if (card.className.includes('hover:shadow-cardHover')) {
+      expect(card.className).toContain('relative')
+      expect(link.className).toContain('after:inset-0')
+    }
+  })
+
+  it('37. o anel de foco e desenhado no overlay, cobrindo a area clicavel real', async () => {
+    mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
+    renderListaResidentes()
+    const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
+
+    // O anel continua disparado pelo elemento interativo (o proprio <a>), mas pintado no
+    // pseudo-elemento: um anel so na faixa visivel indicaria uma area menor que a clicavel.
+    expect(link.className).toContain('focus-visible:after:ring-2')
+    expect(link.className).not.toMatch(/(^|\s)focus-visible:ring-2/)
+  })
 })
