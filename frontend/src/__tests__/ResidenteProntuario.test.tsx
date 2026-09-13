@@ -527,7 +527,8 @@ describe('ResidenteProntuario', () => {
     const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
 
     // O item do grid e o card, ancestral do link. Sem min-w-0 o `truncate` do nome eleva o
-    // min-content da coluna e a pagina ganha rolagem lateral (jsdom nao mede isso: ver Issue).
+    // min-content da coluna e a pagina ganha rolagem lateral. jsdom nao faz layout e nao mede
+    // isso: a prova em 360/390/430/768/1366px esta registrada na Issue #34.
     const card = link.parentElement!
     expect(card.className).toContain('card')
     expect(card.className).toContain('min-w-0')
@@ -542,8 +543,8 @@ describe('ResidenteProntuario', () => {
     // textContent. O que DEVE entrar:
     expect(screen.getByRole('link', { name: /ativo/ })).toBe(link)
     // Data em formato numerico. Regex frouxa de proposito: formatDate desloca datas-so-data em
-    // um dia por fuso, defeito pre-existente e fora do escopo desta Issue — travar o valor aqui
-    // congelaria o bug no teste.
+    // um dia por fuso (Issue #35), defeito pre-existente e fora do escopo da Issue #34. Travar o
+    // valor aqui congelaria o bug no teste; apertar esta regex depende de corrigir a #35 antes.
     expect(screen.getByRole('link', { name: /\d{2}\/\d{2}\/1938/ })).toBe(link)
 
     // O que NAO pode entrar:
@@ -599,18 +600,23 @@ describe('ResidenteProntuario', () => {
     expect(card.contains(screen.getByText('Grau II'))).toBe(true)
   })
 
-  it('36. a sombra de hover do card so existe onde o card inteiro navega', async () => {
+  it('36. na lista de Residentes, a sombra de hover acompanha a area navegavel do card', async () => {
     mockGet.mockResolvedValueOnce({ data: [RESIDENTE_LONGO] } as any)
     renderListaResidentes()
     const link = await screen.findByRole('link', { name: /^Maria das Gracas/ })
     const card = link.parentElement!
 
-    // hover:shadow-cardHover em area nao clicavel e falsa affordance: sinaliza clique onde
-    // nada acontece. Se a sombra existir, a cobertura tem de existir junto.
-    if (card.className.includes('hover:shadow-cardHover')) {
-      expect(card.className).toContain('relative')
-      expect(link.className).toContain('after:inset-0')
-    }
+    // Regra deste card, nao regra geral: na lista de Residentes a unica interacao e navegar,
+    // entao a sombra de hover — que cobre o card inteiro — promete clique em toda a superficie
+    // e a area navegavel tem de acompanhar. Outros cards do projeto (FuncionarioCard,
+    // UsuariosSection, Equipe) usam a mesma sombra sem navegar: la eles contem botoes, e a
+    // sombra indica "card com acoes". Nada aqui afirma que todo card com hover navega inteiro.
+    //
+    // As tres assercoes sao obrigatorias: como implicacao condicional, remover a sombra deixaria
+    // o teste verde sem afirmar nada.
+    expect(card.className).toContain('hover:shadow-cardHover')
+    expect(card.className).toContain('relative')
+    expect(link.className).toContain('after:inset-0')
   })
 
   it('37. o anel de foco e desenhado no overlay, cobrindo a area clicavel real', async () => {
