@@ -31,6 +31,39 @@ api.interceptors.response.use(
   }
 )
 
+// `detail` chega da API em três formas, todas em uso:
+//   - string        -> HTTPException(detail="Intervalo de consulta invalido")
+//   - {code, message} -> erros de negócio (PERMISSION_DENIED, AUTH_CONTEXT_REQUIRED, ...)
+//   - [{loc, msg, ...}] -> validação automática do FastAPI (422)
+// Entregar objeto ou array direto ao JSX faz o React lançar "Objects are not valid as a
+// React child" e, sem error boundary, derruba a aplicação inteira.
+// Este normalizador é o único ponto autorizado a converter erro de API em texto de tela.
+export const ERRO_SEM_RESPOSTA = 'Não foi possível falar com o servidor. Verifique sua conexão e tente novamente.'
+
+export function mensagemDeErro(e: unknown, padrao: string): string {
+  const resposta = (e as { response?: { data?: { detail?: unknown } } })?.response
+  // Sem resposta: rede, CORS ou servidor fora. Não é credencial inválida e não deve dizer que é.
+  if (!resposta) return ERRO_SEM_RESPOSTA
+
+  const detail = resposta.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map(item => (typeof item === 'string' ? item : (item as { msg?: unknown })?.msg))
+      .filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+    return msgs.length ? msgs.join('; ') : padrao
+  }
+
+  if (detail && typeof detail === 'object') {
+    // Só `message` vai para a tela; `code` é identificador técnico.
+    const message = (detail as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) return message
+  }
+
+  return padrao
+}
+
 export const formatCurrency = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0)
 

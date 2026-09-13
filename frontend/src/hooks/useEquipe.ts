@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { mensagemDeErro } from '../services/api'
 import { equipeApi } from '../services/equipe'
 import { CONTEXT_CHANGED_EVENT } from '../types/context'
 import type {
@@ -29,7 +30,7 @@ export function useEquipe() {
       const { data } = await equipeApi.listFuncionarios(situacao ?? undefined)
       setFuncionarios(data)
     } catch (e: any) {
-      setError(e.response?.data?.detail?.message || e.response?.data?.detail || 'Erro ao carregar funcionários')
+      setError(mensagemDeErro(e, 'Erro ao carregar funcionários'))
     } finally {
       setLoading(false)
     }
@@ -42,7 +43,7 @@ export function useEquipe() {
       const { data } = await equipeApi.listUsuarios()
       setUsuarios(data)
     } catch (e: any) {
-      setError(e.response?.data?.detail?.message || e.response?.data?.detail || 'Erro ao carregar usuários')
+      setError(mensagemDeErro(e, 'Erro ao carregar usuários'))
     } finally {
       setLoading(false)
     }
@@ -55,7 +56,7 @@ export function useEquipe() {
       const { data } = await equipeApi.listPerfis()
       setPerfis(data.filter(p => p.escopo === 'ilpi'))
     } catch (e: any) {
-      setError(e.response?.data?.detail?.message || e.response?.data?.detail || 'Erro ao carregar perfis')
+      setError(mensagemDeErro(e, 'Erro ao carregar perfis'))
     } finally {
       setLoading(false)
     }
@@ -66,7 +67,7 @@ export function useEquipe() {
       const { data } = await equipeApi.listPermissoes()
       setPermissoes(data)
     } catch (e: any) {
-      setError(e.response?.data?.detail?.message || e.response?.data?.detail || 'Erro ao carregar permissões')
+      setError(mensagemDeErro(e, 'Erro ao carregar permissões'))
     }
   }, [])
 

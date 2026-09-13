@@ -1,6 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { mensagemDeErro } from '../services/api'
 import { Modal } from './Modal'
 import { ContextSwitcher } from './ContextSwitcher'
 
@@ -45,7 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       setMsg('Senha alterada com sucesso')
       setTimeout(() => { setPwdOpen(false); setMsg(''); setNova(''); setConfirmar('') }, 1200)
     } catch (e: any) {
-      setMsg(e.response?.data?.detail || 'Erro ao alterar senha')
+      setMsg(mensagemDeErro(e, 'Erro ao alterar senha'))
     }
   }
 

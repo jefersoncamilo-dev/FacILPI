@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api } from '../services/api'
+import { api, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
 
 export function Register() {
@@ -22,7 +22,7 @@ export function Register() {
       setTimeout(() => navigate('/login'), 1400)
     } catch (e: any) {
       setOk(false)
-      setMsg(e.response?.data?.detail || 'Erro ao cadastrar')
+      setMsg(mensagemDeErro(e, 'Erro ao cadastrar'))
       setOpen(true)
     }
   }

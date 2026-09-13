@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
 import { ContextPicker } from '../components/ContextPicker'
 import type { ContextOption } from '../types/context'
@@ -32,8 +33,7 @@ export function Login() {
         navigate('/')
       }
     } catch (e: any) {
-      const msg = e.response?.data?.detail || 'Falha no login. Verifique credenciais.'
-      setErr(msg)
+      setErr(mensagemDeErro(e, 'Falha no login. Verifique credenciais.'))
       setOpen(true)
     }
   }
