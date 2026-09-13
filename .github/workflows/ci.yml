@@ -1,0 +1,155 @@
+name: CI
+
+# O fluxo do projeto integra em fase-3b/funcionarios-usuarios-vinculos, nao em main:
+# um gatilho so em main nao rodaria em nenhum PR do fluxo atual. O filtro de
+# pull_request e pela branch de DESTINO, que e o comportamento desejado aqui.
+on:
+  pull_request:
+    branches:
+      - main
+      - fase-3b/funcionarios-usuarios-vinculos
+  push:
+    branches:
+      - main
+      - fase-3b/funcionarios-usuarios-vinculos
+
+permissions:
+  contents: read
+
+# Um push novo no mesmo PR cancela a execucao anterior, que ja esta obsoleta.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (testes, TypeScript, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Fixado de proposito: package.json nao declara `engines`, entao sem isto
+          # o CI e o ambiente de desenvolvimento podem divergir sem aviso.
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+
+      - name: Testes
+        run: npm run test
+
+      - name: TypeScript
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Build
+        run: npm run build
+
+  backend-sqlite:
+    name: Backend (SQLite)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # -rs lista os skips no log: um teste pulado em silencio e indistinguivel
+      # de um teste que passou, e a suite pula quando o alvo esta indisponivel.
+      - name: pytest
+        run: python -m pytest -rs
+
+  backend-postgres:
+    name: Backend (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: facilpi_qa_test
+        # 55486 e o valor do PG_MANIFEST em backend/tests/db_safety.py, que valida
+        # host, porta, database e usuario por igualdade exata antes de conectar.
+        # Mapear a porta preserva o manifesto e mantem o mesmo comando valido local.
+        ports:
+          - 55486:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # Cada arquivo de teste le a sua propria variavel, no padrao
+      # ["sqlite"] + (["postgresql"] if os.getenv(...) else []). Variavel ausente
+      # nao gera erro nem skip: o backend apenas nao entra na matriz. Definir as 11
+      # a partir de uma unica fonte evita cobertura parcial silenciosa.
+      - name: Exportar as 11 variaveis de PostgreSQL
+        run: |
+          URL="postgresql://postgres:postgres@127.0.0.1:55486/facilpi_qa_test"
+          for PREFIXO in C4 C5 D1 D2 D3 D4 FASE2 FASE3A FASE3B P0 S1; do
+            echo "${PREFIXO}_TEST_POSTGRES_URL=${URL}" >> "$GITHUB_ENV"
+          done
+
+      - name: Conferir que a matriz PostgreSQL esta completa
+        run: |
+          FALTANDO=""
+          for PREFIXO in C4 C5 D1 D2 D3 D4 FASE2 FASE3A FASE3B P0 S1; do
+            NOME="${PREFIXO}_TEST_POSTGRES_URL"
+            if [ -z "${!NOME}" ]; then FALTANDO="${FALTANDO} ${NOME}"; fi
+          done
+          if [ -n "${FALTANDO}" ]; then
+            echo "::error::matriz PostgreSQL incompleta, ausentes:${FALTANDO}"
+            exit 1
+          fi
+          echo "11 variaveis definidas"
+
+      # Sem isto, um servico que nao subiu viraria skip dentro dos testes e o job
+      # terminaria verde tendo rodado so SQLite.
+      - name: Conferir conectividade com o PostgreSQL descartavel
+        run: |
+          python - <<'PY'
+          import socket, sys
+          s = socket.socket()
+          s.settimeout(10)
+          try:
+              s.connect(("127.0.0.1", 55486))
+          except OSError as erro:
+              print(f"::error::PostgreSQL descartavel inacessivel em 127.0.0.1:55486 ({erro})")
+              sys.exit(1)
+          finally:
+              s.close()
+          print("PostgreSQL descartavel acessivel")
+          PY
+
+      - name: pytest
+        run: python -m pytest -rs
