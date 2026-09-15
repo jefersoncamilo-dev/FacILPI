@@ -359,6 +359,13 @@ def test_migration_baselines_clones_downgrade_idempotence(c4_db):
 
 
 def test_migration_refuses_external_grant_downgrade(c4_db):
+    # Roda a partir de 011, nao de head: o alvo aqui e a guarda da propria 011.
+    # Partindo de head, a recusa acontece no meio de uma cadeia de downgrades, e o
+    # estado resultante depende do backend: PostgreSQL envolve a cadeia inteira em
+    # uma transacao e reverte tudo, SQLite comita cada passo. Isolar a transicao
+    # 011->010 mantem o invariante e o torna deterministico nos dois bancos, alem de
+    # nao depender de qual venha a ser o head futuro.
+    _migrate(c4_db, "downgrade", REV_011)
     async def scenario(client, db):
         await _setup(db)
     asyncio.run(_with_client(c4_db, scenario))
