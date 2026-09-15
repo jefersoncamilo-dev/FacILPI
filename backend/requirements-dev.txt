@@ -1,0 +1,11 @@
+# Dependencias exclusivas de teste.
+#
+# Inclui requirements.txt porque a suite importa pacotes de runtime diretamente
+# (httpx, pyjwt, sqlalchemy, fastapi): um unico `pip install -r requirements-dev.txt`
+# prepara o ambiente completo de teste, local ou em CI.
+-r requirements.txt
+
+# Unica dependencia de teste que faltava declarar. A suite chama asyncio.run()
+# diretamente, sem pytest-asyncio, e o unico marcador usado e o parametrize
+# embutido — por isso nenhum plugin e necessario.
+pytest>=9.1
