@@ -1,29 +1,38 @@
 import { useEffect, useState } from 'react'
 import { api, formatDate } from '../services/api'
 import { Link } from 'react-router-dom'
+import { getPlantao, type PlantaoItem } from '../services/plantao'
 
-type Stats = { residentes: number; tarefasPendentes: number; alertas: number; ocupacao: string }
+// Indisponível não é zero. Enquanto a fonte falhar — ou não existir — o cartão
+// mostra este traço; exibir 0 afirmaria que não há pendência nenhuma.
+const INDISPONIVEL = '—'
+
+type Stats = { residentes: number; ocupacao: string }
 
 export function Dashboard() {
-  const [stats, setStats] = useState<Stats>({ residentes: 0, tarefasPendentes: 0, alertas: 0, ocupacao: '—' })
+  const [stats, setStats] = useState<Stats>({ residentes: 0, ocupacao: '—' })
   const [residentes, setResidentes] = useState<any[]>([])
-  const [tarefas, setTarefas] = useState<any[]>([])
+  const [pendencias, setPendencias] = useState<PlantaoItem[]>([])
+  const [pendenciasIndisponiveis, setPendenciasIndisponiveis] = useState(false)
 
   useEffect(() => {
     async function load() {
       try {
-        const [r, t, a] = await Promise.all([
-          api.get('/residentes/').catch(() => ({ data: [] })),
-          api.get('/tarefas/').catch(() => ({ data: [] })),
-          api.get('/alertas/').catch(() => ({ data: [] })),
-        ])
+        const r = await api.get('/residentes/').catch(() => ({ data: [] }))
         setResidentes((r.data || []).slice(0, 5))
-        setTarefas((t.data || []).filter((x: any) => x.situacao === 'Pendente').slice(0, 5))
         const ocupacao = r.data?.length ? `${Math.min(100, Math.round((r.data.length / 40) * 100))}%` : '0%'
-        setStats({ residentes: r.data.length || 0, tarefasPendentes: t.data.filter((x:any)=>x.situacao==='Pendente').length || 0, alertas: a.data.filter((x:any)=>x.situacao==='Ativo').length || 0, ocupacao })
+        setStats({ residentes: r.data.length || 0, ocupacao })
       } catch {}
     }
     load()
+  }, [])
+
+  useEffect(() => {
+    // Fonte oficial das pendências do turno é a projeção /plantao/, a mesma
+    // consumida por Meu Plantão. Falha marca indisponibilidade explícita.
+    getPlantao()
+      .then(itens => { setPendencias(itens); setPendenciasIndisponiveis(false) })
+      .catch(() => { setPendencias([]); setPendenciasIndisponiveis(true) })
   }, [])
 
   return (
@@ -40,14 +49,18 @@ export function Dashboard() {
           <div className="text-xs opacity-80 mt-2">Ocupação {stats.ocupacao}</div>
         </div>
         <div className="card">
-          <div className="text-sm text-textMuted">Tarefas pendentes</div>
-          <div className="text-3xl font-bold text-warning mt-1">{stats.tarefasPendentes}</div>
-          <Link to="/plantao" className="text-xs text-primary font-semibold mt-2 inline-block">Ver Meu Plantão →</Link>
+          <div className="text-sm text-textMuted">Pendências do turno</div>
+          <div className="text-3xl font-bold text-warning mt-1">
+            {pendenciasIndisponiveis ? INDISPONIVEL : pendencias.length}
+          </div>
+          {pendenciasIndisponiveis
+            ? <span className="text-xs text-textMuted mt-2 inline-block">Indisponível no momento</span>
+            : <Link to="/plantao" className="text-xs text-primary font-semibold mt-2 inline-block">Ver Meu Plantão →</Link>}
         </div>
         <div className="card">
           <div className="text-sm text-textMuted">Alertas ativos</div>
-          <div className="text-3xl font-bold text-danger mt-1">{stats.alertas}</div>
-          <span className="text-xs text-textMuted mt-2 inline-block">Críticos e pendências</span>
+          <div className="text-3xl font-bold text-danger mt-1">{INDISPONIVEL}</div>
+          <span className="text-xs text-textMuted mt-2 inline-block">Indisponível — sem fonte oficial</span>
         </div>
         <div className="card">
           <div className="text-sm text-textMuted">Conformidade</div>
@@ -86,21 +99,27 @@ export function Dashboard() {
 
         <div className="card">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Próximas tarefas</h3>
+            <h3 className="font-semibold">Próximas pendências</h3>
             <Link to="/plantao" className="text-sm text-primary font-semibold">Meu Plantão</Link>
           </div>
-          {tarefas.length === 0 ? (
+          {pendenciasIndisponiveis ? (
+            <div className="py-10 text-center text-textMuted" role="alert">
+              <div className="text-4xl mb-2">⚠️</div>
+              <p className="text-sm">Não foi possível carregar as pendências</p>
+              <p className="text-xs mt-1">Isso não significa que não há pendências.</p>
+            </div>
+          ) : pendencias.length === 0 ? (
             <div className="py-10 text-center text-textMuted">
               <div className="text-4xl mb-2">🩺</div>
-              <p className="text-sm">Nenhuma tarefa pendente</p>
-              <p className="text-xs mt-1">Tarefas geradas pelo Plano de Cuidados aparecem aqui.</p>
+              <p className="text-sm">Nenhuma pendência no período</p>
+              <p className="text-xs mt-1">Cuidados, doses e intercorrências abertas aparecem aqui.</p>
             </div>
           ) : (
             <div className="space-y-3">
-              {tarefas.map(t => (
-                <div key={t.id} className="p-3 rounded-xl bg-amber-50 border border-amber-100">
-                  <div className="text-sm font-medium">{t.descricao}</div>
-                  <div className="text-xs text-textMuted mt-1">{t.prioridade} • {t.responsavel || 'Sem responsável'}</div>
+              {pendencias.slice(0, 5).map(item => (
+                <div key={`${item.origem}:${item.registro_id}`} className="p-3 rounded-xl bg-amber-50 border border-amber-100">
+                  <div className="text-sm font-medium">{item.descricao}</div>
+                  <div className="text-xs text-textMuted mt-1">{item.origem}{item.prioridade ? ` • ${item.prioridade}` : ''}</div>
                 </div>
               ))}
             </div>
