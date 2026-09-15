@@ -63,9 +63,14 @@ describe('ContextSwitch — login e contexto', () => {
     mockPost.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
     const { get } = renderAuth()
     await get().login('admin@ilpi.com', 'senha')
-    await waitFor(() => expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN))
-    expect(get().activeContext?.scope).toBe('global')
-    expect(get().availableContexts.length).toBe(2)
+    // O token chega ao localStorage de forma sincrona dentro do login, antes de
+    // setActiveContext/setAvailableContexts; fechar o gate nele libera antes do
+    // commit do estado React. Aguardar o estado, como nos testes 3-8.
+    await waitFor(() => {
+      expect(get().activeContext?.scope).toBe('global')
+      expect(get().availableContexts.length).toBe(2)
+    })
+    expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN)
   })
 
   it('2. contexto atual exibido (Plataforma)', async () => {
