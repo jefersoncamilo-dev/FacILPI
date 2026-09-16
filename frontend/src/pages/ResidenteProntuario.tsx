@@ -12,6 +12,7 @@ import { ResidenteCabecalho, ResidenteResumo } from '../components/prontuario/Re
 import { FILTROS_INICIAIS, FiltrosValue, ProntuarioFiltros } from '../components/prontuario/ProntuarioFiltros'
 import { ProntuarioLinhaDoTempo } from '../components/prontuario/ProntuarioLinhaDoTempo'
 import { ProntuarioCarregando, ProntuarioErro, ProntuarioVazio } from '../components/prontuario/ProntuarioEstados'
+import { RegistrarSinalVitalModal } from '../components/sinaisVitais/RegistrarSinalVitalModal'
 
 function paramsDeFiltros(f: FiltrosValue, cursor?: string): ProntuarioConsultaParams {
   return {
@@ -62,6 +63,13 @@ export function ResidenteProntuario() {
   const [hasMore, setHasMore] = useState(false)
   const [carregandoMais, setCarregandoMais] = useState(false)
   const [erroPaginacao, setErroPaginacao] = useState<string | null>(null)
+
+  // Registro de sinais vitais: entrada preferencial do módulo, já no contexto do
+  // residente. O reflexo na linha do tempo vem do backend (origem `sinal_vital`),
+  // por isso o sucesso apenas recarrega a consulta — nada é inserido no cliente.
+  const [registrandoSinais, setRegistrandoSinais] = useState(false)
+  const [sucessoSinais, setSucessoSinais] = useState('')
+  const [semPermissaoSinais, setSemPermissaoSinais] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -159,6 +167,28 @@ export function ResidenteProntuario() {
           <ResidenteCabecalho residente={residente} />
 
           <div className="space-y-4 min-w-0">
+            {!semPermissaoSinais && (
+              <button
+                type="button"
+                onClick={() => { setSucessoSinais(''); setRegistrandoSinais(true) }}
+                className="btn-primary w-full sm:w-auto"
+              >
+                + Registrar sinais vitais
+              </button>
+            )}
+
+            {semPermissaoSinais && (
+              <p className="text-sm text-textMuted">
+                Seu perfil não permite registrar sinais vitais. A consulta continua disponível.
+              </p>
+            )}
+
+            {sucessoSinais && (
+              <div role="status" className="card border-l-4 border-l-success py-3">
+                <span className="text-sm font-medium text-success">{sucessoSinais}</span>
+              </div>
+            )}
+
             <ProntuarioFiltros value={filtros} onChange={aplicarFiltros} />
 
             {erroFiltro && (
@@ -195,6 +225,20 @@ export function ResidenteProntuario() {
             )}
           </div>
         </div>
+      )}
+
+      {id && (
+        <RegistrarSinalVitalModal
+          open={registrandoSinais}
+          onClose={() => setRegistrandoSinais(false)}
+          onRegistrado={() => {
+            setRegistrandoSinais(false)
+            setSucessoSinais('Sinais vitais registrados.')
+            carregar(filtros)
+          }}
+          residenteFixo={{ id, nome: residente?.nome ?? '' }}
+          onPermissaoNegada={() => setSemPermissaoSinais(true)}
+        />
       )}
     </div>
   )
