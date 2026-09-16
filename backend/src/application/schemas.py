@@ -840,6 +840,11 @@ class IntercorrenciaCreate(BaseModel):
     sbar_recomendacao: Optional[str] = None
     providencia: Optional[str] = None
     desfecho: None = None
+    # B1: quando o evento realmente aconteceu. Opcional — omitido, o backend
+    # assume o instante atual. `AwareDatetime` recusa datetime sem fuso (422),
+    # mesmo contrato de ExecucaoCreate/C5Resultado. O limite de futuro e
+    # aplicado no handler, junto do relogio do servidor.
+    ocorrido_em: Optional[AwareDatetime] = None
 
     @field_validator("tipo")
     @classmethod
@@ -864,6 +869,10 @@ class IntercorrenciaUpdate(BaseModel):
         if isinstance(data, dict):
             if {"residente_id", "situacao", "desfecho"} & data.keys():
                 raise ValueError("Residente imutavel; encerramento exige operacao explicita")
+            # Recusa explicita em vez de ignorar em silencio: o cliente saberia
+            # que a correcao nao aconteceu.
+            if "ocorrido_em" in data:
+                raise ValueError("Hora da ocorrencia nao e corrigivel neste contrato")
             for key in ("tipo", "gravidade"):
                 if key in data and (data[key] is None or not str(data[key]).strip()):
                     raise ValueError(f"{key} nao pode ser vazio")
@@ -885,6 +894,9 @@ class IntercorrenciaResponse(IntercorrenciaCreate):
     situacao: Literal["aberta", "encerrada"]
     desfecho: Optional[str] = None
     responsavel: Optional[str] = None
+    # Persistido NOT NULL; o Optional aqui so acompanha o estilo do modulo.
+    ocorrido_em: Optional[datetime] = None
+    # Timestamp tecnico de criacao do registro.
     data: Optional[datetime] = None
     class Config:
         from_attributes = True

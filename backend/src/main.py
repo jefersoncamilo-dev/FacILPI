@@ -1218,7 +1218,9 @@ async def list_intercorrencias(
     if residente_id is not None:
         await _ensure_intercorrencia_parent(db, residente_id, context)
         query = query.where(m.Intercorrencia.residente_id == residente_id)
-    result = await db.execute(query.order_by(m.Intercorrencia.data.desc(), m.Intercorrencia.id).offset(max(0, skip)).limit(max(1, min(limit, 100))))
+    # B1: a ordem passa a ser a do evento, nao a do registro. Uma intercorrencia
+    # da madrugada anotada de manha aparece no lugar em que aconteceu.
+    result = await db.execute(query.order_by(m.Intercorrencia.ocorrido_em.desc(), m.Intercorrencia.id).offset(max(0, skip)).limit(max(1, min(limit, 100))))
     return result.scalars().all()
 
 
@@ -1230,9 +1232,25 @@ async def create_intercorrencia(
     context: SecurityContext = Depends(require_permission("intercorrencias:criar")),
 ):
     await _ensure_intercorrencia_parent(db, payload.residente_id, context)
+    agora = datetime.now(timezone.utc)
+    # Omitido, o registro vale por agora. Informado, e sempre timezone-aware
+    # (AwareDatetime no schema) e normalizado para UTC antes de persistir.
+    ocorrido_em = payload.ocorrido_em.astimezone(timezone.utc) if payload.ocorrido_em is not None else agora
+    # Mesmo limite de rotina.py:419-420: o registro descreve o que ja aconteceu.
+    if ocorrido_em > agora:
+        raise HTTPException(status_code=422, detail="Ocorrido em nao pode estar no futuro")
     # Schemas ignore extra fields: neither tenant nor authorship comes from JSON.
+    dados = payload.model_dump()
+    dados["ocorrido_em"] = ocorrido_em
+    # `data` (registrado_em) passa a ser escrita pela aplicacao, como ExecucaoCuidado
+    # (rotina.py:428) e Administracao (medicacao.py:293) ja fazem. O server_default
+    # CURRENT_TIMESTAMP do SQLite grava com precisao de SEGUNDO, enquanto qualquer
+    # datetime vinculado chega com microssegundos: no keyset do Prontuario
+    # '…:06' < '…:06.000000' e verdadeiro, e a linha do cursor voltava como primeira
+    # da pagina seguinte. Escrever do Python torna armazenado e vinculado identicos.
+    dados["data"] = agora
     obj = m.Intercorrencia(
-        **payload.model_dump(),
+        **dados,
         ilpi_id=context.ilpi_id,
         responsavel=await _resolve_profissional(db, context),
     )

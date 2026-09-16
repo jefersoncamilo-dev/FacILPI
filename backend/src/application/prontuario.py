@@ -365,17 +365,20 @@ async def get_prontuario(
     # Intercorrencias
     if "intercorrencia" in allowed:
         q = select(m.Intercorrencia).where(m.Intercorrencia.ilpi_id == tenant, m.Intercorrencia.residente_id == residente_id)
+        # B1: janela e ordenacao passam a usar a hora do evento; `data` fica
+        # apenas como registrado_em. Cursores emitidos antes da 019 para esta
+        # origem deixam de ser comparaveis — ver CURSOR_IMPACT no handoff.
         if desde is not None:
-            q = q.where(m.Intercorrencia.data >= _utc(desde))
+            q = q.where(m.Intercorrencia.ocorrido_em >= _utc(desde))
         if ate is not None:
-            q = q.where(m.Intercorrencia.data <= _utc(ate))
+            q = q.where(m.Intercorrencia.ocorrido_em <= _utc(ate))
         if situacao is not None:
             q = q.where(m.Intercorrencia.situacao == situacao)
-        q = _apply_keyset(q, m.Intercorrencia.data, m.Intercorrencia.data, m.Intercorrencia.id, "intercorrencia", "intercorrencia", cursor_tuple, limit)
+        q = _apply_keyset(q, m.Intercorrencia.ocorrido_em, m.Intercorrencia.data, m.Intercorrencia.id, "intercorrencia", "intercorrencia", cursor_tuple, limit)
         rows = (await db.execute(q)).scalars().all()
         for r in rows:
             events.append(_event(
-                ocorrido_em=_utc(r.data),
+                ocorrido_em=_utc(r.ocorrido_em),
                 registrado_em=_utc(r.data),
                 origem="intercorrencia",
                 tipo="intercorrencia",

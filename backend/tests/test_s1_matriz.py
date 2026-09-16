@@ -311,9 +311,14 @@ def test_04_escalation_bloqueada(s1_db):
         profile_chefe = (await db.execute(select(m.Perfil).join(
             m.UsuarioIlpiPerfil, m.UsuarioIlpiPerfil.perfil_id == m.Perfil.id).where(
             m.UsuarioIlpiPerfil.usuario_id == chefe.id))).scalar_one()
+        # O superset precisa acompanhar o perfil: a 019 concedeu intercorrencias:ler
+        # e :criar ao cuidador, entao quem atribui o perfil passa a precisar delas
+        # tambem. A guarda anti-escalation (matriz.py:117) esta funcionando; o que
+        # mudou foi a composicao do perfil, por decisao institucional.
         await _grant(db, profile_chefe.id, {"usuarios:atribuir_perfil", "residentes:ler",
                      "planos_cuidados:ler", "programacoes:ler", "ocorrencias:ler",
-                     "execucoes:ler", "execucoes:criar", "plantao:ler", "sinais_vitais:ler"})
+                     "execucoes:ler", "execucoes:criar", "plantao:ler", "sinais_vitais:ler",
+                     "intercorrencias:ler", "intercorrencias:criar"})
         await db.commit()
         hc = _headers(chefe, ilpi_id=ilpi.id)
         r = await client.post("/api/matriz/atribuicoes",
