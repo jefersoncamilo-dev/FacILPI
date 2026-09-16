@@ -13,6 +13,7 @@ import { FILTROS_INICIAIS, FiltrosValue, ProntuarioFiltros } from '../components
 import { ProntuarioLinhaDoTempo } from '../components/prontuario/ProntuarioLinhaDoTempo'
 import { ProntuarioCarregando, ProntuarioErro, ProntuarioVazio } from '../components/prontuario/ProntuarioEstados'
 import { RegistrarSinalVitalModal } from '../components/sinaisVitais/RegistrarSinalVitalModal'
+import { RegistrarIntercorrenciaModal } from '../components/intercorrencias/RegistrarIntercorrenciaModal'
 
 function paramsDeFiltros(f: FiltrosValue, cursor?: string): ProntuarioConsultaParams {
   return {
@@ -70,6 +71,12 @@ export function ResidenteProntuario() {
   const [registrandoSinais, setRegistrandoSinais] = useState(false)
   const [sucessoSinais, setSucessoSinais] = useState('')
   const [semPermissaoSinais, setSemPermissaoSinais] = useState(false)
+
+  // Mesmo desenho para intercorrencia: o reflexo na linha do tempo vem do
+  // backend (origem `intercorrencia`), entao o sucesso apenas recarrega.
+  const [registrandoIntercorrencia, setRegistrandoIntercorrencia] = useState(false)
+  const [sucessoIntercorrencia, setSucessoIntercorrencia] = useState('')
+  const [semPermissaoIntercorrencia, setSemPermissaoIntercorrencia] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -167,14 +174,31 @@ export function ResidenteProntuario() {
           <ResidenteCabecalho residente={residente} />
 
           <div className="space-y-4 min-w-0">
-            {!semPermissaoSinais && (
-              <button
-                type="button"
-                onClick={() => { setSucessoSinais(''); setRegistrandoSinais(true) }}
-                className="btn-primary w-full sm:w-auto"
-              >
-                + Registrar sinais vitais
-              </button>
+            {/* Duas acoes de registro convivem aqui. Empilham em 360 e ficam lado a
+                lado a partir de sm; a hierarquia vem das classes ja existentes —
+                sinais vitais e o ato rotineiro (primaria), intercorrencia e o
+                excepcional (secundaria). Sem redesenho do Prontuario. */}
+            {(!semPermissaoSinais || !semPermissaoIntercorrencia) && (
+              <div className="flex flex-col sm:flex-row gap-2">
+                {!semPermissaoSinais && (
+                  <button
+                    type="button"
+                    onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}
+                    className="btn-primary w-full sm:w-auto"
+                  >
+                    + Registrar sinais vitais
+                  </button>
+                )}
+                {!semPermissaoIntercorrencia && (
+                  <button
+                    type="button"
+                    onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}
+                    className="btn-secondary w-full sm:w-auto"
+                  >
+                    + Registrar intercorrência
+                  </button>
+                )}
+              </div>
             )}
 
             {semPermissaoSinais && (
@@ -183,9 +207,21 @@ export function ResidenteProntuario() {
               </p>
             )}
 
+            {semPermissaoIntercorrencia && (
+              <p className="text-sm text-textMuted">
+                Seu perfil não permite registrar intercorrências. A consulta continua disponível.
+              </p>
+            )}
+
             {sucessoSinais && (
               <div role="status" className="card border-l-4 border-l-success py-3">
                 <span className="text-sm font-medium text-success">{sucessoSinais}</span>
+              </div>
+            )}
+
+            {sucessoIntercorrencia && (
+              <div role="status" className="card border-l-4 border-l-success py-3">
+                <span className="text-sm font-medium text-success">{sucessoIntercorrencia}</span>
               </div>
             )}
 
@@ -238,6 +274,20 @@ export function ResidenteProntuario() {
           }}
           residenteFixo={{ id, nome: residente?.nome ?? '' }}
           onPermissaoNegada={() => setSemPermissaoSinais(true)}
+        />
+      )}
+
+      {id && (
+        <RegistrarIntercorrenciaModal
+          open={registrandoIntercorrencia}
+          onClose={() => setRegistrandoIntercorrencia(false)}
+          onRegistrado={() => {
+            setRegistrandoIntercorrencia(false)
+            setSucessoIntercorrencia('Intercorrência registrada.')
+            carregar(filtros)
+          }}
+          residenteFixo={{ id, nome: residente?.nome ?? '' }}
+          onPermissaoNegada={() => setSemPermissaoIntercorrencia(true)}
         />
       )}
     </div>
