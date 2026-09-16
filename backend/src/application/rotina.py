@@ -568,11 +568,15 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
             "previsto_em": _utc(dose.previsto_em),
             "prioridade": None,
         })
+    # B1: com `limit` atingido, quem sobrevive ao corte passa a ser decidido pela
+    # hora do evento, nao pela de criacao. `previsto_em` segue None: intercorrencia
+    # aberta nao tem horario previsto, e a ordenacao final joga esses itens para o
+    # fim da lista do plantao.
     abertas = (await db.scalars(select(m.Intercorrencia).where(
         m.Intercorrencia.ilpi_id == context.ilpi_id,
         m.Intercorrencia.situacao == "aberta",
         *([m.Intercorrencia.residente_id == residente_id] if residente_id is not None else []),
-    ).order_by(m.Intercorrencia.data.desc(), m.Intercorrencia.id).limit(limit))).all()
+    ).order_by(m.Intercorrencia.ocorrido_em.desc(), m.Intercorrencia.id).limit(limit))).all()
     for intercorrencia in abertas:
         items.append({
             "origem": "intercorrencia",

@@ -190,7 +190,9 @@ async def _seed_sinal(db, ilpi_id, res_id, when=None):
     await db.flush()
     return obj
 async def _seed_intercorrencia(db, ilpi_id, res_id, when=None):
-    obj=m.Intercorrencia(id=_new_id(), residente_id=res_id, ilpi_id=ilpi_id, tipo="Queda", gravidade="leve", situacao="aberta", data=when or datetime.now(timezone.utc), responsavel="Enf D4")
+    # B1: `when` e a hora do evento (ocorrido_em); `data` segue como registrado_em.
+    momento = when or datetime.now(timezone.utc)
+    obj=m.Intercorrencia(id=_new_id(), residente_id=res_id, ilpi_id=ilpi_id, tipo="Queda", gravidade="leve", situacao="aberta", ocorrido_em=momento, data=momento, responsavel="Enf D4")
     db.add(obj)
     await db.flush()
     return obj

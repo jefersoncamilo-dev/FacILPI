@@ -534,7 +534,8 @@ def test_14_meu_plantao_projecao(rotina_db):
         rev = await _create_funcionario(db, ilpi)
         res = await _create_residente(db, ilpi.id)
         await db.flush()
-        db.add(m.Intercorrencia(id=_new_id(), residente_id=res.id, ilpi_id=ilpi.id, tipo="Queda", situacao="aberta"))
+        # B1: ocorrido_em e NOT NULL desde a 019.
+        db.add(m.Intercorrencia(id=_new_id(), residente_id=res.id, ilpi_id=ilpi.id, tipo="Queda", situacao="aberta", ocorrido_em=datetime.now(timezone.utc)))
         await db.commit()
         h = _headers(user, ilpi_id=ilpi.id)
         pid, iid = await _setup_pais_vigente(client, h, res.id, rev.id)

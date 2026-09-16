@@ -821,6 +821,7 @@ class Intercorrencia(Base):
     __tablename__ = "intercorrencias"
     __table_args__ = (
         Index("ix_intercorrencias_ilpi_id", "ilpi_id"),
+        Index("ix_intercorrencias_ilpi_residente_ocorrido", "ilpi_id", "residente_id", "ocorrido_em"),
         ForeignKeyConstraint(
             ["residente_id", "ilpi_id"],
             ["residentes.id", "residentes.instituicao_id"],
@@ -840,6 +841,10 @@ class Intercorrencia(Base):
     providencia: Mapped[str] = mapped_column(Text, nullable=True)
     desfecho: Mapped[str] = mapped_column(Text, nullable=True)
     responsavel: Mapped[str] = mapped_column(String(255), nullable=True)
+    # Par ocorrido_em/registrado_em de D.2/C.5: `ocorrido_em` e quando o evento
+    # aconteceu (pode ser retroativo) e `data` e quando o registro foi criado.
+    # `data` nao foi renomeada para `registrado_em` neste BUILD.
+    ocorrido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     data: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
