@@ -318,6 +318,8 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
                 "template_permissoes": "SELECT COUNT(*) FROM perfil_permissoes pp JOIN perfis p ON p.id = pp.perfil_id WHERE p.ilpi_id IS NULL",
             }.items()
         }
-        assert counts == {"permissoes": 93, "template_perfis": 7, "template_permissoes": 169}
+        # 018 adiciona documentos:anexar (+1 permissao) e a concede ao template
+        # ilpi_admin (+1 vinculo de template). Nenhum perfil novo.
+        assert counts == {"permissoes": 94, "template_perfis": 7, "template_permissoes": 170}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))

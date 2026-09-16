@@ -513,13 +513,19 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
             assert blocked.status_code == 403
             assert _detail_code(blocked) == PERMISSION_CATALOG_PENDING
 
-        upload_blocked = await client.post(
+        # A3/Issue #45: a rota generica /uploads/{entity_id} foi REMOVIDA, nao
+        # apenas bloqueada. Ela gravava em STORAGE_PATH — o mesmo diretorio de
+        # app.db — usando entity_id e file.filename crus. Anexar virou ato
+        # dedicado em POST /documentos/{id}/arquivo, com permissao propria,
+        # tenant da sessao e caminho integralmente gerado pelo backend.
+        # O contrato esperado aqui passa de "403 fail-closed" para "404 rota
+        # inexistente": mudanca de contrato, nao afrouxamento de assercao.
+        upload_removed = await client.post(
             f"/api/uploads/{institution.id}",
             headers=headers,
             files={"file": ("segredo.txt", b"nao gravar", "text/plain")},
         )
-        assert upload_blocked.status_code == 403
-        assert _detail_code(upload_blocked) == PERMISSION_CATALOG_PENDING
+        assert upload_removed.status_code == 404
 
         alert_payload_blocked = await client.post(
             "/api/alertas/",

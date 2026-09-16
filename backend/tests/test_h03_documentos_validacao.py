@@ -21,12 +21,17 @@ from .test_d2_rotina import _code, _create_platform_user, _headers, _new_id
 from src.infrastructure import models as m
 
 HEAD = "017_h03_documentos_validar"
+# A 018 acrescentou colunas em `documentos`; o banco funcional precisa
+# alcanca-la para o ORM enxergar o mesmo schema do codigo. Os testes de
+# transicao abaixo continuam medindo exatamente o salto 016 -> 017 e por isso
+# seguem usando HEAD.
+HEAD_018 = "018_a3_documentos_arquivo"
 
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def h03_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    _migrate(ref, target=HEAD_018)
     return ref
 
 

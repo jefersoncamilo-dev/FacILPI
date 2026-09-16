@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator, model_validator
 from typing import Literal, Optional
 from datetime import date, datetime
 import re
@@ -908,11 +908,13 @@ class AlertaResponse(AlertaCreate):
         from_attributes = True
 
 # ---- Documento (F5A-2C) ----
+# A3/Issue #45: `arquivo` saiu da superfície gravável. É chave relativa de
+# storage controlada pelo backend; anexar é ato dedicado
+# (POST /documentos/{id}/arquivo), nunca campo de payload.
 class DocumentoCreate(BaseModel):
     residente_id: str
     tipo: str
     numero: Optional[str] = None
-    arquivo: Optional[str] = None
     validade: Optional[date] = None
     obrigatorio: Optional[bool] = False
     responsavel_envio: Optional[str] = None
@@ -920,7 +922,6 @@ class DocumentoCreate(BaseModel):
 class DocumentoUpdate(BaseModel):
     tipo: Optional[str] = None
     numero: Optional[str] = None
-    arquivo: Optional[str] = None
     validade: Optional[date] = None
     obrigatorio: Optional[bool] = None
     situacao: Optional[str] = None
@@ -931,7 +932,16 @@ class DocumentoResponse(BaseModel):
     residente_id: Optional[str] = None
     tipo: str
     numero: Optional[str] = None
-    arquivo: Optional[str] = None
+    # Lida do ORM para derivar `arquivo_presente`, mas nunca serializada: a
+    # chave expõe o layout interno do storage e não serve ao cliente, que
+    # baixa por GET /documentos/{id}/arquivo.
+    arquivo: Optional[str] = Field(default=None, exclude=True)
+    arquivo_nome_original: Optional[str] = None
+    arquivo_mime: Optional[str] = None
+    arquivo_tamanho: Optional[int] = None
+    arquivo_hash: Optional[str] = None
+    anexado_por: Optional[str] = None
+    anexado_em: Optional[datetime] = None
     validade: Optional[date] = None
     obrigatorio: Optional[bool] = None
     situacao: Optional[str] = None
@@ -939,6 +949,12 @@ class DocumentoResponse(BaseModel):
     validado_por: Optional[str] = None
     validado_em: Optional[datetime] = None
     created_at: Optional[datetime] = None
+
+    @computed_field
+    @property
+    def arquivo_presente(self) -> bool:
+        return bool(self.arquivo)
+
     class Config:
         from_attributes = True
 
