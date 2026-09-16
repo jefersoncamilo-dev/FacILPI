@@ -9,6 +9,7 @@ import { Dashboard } from './pages/Dashboard'
 import { Residentes } from './pages/Residentes'
 import { ResidenteProntuario } from './pages/ResidenteProntuario'
 import { MeuPlantao } from './pages/MeuPlantao'
+import { SinaisVitais } from './pages/SinaisVitais'
 import { Placeholder } from './pages/Placeholder'
 import { Equipe } from './pages/Equipe'
 
@@ -33,7 +34,7 @@ export default function App() {
           <Route path="/plano" element={<Protected><Placeholder title="Plano de Cuidados / PAIS" desc="Rascunho → Em revisão → Aprovado → Vigente → Encerrado, com versão e aprovações" /></Protected>} />
           <Route path="/cuidados" element={<Protected><Placeholder title="Cuidados Diários" desc="Banho, higiene, alimentação, hidratação, mobilidade — com percentuais" /></Protected>} />
           <Route path="/medicacao" element={<Protected><Placeholder title="Medicação" desc="Prescrição → Aprazamento → Administração com executor autenticado" /></Protected>} />
-          <Route path="/sinais" element={<Protected><Placeholder title="Sinais Vitais" desc="Temperatura, PA, FC, FR, saturação, glicemia, peso com alertas" /></Protected>} />
+          <Route path="/sinais" element={<Protected><SinaisVitais /></Protected>} />
           <Route path="/intercorrencias" element={<Protected><Placeholder title="Intercorrências" desc="SBAR, gravidade, providências, desfecho e evento sentinela" /></Protected>} />
           <Route path="/agenda" element={<Protected><Placeholder title="Agenda Clínica" desc="Compromissos com detecção de conflito" /></Protected>} />
           <Route path="/passagem" element={<Protected><Placeholder title="Passagem de Plantão" desc="Resumo automático do turno + pendências" /></Protected>} />
