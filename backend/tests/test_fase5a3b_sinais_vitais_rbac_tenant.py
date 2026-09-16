@@ -1353,7 +1353,8 @@ def test_48_catalogo_sem_novas_permissoes(sinais_db):
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         total = (await db.execute(select(func.count(m.Permissao.id)))).scalar_one()
-        assert total == 93
+        # 94 desde a 018 (documentos:anexar). Esta fase segue sem permissoes novas.
+        assert total == 94
         novas = (
             await db.execute(
                 select(m.Permissao).where(

@@ -466,7 +466,9 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
                 "template_permissoes": "SELECT COUNT(*) FROM perfil_permissoes pp JOIN perfis p ON p.id = pp.perfil_id WHERE p.ilpi_id IS NULL",
             }.items()
         }
-        assert counts == {"permissoes": 93, "template_perfis": 7, "template_permissoes": 169}
+        # 018 adiciona documentos:anexar (+1 permissao) e a concede ao template
+        # ilpi_admin (+1 vinculo de template). Nenhum perfil novo.
+        assert counts == {"permissoes": 94, "template_perfis": 7, "template_permissoes": 170}
 
         platform_still_works = await client.get("/api/instituicoes/", headers=_auth_headers(context["global_access"]))
         assert platform_still_works.status_code == 200, platform_still_works.text

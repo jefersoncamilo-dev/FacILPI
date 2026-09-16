@@ -1,9 +1,10 @@
+import hashlib
 import os
+import uuid
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, APIRouter, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import false, select, func, update
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -56,9 +57,15 @@ from .application.security import (
     require_permission,
 )
 
-# Ensure storage dir exists for uploads
+# STORAGE_PATH é a raiz de dados de runtime e contém o banco SQLite oficial.
+# Arquivos enviados NUNCA vão para ela: UPLOAD_ROOT é um diretório dedicado,
+# fora do alcance do banco. Antes da Issue #45 o upload gravava direto em
+# STORAGE_PATH, ao lado de app.db.
 STORAGE_PATH = os.getenv("STORAGE_PATH", "./storage")
 pathlib.Path(STORAGE_PATH).mkdir(parents=True, exist_ok=True)
+
+UPLOAD_ROOT = pathlib.Path(os.getenv("UPLOAD_ROOT", "./storage/uploads")).resolve()
+UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 
 # CORS Origins
 default_local_origins = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
@@ -502,6 +509,249 @@ async def validar_documento(
     await db.commit()
     await db.refresh(obj)
     return obj
+
+
+# ===== A3 (Issue #45): anexo de arquivo em Documento =====
+# Substitui POST /uploads/{entity_id}, que gravava em STORAGE_PATH (mesmo
+# diretório do banco) usando entity_id e file.filename crus — dois vetores de
+# path traversal. Aqui nenhum componente de caminho vem do cliente.
+
+DOCUMENTO_ARQUIVO_JA_ANEXADO = "DOCUMENTO_ARQUIVO_JA_ANEXADO"
+DOCUMENTO_ARQUIVO_AUSENTE = "DOCUMENTO_ARQUIVO_AUSENTE"
+ARQUIVO_TIPO_NAO_PERMITIDO = "ARQUIVO_TIPO_NAO_PERMITIDO"
+ARQUIVO_MUITO_GRANDE = "ARQUIVO_MUITO_GRANDE"
+ARQUIVO_VAZIO = "ARQUIVO_VAZIO"
+
+ARQUIVO_MAX_BYTES = 10 * 1024 * 1024
+ARQUIVO_CHUNK_BYTES = 1024 * 1024
+
+# Allowlist restrita ao que uma ILPI de fato anexa a um documento. O MIME é
+# decidido pela assinatura do conteúdo; extensão e content_type do multipart
+# são descartados. Formatos sem assinatura verificável (texto puro) ficam de
+# fora justamente por não permitirem inspeção real.
+ARQUIVO_ASSINATURAS = (
+    ("application/pdf", ".pdf", (b"%PDF-",)),
+    ("image/jpeg", ".jpg", (b"\xff\xd8\xff",)),
+    ("image/png", ".png", (b"\x89PNG\r\n\x1a\n",)),
+)
+ARQUIVO_MAGIC_BYTES = max(len(magic) for _, _, magics in ARQUIVO_ASSINATURAS for magic in magics)
+
+
+def _detectar_tipo(cabeca: bytes) -> tuple[str, str]:
+    for mime, extensao, magics in ARQUIVO_ASSINATURAS:
+        if any(cabeca.startswith(magic) for magic in magics):
+            return mime, extensao
+    raise HTTPException(
+        status_code=422,
+        detail={"code": ARQUIVO_TIPO_NAO_PERMITIDO, "message": "Tipo de arquivo não permitido. Aceitos: PDF, JPEG, PNG."},
+    )
+
+
+def _nome_para_exibicao(nome: str | None) -> str:
+    """Nome original reduzido a rótulo seguro: nunca vira componente de caminho."""
+    bruto = (nome or "").strip()
+    # Corta qualquer prefixo de diretório em ambos os separadores e remove
+    # caracteres de controle, que envenenariam o Content-Disposition.
+    bruto = bruto.replace("\\", "/").split("/")[-1]
+    limpo = "".join(c for c in bruto if c.isprintable() and c not in '"\r\n')
+    limpo = limpo.strip(" .")
+    return limpo[:255] or "documento"
+
+
+def _caminho_do_anexo(chave: str) -> pathlib.Path:
+    """Resolve a chave relativa e exige containment em UPLOAD_ROOT."""
+    destino = (UPLOAD_ROOT / chave).resolve()
+    if destino != UPLOAD_ROOT and UPLOAD_ROOT not in destino.parents:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    return destino
+
+
+async def _receber_para_temporario(upload: UploadFile, temporario: pathlib.Path) -> tuple[int, str, bytes]:
+    """Grava em chunks: limite e hash são apurados durante o streaming."""
+    hasher = hashlib.sha256()
+    tamanho = 0
+    cabeca = b""
+    with temporario.open("wb") as destino:
+        while True:
+            chunk = await upload.read(ARQUIVO_CHUNK_BYTES)
+            if not chunk:
+                break
+            tamanho += len(chunk)
+            if tamanho > ARQUIVO_MAX_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail={"code": ARQUIVO_MUITO_GRANDE, "message": "Arquivo excede o limite de 10 MB."},
+                )
+            if len(cabeca) < ARQUIVO_MAGIC_BYTES:
+                cabeca += chunk[: ARQUIVO_MAGIC_BYTES - len(cabeca)]
+            hasher.update(chunk)
+            destino.write(chunk)
+        destino.flush()
+        os.fsync(destino.fileno())
+    return tamanho, hasher.hexdigest(), cabeca
+
+
+def _descartar(caminho: pathlib.Path) -> None:
+    """Cleanup best-effort: nunca deixa a falha original ser mascarada."""
+    try:
+        caminho.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+@documentos_router.post("/{item_id}/arquivo", response_model=s.DocumentoResponse, status_code=201)
+async def anexar_arquivo_documento(
+    item_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("documentos:anexar")),
+):
+    # O documento é localizado dentro do tenant da sessão: inexistente e
+    # cross-tenant compartilham o mesmo 404.
+    obj = (await db.execute(
+        select(m.Documento).where(
+            m.Documento.id == item_id,
+            m.Documento.instituicao_id == context.ilpi_id,
+        )
+    )).scalar_one_or_none()
+    if not obj:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    if obj.arquivo:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": DOCUMENTO_ARQUIVO_JA_ANEXADO, "message": "Documento já possui arquivo anexado"},
+        )
+    if obj.situacao == "validado":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": DOCUMENTO_JA_VALIDADO, "message": "Documento já validado não recebe novo arquivo"},
+        )
+
+    temporario = UPLOAD_ROOT / f".tmp-{uuid.uuid4().hex}"
+    chave: str | None = None
+    destino: pathlib.Path | None = None
+    promovido = False
+    commit_tentado = False
+    try:
+        tamanho, digest, cabeca = await _receber_para_temporario(file, temporario)
+        if tamanho == 0:
+            raise HTTPException(status_code=422, detail={"code": ARQUIVO_VAZIO, "message": "Arquivo vazio"})
+        mime, extensao = _detectar_tipo(cabeca)
+
+        # Todos os componentes do caminho são do backend: tenant da sessão,
+        # id do recurso já validado e um uuid gerado aqui.
+        chave = f"{context.ilpi_id}/{obj.id}/{uuid.uuid4().hex}{extensao}"
+        destino = _caminho_do_anexo(chave)
+        destino.parent.mkdir(parents=True, exist_ok=True)
+
+        agora = datetime.now(timezone.utc)
+        nome_original = _nome_para_exibicao(file.filename)
+        # UPDATE condicional: se outra requisição anexou entre a leitura acima
+        # e aqui, rowcount == 0 e devolvemos 409 sem sobrescrever nada.
+        resultado = await db.execute(
+            update(m.Documento)
+            .where(
+                m.Documento.id == item_id,
+                m.Documento.instituicao_id == context.ilpi_id,
+                m.Documento.arquivo.is_(None),
+                m.Documento.situacao != "validado",
+            )
+            .values(
+                arquivo=chave,
+                arquivo_nome_original=nome_original,
+                arquivo_mime=mime,
+                arquivo_tamanho=tamanho,
+                arquivo_hash=digest,
+                anexado_por=context.user.id,
+                anexado_em=agora,
+            )
+        )
+        if resultado.rowcount != 1:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": DOCUMENTO_ARQUIVO_JA_ANEXADO, "message": "Documento já possui arquivo anexado"},
+            )
+
+        add_audit(
+            db,
+            acao="documentos.anexar",
+            entidade="documentos",
+            registro_id=obj.id,
+            usuario_id=context.user.id,
+            ilpi_id=context.ilpi_id,
+            valores_anteriores={"arquivo_presente": False},
+            # Auditoria guarda metadados, nunca conteúdo nem caminho absoluto.
+            valores_posteriores={
+                "arquivo_presente": True,
+                "arquivo_nome_original": nome_original,
+                "arquivo_mime": mime,
+                "arquivo_tamanho": tamanho,
+                "arquivo_hash": digest,
+                "anexado_em": agora.isoformat(),
+            },
+            request=request,
+        )
+
+        # Promoção atômica antes do commit. A ordem inversa deixaria registro
+        # apontando para arquivo inexistente.
+        os.replace(temporario, destino)
+        promovido = True
+        # A partir daqui o resultado do commit é AMBÍGUO: uma exceção não prova
+        # que o servidor deixou de efetivar a transação (ack perdido, conexão
+        # cortada durante o COMMIT). Marcar antes de chamar, nunca depois.
+        commit_tentado = True
+        await db.commit()
+    except BaseException:
+        # Best-effort: sobre um commit ambíguo, rollback não decide nada.
+        await db.rollback()
+        # Arquivo órfão recuperável é preferível a registro commitado apontando
+        # para arquivo apagado. Só removemos o arquivo já promovido quando há
+        # prova de que o commit sequer chegou a ser tentado.
+        if promovido and not commit_tentado and destino is not None:
+            _descartar(destino)
+        _descartar(temporario)
+        raise
+    finally:
+        await file.close()
+
+    await db.refresh(obj)
+    return obj
+
+
+@documentos_router.get("/{item_id}/arquivo")
+async def baixar_arquivo_documento(
+    item_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("documentos:ler")),
+):
+    obj = (await db.execute(
+        select(m.Documento).where(
+            m.Documento.id == item_id,
+            m.Documento.instituicao_id == context.ilpi_id,
+        )
+    )).scalar_one_or_none()
+    if not obj:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    if not obj.arquivo:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": DOCUMENTO_ARQUIVO_AUSENTE, "message": "Documento não possui arquivo anexado"},
+        )
+    caminho = _caminho_do_anexo(obj.arquivo)
+    if not caminho.is_file():
+        # Registro sem arquivo em disco é inconsistência de infraestrutura; a
+        # resposta não revela caminho nem distingue do caso "sem anexo".
+        raise HTTPException(
+            status_code=404,
+            detail={"code": DOCUMENTO_ARQUIVO_AUSENTE, "message": "Documento não possui arquivo anexado"},
+        )
+    return FileResponse(
+        caminho,
+        # MIME é o detectado e persistido pelo backend, nunca o declarado.
+        media_type=obj.arquivo_mime or "application/octet-stream",
+        filename=_nome_para_exibicao(obj.arquivo_nome_original),
+    )
 
 
 tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
@@ -1078,26 +1328,6 @@ async def close_intercorrencia(
 
 alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"], fail_closed=True)
 
-# Upload handler generic: storage/<entity_id>/
-uploads_router = APIRouter(prefix="/uploads", tags=["uploads"])
-
-@uploads_router.post("/{entity_id}")
-async def upload_file(entity_id: str, file: UploadFile = File(...), _blocked: None = Depends(block_pending_permission_catalog)):
-    # Validate file type/size (simple)
-    allowed = {"image/jpeg","image/png","image/webp","application/pdf","text/plain"}
-    if file.content_type not in allowed:
-        # allow any for now but warn
-        pass
-    # limit 10MB
-    content = await file.read()
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Arquivo muito grande (máx 10MB)")
-    dest_dir = pathlib.Path(STORAGE_PATH) / entity_id
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    dest_path = dest_dir / file.filename
-    dest_path.write_bytes(content)
-    return {"filename": file.filename, "path": str(dest_path), "size": len(content)}
-
 # Include routers under /api
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
@@ -1129,7 +1359,6 @@ app.include_router(plantao_router, prefix="/api")
 app.include_router(sinais_router, prefix="/api")
 app.include_router(intercorrencias_router, prefix="/api")
 app.include_router(alertas_router, prefix="/api")
-app.include_router(uploads_router, prefix="/api")
 app.include_router(quartos_leitos_router, prefix="/api")
 app.include_router(ausencias_router, prefix="/api")
 app.include_router(ocupacao_historico_router, prefix="/api")

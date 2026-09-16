@@ -26,13 +26,17 @@ URL = "/api/admissoes/"
 # Issue #25 (H0-3): DOMAIN exige documentos:validar, que so existe a partir
 # da migration 017. d3_db precisa migrar ate 017 (nao mais o HEAD "016" de
 # test_d3_admissao_migration) para o catalogo/grants ficarem consistentes.
-HEAD_017 = "017_h03_documentos_validar"
+# Alvo do banco funcional: acompanha a ultima revisao que altera o modelo
+# exercitado por estes testes. A 018 adicionou colunas em `documentos`, entao
+# parar na 017 faria o ORM consultar colunas inexistentes. Os testes da
+# TRANSICAO de cada migration continuam pinados no seu proprio par.
+HEAD_018 = "018_a3_documentos_arquivo"
 
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def d3_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD_017)
+    _migrate(ref, target=HEAD_018)
     return ref
 
 

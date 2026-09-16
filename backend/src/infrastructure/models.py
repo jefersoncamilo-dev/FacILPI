@@ -120,7 +120,15 @@ class Documento(Base):
     instituicao_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True)
     tipo: Mapped[str] = mapped_column(String(100), nullable=False)
     numero: Mapped[str] = mapped_column(String(100), nullable=True)
+    # Chave RELATIVA controlada pelo backend (<ilpi_id>/<documento_id>/<uuid>.<ext>).
+    # Nunca caminho absoluto, nunca definida pelo cliente (Issue #45).
     arquivo: Mapped[str] = mapped_column(Text, nullable=True)
+    arquivo_nome_original: Mapped[str] = mapped_column(String(255), nullable=True)
+    arquivo_mime: Mapped[str] = mapped_column(String(127), nullable=True)
+    arquivo_tamanho: Mapped[int] = mapped_column(Integer, nullable=True)
+    arquivo_hash: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
+    anexado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    anexado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
     validade: Mapped[date] = mapped_column(Date, nullable=True)
     obrigatorio: Mapped[bool] = mapped_column(Boolean, default=False)
     situacao: Mapped[str] = mapped_column(String(50), default="pendente")
