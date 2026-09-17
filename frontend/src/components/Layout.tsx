@@ -10,6 +10,7 @@ const menu = [
   { to: '/plantao', label: 'Meu Plantão', icon: '🩺' },
   { to: '/residentes', label: 'Residentes', icon: '👥' },
   { to: '/admissoes', label: 'Admissões', icon: '📋' },
+  { to: '/documentos', label: 'Documentos', icon: '📄' },
   { to: '/avaliacoes', label: 'Avaliações', icon: '📊' },
   { to: '/plano', label: 'Plano de Cuidados', icon: '📝' },
   { to: '/cuidados', label: 'Cuidados Diários', icon: '💧' },

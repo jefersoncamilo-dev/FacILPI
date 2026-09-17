@@ -11,6 +11,7 @@ import { ResidenteProntuario } from './pages/ResidenteProntuario'
 import { MeuPlantao } from './pages/MeuPlantao'
 import { SinaisVitais } from './pages/SinaisVitais'
 import { Intercorrencias } from './pages/Intercorrencias'
+import { Documentos } from './pages/Documentos'
 import { Placeholder } from './pages/Placeholder'
 import { Equipe } from './pages/Equipe'
 
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/medicacao" element={<Protected><Placeholder title="Medicação" desc="Prescrição → Aprazamento → Administração com executor autenticado" /></Protected>} />
           <Route path="/sinais" element={<Protected><SinaisVitais /></Protected>} />
           <Route path="/intercorrencias" element={<Protected><Intercorrencias /></Protected>} />
+          <Route path="/documentos" element={<Protected><Documentos /></Protected>} />
           <Route path="/agenda" element={<Protected><Placeholder title="Agenda Clínica" desc="Compromissos com detecção de conflito" /></Protected>} />
           <Route path="/passagem" element={<Protected><Placeholder title="Passagem de Plantão" desc="Resumo automático do turno + pendências" /></Protected>} />
           <Route path="/quartos" element={<Protected><Placeholder title="Quartos e Leitos" desc="Mapa de ocupação com disponibilidade" /></Protected>} />
