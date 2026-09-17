@@ -164,7 +164,22 @@ def make_crud_router(
     tenant_resource: str | None = None,
     tenant_column: str | None = None,
     parent_check: dict | None = None,
+    parent_filter_param: str | None = None,
 ):
+    # D1: filtro por pai na listagem, opt-in por roteador. Declarar o parametro
+    # numa assinatura unica o faria aparecer no OpenAPI de TODOS os roteadores da
+    # factory e transformaria um query param hoje ignorado em erro nos que nao o
+    # suportam — quebra silenciosa fora do escopo. Por isso o handler tem duas
+    # definicoes condicionais e so quem declara o flag expoe o parametro.
+    if parent_filter_param is not None:
+        if parent_check is None or parent_filter_param != parent_check.get("id_field"):
+            raise RuntimeError("parent_filter_param exige parent_check com o mesmo id_field")
+        if parent_filter_param != "residente_id":
+            # FastAPI deriva o nome do query param do nome do argumento Python,
+            # que precisa ser literal. Hoje so `residente_id` e suportado; outro
+            # valor falha aqui, no import, e nao em silencio na rota.
+            raise RuntimeError(f"parent_filter_param nao suportado: {parent_filter_param}")
+
     router = APIRouter(prefix=prefix, tags=tags)
 
     def guard(action: str):
@@ -245,13 +260,28 @@ def make_crud_router(
         if parent is None:
             raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
 
-    @router.get("/", response_model=list[response_schema])
-    async def list_items(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), context = Depends(guard("list"))):
+    async def listar(db, context, skip: int, limit: int, parent_id: str | None):
         query = scoped_query(select(model), context)
+        if parent_id is not None:
+            # Mesma convencao de list_sinais_vitais (main.py:1130) e
+            # list_intercorrencias (main.py:1218): o pai e validado no tenant da
+            # sessao ANTES de filtrar. Inexistente e cross-tenant compartilham o
+            # mesmo 404, sem revelar existencia.
+            await ensure_parent_same_tenant(db, {parent_check["id_field"]: parent_id}, None, context)
+            query = query.where(getattr(model, parent_check["id_field"]) == parent_id)
         order = model.created_at.desc() if hasattr(model, "created_at") else model.id
         result = await db.execute(query.order_by(order).offset(skip).limit(limit))
         items = result.scalars().all()
         return items
+
+    if parent_filter_param is not None:
+        @router.get("/", response_model=list[response_schema])
+        async def list_items(residente_id: str | None = None, skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), context = Depends(guard("list"))):
+            return await listar(db, context, skip, limit, residente_id)
+    else:
+        @router.get("/", response_model=list[response_schema])
+        async def list_items(skip: int = 0, limit: int = 100, db: AsyncSession = Depends(get_db), context = Depends(guard("list"))):
+            return await listar(db, context, skip, limit, None)
 
     @router.post("/", response_model=response_schema, status_code=201)
     async def create_item(payload: create_schema, db: AsyncSession = Depends(get_db), context = Depends(guard("create"))):
@@ -450,6 +480,9 @@ documentos_router = make_crud_router(
         "id_field": "residente_id",
         "tenant_column": "instituicao_id",
     },
+    # D1: unico roteador da factory que expoe ?residente_id=. Sem o parametro a
+    # resposta e identica a anterior.
+    parent_filter_param="residente_id",
 )
 
 

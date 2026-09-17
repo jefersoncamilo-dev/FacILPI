@@ -322,6 +322,8 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
         # ilpi_admin (+1 vinculo de template). Nenhum perfil novo.
         # 019 nao cria permissao: concede intercorrencias:ler e :criar ao template
         # cuidador (+2 vinculos de template). Catalogo segue em 94.
-        assert counts == {"permissoes": 94, "template_perfis": 7, "template_permissoes": 172}
+        # 020 tambem nao cria permissao: concede documentos:anexar ao template
+        # administrativo (+1 vinculo de template).
+        assert counts == {"permissoes": 94, "template_perfis": 7, "template_permissoes": 173}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))
