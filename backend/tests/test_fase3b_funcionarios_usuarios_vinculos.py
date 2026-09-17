@@ -470,7 +470,9 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
         # ilpi_admin (+1 vinculo de template). Nenhum perfil novo.
         # 019 nao cria permissao: concede intercorrencias:ler e :criar ao template
         # cuidador (+2 vinculos de template). Catalogo segue em 94.
-        assert counts == {"permissoes": 94, "template_perfis": 7, "template_permissoes": 172}
+        # 020 tambem nao cria permissao: concede documentos:anexar ao template
+        # administrativo (+1 vinculo de template).
+        assert counts == {"permissoes": 94, "template_perfis": 7, "template_permissoes": 173}
 
         platform_still_works = await client.get("/api/instituicoes/", headers=_auth_headers(context["global_access"]))
         assert platform_still_works.status_code == 200, platform_still_works.text

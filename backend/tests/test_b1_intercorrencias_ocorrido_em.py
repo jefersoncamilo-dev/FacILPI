@@ -8,17 +8,35 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import func, inspect as sa_inspect, select, text
 
 from .test_fase5a4a_intercorrencias_rbac_tenant import (  # noqa: F401
     BASE, KEYS, _create, _migrate, _setup, c4_db,
 )
 from .test_fase5a3b_sinais_vitais_rbac_tenant import (
-    _auth_headers, _create_ilpi_user, _detail_code, _new_id, _with_client, m,
+    BACKEND, _auth_headers, _create_ilpi_user, _detail_code, _new_id, _with_client, m,
 )
 
 REV_018 = "018_a3_documentos_arquivo"
-REV_019 = "019_b1_intercorrencias_ocorrido"
+
+
+def _head_da_cadeia():
+    """Ponta atual da cadeia Alembic, lida dos proprios scripts.
+
+    A fixture `c4_db` sobe ate `head`, que avanca a cada migration nova. Fixar o
+    valor esperado em uma revisao literal fazia este teste quebrar em toda
+    migration seguinte — foi o que a 020 expos, sem que nada da 019 tivesse
+    mudado. A afirmacao permanece a mesma: reaplicar `upgrade head` sobre head
+    deixa o banco no head real, sem mover nem corromper a linha de versao.
+
+    `script_location` e resolvido em absoluto para nao depender do cwd do pytest.
+    """
+    cfg = Config(str(BACKEND / "alembic.ini"))
+    cfg.set_main_option("script_location", str(BACKEND / "alembic"))
+    return ScriptDirectory.from_config(cfg).get_current_head()
+
 
 # Capacidade do cuidador decidida pela Control Tower: le e cria, nao atualiza.
 CUIDADOR_KEYS = {"intercorrencias:ler", "intercorrencias:criar"}
@@ -304,7 +322,7 @@ def test_migration_idempotente_e_downgrade_reverte(c4_db):
     _migrate(c4_db)
 
     async def com_coluna(client, db):
-        assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == REV_019
+        assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == _head_da_cadeia()
         await db.execute(text("SELECT ocorrido_em FROM intercorrencias"))
     asyncio.run(_with_client(c4_db, com_coluna))
 
