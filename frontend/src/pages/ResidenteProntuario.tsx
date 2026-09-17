@@ -178,28 +178,38 @@ export function ResidenteProntuario() {
                 lado a partir de sm; a hierarquia vem das classes ja existentes —
                 sinais vitais e o ato rotineiro (primaria), intercorrencia e o
                 excepcional (secundaria). Sem redesenho do Prontuario. */}
-            {(!semPermissaoSinais || !semPermissaoIntercorrencia) && (
-              <div className="flex flex-col sm:flex-row gap-2">
-                {!semPermissaoSinais && (
-                  <button
-                    type="button"
-                    onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}
-                    className="btn-primary w-full sm:w-auto"
-                  >
-                    + Registrar sinais vitais
-                  </button>
-                )}
-                {!semPermissaoIntercorrencia && (
-                  <button
-                    type="button"
-                    onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}
-                    className="btn-secondary w-full sm:w-auto"
-                  >
-                    + Registrar intercorrência
-                  </button>
-                )}
-              </div>
-            )}
+            <div className="flex flex-col sm:flex-row gap-2">
+              {!semPermissaoSinais && (
+                <button
+                  type="button"
+                  onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}
+                  className="btn-primary w-full sm:w-auto"
+                >
+                  + Registrar sinais vitais
+                </button>
+              )}
+              {!semPermissaoIntercorrencia && (
+                <button
+                  type="button"
+                  onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}
+                  className="btn-secondary w-full sm:w-auto"
+                >
+                  + Registrar intercorrência
+                </button>
+              )}
+              {/* D2: Documentos nao e origem da linha do tempo, entao a entrada
+                  aqui e navegacao com o residente ja no contexto — e nao uma
+                  segunda listagem embutida no Prontuario. O parametro `residente`
+                  e estado de UI; a consulta sai como `residente_id`. */}
+              {id && (
+                <Link
+                  to={`/documentos?residente=${id}`}
+                  className="btn-secondary w-full sm:w-auto text-center inline-flex items-center justify-center"
+                >
+                  Documentos
+                </Link>
+              )}
+            </div>
 
             {semPermissaoSinais && (
               <p className="text-sm text-textMuted">
