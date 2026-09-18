@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from ..infrastructure.database import get_db
 from ..infrastructure.models import RefreshToken, User
+from .runtime import cookie_secure_for, resolve_environment
 
 AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
 AUTH_CONTEXT_REQUIRED = "AUTH_CONTEXT_REQUIRED"
@@ -80,11 +81,15 @@ RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "10"))
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
-ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")).lower()
-REFRESH_COOKIE_SECURE = os.getenv(
-    "REFRESH_COOKIE_SECURE",
-    "true" if ENVIRONMENT in {"homolog", "homologacao", "staging", "production", "prod"} else "false",
-).lower() == "true"
+# SAFE2-C1: o ambiente passa a ter uma leitura canonica, em `runtime.py`.
+#
+# Antes, `secure` saia de um conjunto que incluia "staging", "prod" e "homolog",
+# e podia ser rebaixado pela variavel REFRESH_COOKIE_SECURE. Nenhum desses
+# valores era definido pelo compose, pelo Dockerfile ou pelo .env.example — o
+# piloto subiria enviando a sessao sem `Secure`. Agora deriva so do ambiente e
+# nao aceita override: em pilot/production, `Secure` nao se negocia.
+ENVIRONMENT = resolve_environment(os.environ)
+REFRESH_COOKIE_SECURE = cookie_secure_for(ENVIRONMENT)
 
 logger = logging.getLogger("facilpi.security")
 security = HTTPBearer(auto_error=False)
