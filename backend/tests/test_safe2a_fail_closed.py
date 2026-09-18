@@ -209,10 +209,22 @@ def test_database_url_explicita_para_banco_protegido_ainda_e_recusada():
         resolve_database_url({"DATABASE_URL": _url(PROTEGIDO)})
 
 
-def test_guard_nao_cria_nem_toca_o_arquivo_protegido():
-    """A recusa e inspecao de caminho: nada e aberto, nada e criado."""
-    antes = PROTEGIDO.stat()
+@pytest.mark.parametrize("protegido", PROTECTED_DATABASES, ids=["storage", "backend_storage"])
+def test_guard_nao_cria_nem_toca_o_arquivo_protegido(protegido):
+    """A recusa e inspecao de caminho: nada e aberto, nada e criado.
+
+    O artefato existe na maquina do piloto e nao existe no runner do CI, entao o
+    invariante e afirmado nos dois estados. O teste nunca cria o arquivo para
+    poder observa-lo: ausente, o que se afirma e que a recusa nao o materializa —
+    que e a metade mais relevante para seguranca.
+    """
+    existia = protegido.exists()
+    antes = protegido.stat() if existia else None
+
     with pytest.raises(ProtectedDatabaseError):
-        ensure_database_allowed(_url(PROTEGIDO))
-    depois = PROTEGIDO.stat()
-    assert (antes.st_size, antes.st_mtime_ns) == (depois.st_size, depois.st_mtime_ns)
+        ensure_database_allowed(_url(protegido))
+
+    assert protegido.exists() is existia, "o guard nao pode criar nem remover o alvo"
+    if antes is not None:
+        depois = protegido.stat()
+        assert (antes.st_size, antes.st_mtime_ns) == (depois.st_size, depois.st_mtime_ns)

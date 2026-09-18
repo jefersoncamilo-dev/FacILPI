@@ -5,11 +5,14 @@ Valida correções pós-57d25fe. Não cria ILPI real, não faz bootstrap, não a
 import os
 import pathlib
 import sqlite3
+import subprocess
+import sys
 import uuid
 
 import pytest
+from alembic.config import Config
 
-from tests.db_safety import run_alembic, validate_target
+from tests.db_safety import BACKEND, run_alembic, validate_target
 
 def _disposable_db(tmp_path):
     """Create the Phase 1 corrections schema in a disposable database."""
@@ -75,13 +78,61 @@ def test_database_url_independente_cwd():
     assert "storage/app.db" not in DATABASE_URL
     assert "backend/storage/app.db" not in DATABASE_URL
 
-def test_alembic_compartilha_database_url():
-    """Alembic aceita URL explícita antes de qualquer fallback."""
-    root = pathlib.Path(__file__).resolve().parents[2]
-    text = (root / "backend" / "alembic" / "env.py").read_text(encoding="utf-8")
-    assert "APP_DATABASE_URL or config.get_main_option" in text or "APP_DATABASE_URL or" in text
-    ini = (root / "backend" / "alembic.ini").read_text()
-    assert "sqlalchemy.url" in ini
+def _alembic_somente_com_x(url, *argumentos):
+    """Invoca o Alembic com o alvo APENAS em `-x database_url=`.
+
+    `run_alembic` define DATABASE_URL e passa `-x` com o mesmo valor, então a
+    suíte inteira passaria mesmo que o `-x` fosse ignorado. Aqui o ambiente sai
+    de cena e o `-x` fica como única fonte possível do destino.
+    """
+    validate_target(url)
+    ambiente = os.environ.copy()
+    for variavel in (
+        "DATABASE_URL",
+        "APP_DATABASE_URL",
+        "FASE3A_TEST_POSTGRES_URL",
+        "FASE2_TEST_POSTGRES_URL",
+    ):
+        ambiente.pop(variavel, None)
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            str(BACKEND / "alembic.ini"),
+            "-x",
+            f"database_url={url}",
+            *argumentos,
+        ],
+        cwd=BACKEND,
+        env=ambiente,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+
+
+def test_alembic_exige_url_explicita_sem_default(tmp_path):
+    """Alembic só alcança o banco informado explicitamente; não há default.
+
+    A asserção anterior era textual sobre a cadeia `APP_DATABASE_URL or ...` do
+    env.py — cadeia que a SAFE2-A removeu porque terminava em storage/app.db.
+    Comparar texto-fonte não distinguia implementação correta de implementação
+    com fallback; as duas propriedades abaixo distinguem.
+    """
+    # (a) o destino chega só pelo -x, com o ambiente limpo. `current` executa o
+    # env.py e conecta sem aplicar migration alguma.
+    alvo = tmp_path / "alembic-somente-x.db"
+    url = f"sqlite+aiosqlite:///{alvo.resolve().as_posix()}"
+    resultado = _alembic_somente_com_x(url, "current")
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+    # (b) alembic.ini não carrega URL operacional. Pela API, não por substring:
+    # a string sobrevive no comentário que documenta a remoção.
+    ini = Config(str(BACKEND / "alembic.ini"))
+    assert not (ini.get_main_option("sqlalchemy.url") or "")
 
 def test_default_ilpi_rascunho(tmp_path):
     """I: modelo e banco devem usar ILPI_RASCUNHO"""
