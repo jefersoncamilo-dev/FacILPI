@@ -21,9 +21,9 @@ type AuthContextType = {
   requiresPasswordChange: boolean
   login: (email: string, password: string) => Promise<LoginResult>
   logout: () => void
-  updatePassword: (nova: string, confirmar: string) => Promise<void>
+  updatePassword: (atual: string, nova: string, confirmar: string) => Promise<void>
   /** Troca obrigatória: PUT /auth/password + re-login (token/claims atualizados). */
-  completePasswordChange: (nova: string, confirmar: string) => Promise<LoginResult>
+  completePasswordChange: (atual: string, nova: string, confirmar: string) => Promise<LoginResult>
   loading: boolean
   activeContext: ActiveContext | null
   availableContexts: ContextOption[]
@@ -193,18 +193,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function updatePassword(nova_senha: string, confirmar_senha: string) {
-    await api.put('/auth/password', { nova_senha, confirmar_senha })
+  async function updatePassword(senha_atual: string, nova_senha: string, confirmar_senha: string) {
+    await api.put('/auth/password', { senha_atual, nova_senha, confirmar_senha })
   }
 
   /**
    * Fluxo obrigatório de primeiro acesso: troca a senha e re-autentica para
    * obter token/claims atualizados. A senha vive só neste escopo (não persiste).
    */
-  async function completePasswordChange(nova_senha: string, confirmar_senha: string): Promise<LoginResult> {
+  async function completePasswordChange(senha_atual: string, nova_senha: string, confirmar_senha: string): Promise<LoginResult> {
     setLoading(true)
     try {
-      await api.put('/auth/password', { nova_senha, confirmar_senha })
+      await api.put('/auth/password', { senha_atual, nova_senha, confirmar_senha })
       const email = user?.email || readStored<User>(USER_KEY)?.email || ''
       const { data } = await api.post('/auth/token', { email, password: nova_senha })
       const u = buildUser(data.access_token)

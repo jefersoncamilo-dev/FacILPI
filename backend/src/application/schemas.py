@@ -73,6 +73,10 @@ class PrimeiroAcessoUpdate(BaseModel):
         return v
 
 class PasswordUpdate(BaseModel):
+    # SAFE2-B/H01: a senha atual é prova de posse, não candidata. A política de
+    # força NÃO se aplica a ela: exigir 8+ aqui travaria conta cuja senha foi
+    # criada antes da política — e o que importa é conferir com o hash gravado.
+    senha_atual: str = Field(..., min_length=1)
     nova_senha: str = Field(..., min_length=8)
     confirmar_senha: str = Field(..., min_length=8)
 

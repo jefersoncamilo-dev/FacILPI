@@ -22,6 +22,7 @@ function localCheck(pwd: string): string | null {
 
 /** Primeiro acesso: troca obrigatória antes de qualquer uso do sistema. */
 export function PrimeiroAcesso() {
+  const [atual, setAtual] = useState('')
   const [nova, setNova] = useState('')
   const [confirmar, setConfirmar] = useState('')
   const [err, setErr] = useState('')
@@ -48,7 +49,8 @@ export function PrimeiroAcesso() {
       return
     }
     try {
-      const res = await completePasswordChange(nova, confirmar)
+      const res = await completePasswordChange(atual, nova, confirmar)
+      setAtual('')
       setNova('')
       setConfirmar('')
       if (res.options.length > 1) {
@@ -104,6 +106,7 @@ export function PrimeiroAcesso() {
           <p className="text-textMuted text-sm mt-1">Por segurança, você precisa definir uma nova senha antes de continuar.</p>
         </div>
         <form onSubmit={handle} className="card space-y-4">
+          <input className="input" type="password" placeholder="Senha temporária (a que você acabou de usar)" value={atual} onChange={e => setAtual(e.target.value)} required autoComplete="current-password" />
           <input className="input" type="password" placeholder="Nova senha" value={nova} onChange={e => setNova(e.target.value)} required autoComplete="new-password" />
           <input className="input" type="password" placeholder="Confirmar nova senha" value={confirmar} onChange={e => setConfirmar(e.target.value)} required autoComplete="new-password" />
           <ul className="text-xs text-textMuted space-y-1">

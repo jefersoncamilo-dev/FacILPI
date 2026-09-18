@@ -232,6 +232,31 @@ def refresh_token_is_valid(row: RefreshToken | None) -> bool:
     return expires_at > datetime.now(timezone.utc)
 
 
+async def revoke_token_family(db: AsyncSession, user_id: str, token_family: str) -> int:
+    """Revoga a familia inteira de UMA sessao, nao o usuario.
+
+    Cada login abre familia nova e, dentro de uma familia, so o token mais
+    recente esta ativo. Escopar por (user_id, token_family) derruba exatamente a
+    cadeia comprometida e preserva as outras sessoes do mesmo usuario — que e a
+    diferenca entre isolar um roubo e deslogar a pessoa de todos os aparelhos.
+
+    Usa o indice composto ix_refresh_user_family, que ja existe.
+    """
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family == token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.revoked_at = now
+    return len(rows)
+
+
 async def revoke_user_refresh_tokens(db: AsyncSession, user_id: str) -> None:
     now = datetime.now(timezone.utc)
     rows = (

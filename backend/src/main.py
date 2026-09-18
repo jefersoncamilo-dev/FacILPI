@@ -133,8 +133,19 @@ async def token(payload: s.UserLogin, request: Request, response: Response, db: 
 async def update_password(payload: s.PasswordUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
     # rate limit authenticated by user id
     check_rate_limit(f"password:{current_user.id}")
+    # SAFE2-B/H01: prova de posse antes de qualquer escrita. Sem isto, um access
+    # token roubado trocava a senha do dono — e a troca ainda revoga os refresh
+    # tokens dele, de modo que o invasor fixava a credencial e expulsava a vítima
+    # no mesmo movimento. Vale também no primeiro acesso: a senha temporária é a
+    # senha atual. Abrir excecao para `exige_troca_senha` recriaria a janela.
+    if not verify_password(payload.senha_atual, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
     if payload.nova_senha != payload.confirmar_senha:
         raise HTTPException(status_code=400, detail="Senhas não conferem")
+    if payload.nova_senha == payload.senha_atual:
+        # Trocar a senha temporária por ela mesma zerava exige_troca_senha e
+        # encerrava o primeiro acesso sem que senha alguma mudasse.
+        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da senha atual")
     current_user.password_hash = hash_password(payload.nova_senha)
     current_user.exige_troca_senha = False
     await revoke_user_refresh_tokens(db, current_user.id)
