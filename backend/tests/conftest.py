@@ -28,6 +28,13 @@ def _guarded_connect(database, *args, **kwargs):
 
 
 def pytest_configure(config):
+    # SAFE2-A/B01: `auth.py` resolve JWT_SECRET no import e falha fechado sem ela.
+    # A suite precisa de um segredo explicito e controlado — fora do conjunto de
+    # valores conhecidos e com pelo menos 32 bytes. `setdefault` preserva um
+    # segredo ja definido pelo ambiente.
+    os.environ.setdefault(
+        "JWT_SECRET", "facilpi-suite-de-testes-segredo-local-nao-operacional"
+    )
     run_id = f"{os.getpid()}-{uuid.uuid4().hex[:8]}"
     run_root = register_temp_root(pathlib.Path(tempfile.gettempdir()) / "facilpi-pytest" / run_id)
     config.option.basetemp = str(run_root)

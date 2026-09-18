@@ -18,15 +18,38 @@ if config.config_file_name is not None:
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# SAFE2-A/B02: `-x database_url=` precisa ser promovido ANTES do import abaixo.
+# `models` importa `database`, que resolve DATABASE_URL no corpo do modulo e
+# falha fechado sem ela. Sem esta promocao, um `alembic -x database_url=<url>`
+# perfeitamente valido seria recusado por causa de uma variavel de ambiente que o
+# operador acabou de tornar desnecessaria ao passar o alvo explicitamente.
+_x_database_url = context.get_x_argument(as_dictionary=True).get("database_url")
+if _x_database_url:
+    os.environ["DATABASE_URL"] = _x_database_url
+
 from src.infrastructure.models import Base  # noqa: E402
-from src.infrastructure.database import DATABASE_URL as APP_DATABASE_URL  # noqa: E402
+from src.infrastructure.db_guard import ensure_database_allowed  # noqa: E402
 
 target_metadata = Base.metadata
 
+# SAFE2-A/B02: o import de `src.infrastructure.database` foi removido de propósito.
+# Ele resolvia DATABASE_URL no corpo do módulo, então bastava importá-lo para
+# herdar o default que apontava ao banco histórico — inclusive quando o operador
+# passava `-x database_url=` correto. Aqui a URL é resolvida só a partir de
+# fontes explícitas, e a ausência de todas é erro, não fallback.
 def get_url():
-    # B: prioriza DATABASE_URL explícita e APP_DATABASE_URL (Path resolvido independente de CWD) antes de alembic.ini
-    # A: também suporta FASE3A_TEST_POSTGRES_URL para testes descartáveis
-    url = context.get_x_argument(as_dictionary=True).get("database_url") or os.getenv("FASE3A_TEST_POSTGRES_URL") or os.getenv("DATABASE_URL") or APP_DATABASE_URL or config.get_main_option("sqlalchemy.url")
+    # Ordem: -x database_url= (ato deliberado) > URL de teste descartável > DATABASE_URL.
+    url = (
+        context.get_x_argument(as_dictionary=True).get("database_url")
+        or os.getenv("FASE3A_TEST_POSTGRES_URL")
+        or os.getenv("DATABASE_URL")
+    )
+    if not url:
+        raise RuntimeError(
+            "Alembic sem banco de destino. Defina DATABASE_URL ou passe "
+            "-x database_url=<url>. Não há default: migrar é ato deliberado "
+            "sobre um banco escolhido, nunca efeito colateral de um comando."
+        )
     # normalize like database.py
     if url.startswith("sqlite:///"):
         url = url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
@@ -36,6 +59,8 @@ def get_url():
         url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
     elif url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    # Recusa o banco historico protegido ANTES de criar diretorio ou conectar.
+    ensure_database_allowed(url)
     # ensure parent dir for sqlite
     if "sqlite" in url:
         try:
