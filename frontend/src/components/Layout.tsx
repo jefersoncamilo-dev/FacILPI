@@ -34,6 +34,7 @@ const menu = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
   const [pwdOpen, setPwdOpen] = useState(false)
+  const [atual, setAtual] = useState('')
   const [nova, setNova] = useState('')
   const [confirmar, setConfirmar] = useState('')
   const [msg, setMsg] = useState('')
@@ -43,9 +44,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
   async function handlePwd() {
     if (nova !== confirmar) { setMsg('Senhas não conferem'); return }
     try {
-      await updatePassword(nova, confirmar)
+      await updatePassword(atual, nova, confirmar)
       setMsg('Senha alterada com sucesso')
-      setTimeout(() => { setPwdOpen(false); setMsg(''); setNova(''); setConfirmar('') }, 1200)
+      setTimeout(() => { setPwdOpen(false); setMsg(''); setAtual(''); setNova(''); setConfirmar('') }, 1200)
     } catch (e: any) {
       setMsg(mensagemDeErro(e, 'Erro ao alterar senha'))
     }
@@ -145,6 +146,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <Modal open={pwdOpen} onClose={() => setPwdOpen(false)} title="Alterar senha">
         <div className="space-y-4">
+          <input className="input" type="password" placeholder="Senha atual" value={atual} onChange={e => setAtual(e.target.value)} autoComplete="current-password" />
           <input className="input" type="password" placeholder="Nova senha (mín. 8, maiúscula, minúscula, número)" value={nova} onChange={e => setNova(e.target.value)} />
           <input className="input" type="password" placeholder="Confirmar nova senha" value={confirmar} onChange={e => setConfirmar(e.target.value)} />
           {msg && <div className="text-sm p-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">{msg}</div>}

@@ -158,6 +158,7 @@ describe('FirstAccess — troca obrigatória', () => {
         <AuthProvider><PrimeiroAcesso /></AuthProvider>
       </MemoryRouter>,
     )
+    await user.type(screen.getByPlaceholderText(/Senha temporária/), 'Temp1234')
     await user.type(screen.getByPlaceholderText('Nova senha'), 'Nova1234')
     await user.type(screen.getByPlaceholderText('Confirmar nova senha'), 'Outra9999')
     await user.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
@@ -173,6 +174,7 @@ describe('FirstAccess — troca obrigatória', () => {
         <AuthProvider><PrimeiroAcesso /></AuthProvider>
       </MemoryRouter>,
     )
+    await user.type(screen.getByPlaceholderText(/Senha temporária/), 'Temp1234')
     await user.type(screen.getByPlaceholderText('Nova senha'), 'curta')
     await user.type(screen.getByPlaceholderText('Confirmar nova senha'), 'curta')
     await user.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
@@ -195,10 +197,11 @@ describe('FirstAccess — troca obrigatória', () => {
         </AuthProvider>
       </MemoryRouter>,
     )
+    await user.type(screen.getByPlaceholderText(/Senha temporária/), 'Temp1234')
     await user.type(screen.getByPlaceholderText('Nova senha'), 'Nova1234')
     await user.type(screen.getByPlaceholderText('Confirmar nova senha'), 'Nova1234')
     await user.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
-    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/auth/password', { nova_senha: 'Nova1234', confirmar_senha: 'Nova1234' }))
+    await waitFor(() => expect(mockPut).toHaveBeenCalledWith('/auth/password', { senha_atual: 'Temp1234', nova_senha: 'Nova1234', confirmar_senha: 'Nova1234' }))
   })
 
   it('9. sucesso limpa a flag', async () => {
@@ -222,6 +225,7 @@ describe('FirstAccess — troca obrigatória', () => {
         </AuthProvider>
       </MemoryRouter>,
     )
+    await user.type(screen.getByPlaceholderText(/Senha temporária/), 'Temp1234')
     await user.type(screen.getByPlaceholderText('Nova senha'), 'Nova1234')
     await user.type(screen.getByPlaceholderText('Confirmar nova senha'), 'Nova1234')
     await user.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
@@ -243,6 +247,7 @@ describe('FirstAccess — troca obrigatória', () => {
         </AuthProvider>
       </MemoryRouter>,
     )
+    await user.type(screen.getByPlaceholderText(/Senha temporária/), 'Temp1234')
     await user.type(screen.getByPlaceholderText('Nova senha'), 'Nova1234')
     await user.type(screen.getByPlaceholderText('Confirmar nova senha'), 'Nova1234')
     await user.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
@@ -258,6 +263,7 @@ describe('FirstAccess — troca obrigatória', () => {
         <AuthProvider><PrimeiroAcesso /></AuthProvider>
       </MemoryRouter>,
     )
+    await user.type(screen.getByPlaceholderText(/Senha temporária/), 'Temp1234')
     await user.type(screen.getByPlaceholderText('Nova senha'), 'Nova1234')
     await user.type(screen.getByPlaceholderText('Confirmar nova senha'), 'Nova1234')
     await user.click(screen.getByRole('button', { name: 'Salvar nova senha' }))
@@ -286,7 +292,7 @@ describe('FirstAccess — troca obrigatória', () => {
     const SUPER = jwt({ sub: 'u1', email: 'admin@ilpi.com', is_superuser: true, exp: Math.floor(Date.now() / 1000) + 3600 })
     mockPost.mockResolvedValueOnce({ data: { access_token: SUPER, token_type: 'bearer', exige_troca_senha: false } } as any)
     const { get } = renderAuth()
-    await get().completePasswordChange('Nova1234', 'Nova1234')
+    await get().completePasswordChange('Temp1234', 'Nova1234', 'Nova1234')
     await waitFor(() => expect(get().requiresPasswordChange).toBe(false))
     mockSelect.mockResolvedValueOnce({ data: { access_token: ILPI_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
     await get().switchContext({ key: 'ilpi:ilpi1', scope: 'ilpi', ilpi_id: 'ilpi1', label: 'ILPI', sublabel: '' })

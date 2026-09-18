@@ -157,7 +157,13 @@ async def _bootstrap_global_access(client: httpx.AsyncClient) -> str:
     password = await client.put(
         "/api/auth/password",
         headers=_auth_headers(first_access.json()["access_token"]),
-        json={"nova_senha": ADMIN_PASSWORD, "confirmar_senha": ADMIN_PASSWORD},
+        # O primeiro acesso ja concluiu acima, entao esta e uma troca NORMAL e a
+        # senha corrente e FIRST_PASSWORD. SAFE2-B/H01 exige a prova de posse.
+        json={
+            "senha_atual": FIRST_PASSWORD,
+            "nova_senha": ADMIN_PASSWORD,
+            "confirmar_senha": ADMIN_PASSWORD,
+        },
     )
     assert password.status_code == 200, password.text
     login = await _login(client, ADMIN_EMAIL, ADMIN_PASSWORD)
@@ -367,7 +373,13 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
         password_local = await client.put(
             "/api/auth/password",
             headers=_auth_headers(login_local.json()["access_token"]),
-            json={"nova_senha": LOCAL_PASSWORD, "confirmar_senha": LOCAL_PASSWORD},
+            # Primeiro acesso comum: o usuario nasceu com senha temporaria e
+            # acabou de autenticar com ela — a temporaria E a senha atual.
+            json={
+                "senha_atual": user_payload["senha_temporaria"],
+                "nova_senha": LOCAL_PASSWORD,
+                "confirmar_senha": LOCAL_PASSWORD,
+            },
         )
         assert password_local.status_code == 200, password_local.text
         login_context = await _login(

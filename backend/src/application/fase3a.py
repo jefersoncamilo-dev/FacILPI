@@ -24,6 +24,7 @@ from .auth import (
     issue_refresh_token,
     load_refresh_token,
     refresh_token_is_valid,
+    revoke_token_family,
     revoke_user_refresh_tokens,
     set_refresh_cookie,
 )
@@ -379,6 +380,29 @@ async def refresh_session(
 ):
     raw_refresh = request.cookies.get(REFRESH_COOKIE_NAME)
     row = await load_refresh_token(db, raw_refresh or "")
+    # SAFE2-B/M01: um refresh JÁ revogado voltando é evidência de posse indevida —
+    # a rotação normal nunca reapresenta o anterior. Antes, isto só recebia 401 e
+    # o sinal era descartado: quem roubasse o token e o usasse primeiro ficava com
+    # a cadeia ativa e o dono era expulso na renovação seguinte. Agora a família
+    # inteira cai, inclusive o token ativo que pode estar com o invasor.
+    #
+    # O gatilho é só revoked_at: token apenas EXPIRADO não é evidência de roubo e
+    # segue no 401 simples abaixo, sem derrubar a sessão.
+    if row is not None and row.revoked_at is not None:
+        await revoke_token_family(db, row.user_id, row.token_family)
+        add_audit(
+            db,
+            acao="auth.refresh_replay",
+            entidade="refresh_tokens",
+            registro_id=row.id,
+            usuario_id=row.user_id,
+            request=request,
+        )
+        await db.commit()
+        clear_refresh_cookie(response)
+        # Resposta idêntica à de token inválido: quem replica não descobre que
+        # disparou a detecção, nem que a família existia.
+        raise _http_error(status.HTTP_401_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticação obrigatória")
     if not refresh_token_is_valid(row):
         clear_refresh_cookie(response)
         raise _http_error(status.HTTP_401_UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "Autenticação obrigatória")

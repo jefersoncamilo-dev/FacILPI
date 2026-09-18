@@ -267,7 +267,11 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
         normal_password = await client.put(
             "/api/auth/password",
             headers=_auth_headers(access),
-            json={"nova_senha": NORMAL_PASSWORD, "confirmar_senha": NORMAL_PASSWORD},
+            json={
+                "senha_atual": FIRST_PASSWORD,
+                "nova_senha": NORMAL_PASSWORD,
+                "confirmar_senha": NORMAL_PASSWORD,
+            },
         )
         assert normal_password.status_code == 200, normal_password.text
 

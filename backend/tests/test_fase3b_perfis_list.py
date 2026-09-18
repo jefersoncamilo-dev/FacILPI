@@ -155,7 +155,13 @@ async def _bootstrap_global_access(client: httpx.AsyncClient) -> str:
     password = await client.put(
         "/api/auth/password",
         headers=_auth_headers(first_access.json()["access_token"]),
-        json={"nova_senha": ADMIN_PASSWORD, "confirmar_senha": ADMIN_PASSWORD},
+        # O primeiro acesso ja concluiu acima, entao esta e uma troca NORMAL e a
+        # senha corrente e FIRST_PASSWORD. SAFE2-B/H01 exige a prova de posse.
+        json={
+            "senha_atual": FIRST_PASSWORD,
+            "nova_senha": ADMIN_PASSWORD,
+            "confirmar_senha": ADMIN_PASSWORD,
+        },
     )
     assert password.status_code == 200, password.text
     login = await _login(client, ADMIN_EMAIL, ADMIN_PASSWORD)

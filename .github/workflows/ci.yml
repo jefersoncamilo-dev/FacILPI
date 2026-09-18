@@ -54,7 +54,11 @@ jobs:
   backend-sqlite:
     name: Backend (SQLite)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Baseline 18m55s-20m13s. O teto de 30 min dava so 1,5x disso e um runner
+    # lento consumiu tudo: a suite avancava sem travar e foi cancelada em 85%,
+    # com projecao de ~34m20s. 60 min e ~3x a mediana e acompanha o criterio ja
+    # usado no job PostgreSQL, que reserva 120 min para variacao de 32-41 min.
+    timeout-minutes: 60
     defaults:
       run:
         working-directory: backend
