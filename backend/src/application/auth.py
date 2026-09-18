@@ -19,7 +19,61 @@ from ..infrastructure.models import RefreshToken, User
 AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
 AUTH_CONTEXT_REQUIRED = "AUTH_CONTEXT_REQUIRED"
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-prod-min-32-chars-please")
+JWT_SECRET_MIN_BYTES = 32
+
+# Defaults que ja circularam versionados neste repositorio. Estao aqui para serem
+# RECUSADOS: qualquer um deles e publico e permite forjar token de qualquer
+# usuario. A lista nao e segredo — e a negacao de tres segredos que nunca foram.
+JWT_SECRETS_CONHECIDOS = frozenset(
+    {
+        "dev-secret-change-in-prod-min-32-chars-please",
+        "dev-secret-change-me-min-32-chars-please",
+        "change-me-in-production-please-min-32-chars",
+    }
+)
+
+
+class InsecureJWTSecretError(RuntimeError):
+    """JWT_SECRET ausente, conhecido ou curto demais para assinar sessao."""
+
+
+def resolve_jwt_secret(env: "os._Environ[str] | dict[str, str]") -> str:
+    """Resolve o segredo de assinatura, falhando fechado.
+
+    Recusa por tres motivos, sem ordem de preferencia: ausencia, valor conhecido
+    e entropia insuficiente.
+
+    A verificacao NAO e condicionada a ENVIRONMENT de proposito. O default de
+    ENVIRONMENT e "development", e nem o compose nem o Dockerfile o definem —
+    entao condicionar recriaria exatamente a falha que isto corrige, so que
+    dependendo de uma segunda variavel igualmente esquecivel. Falhar sempre
+    torna o esquecimento barulhento, que e o unico modo de falha aceitavel aqui.
+
+    A excecao nomeia a variavel e o motivo; nunca o valor, nem um prefixo dele.
+    """
+    segredo = env.get("JWT_SECRET")
+    if segredo is None or not segredo.strip():
+        raise InsecureJWTSecretError(
+            "JWT_SECRET nao definida. Gere um segredo aleatorio de pelo menos "
+            f"{JWT_SECRET_MIN_BYTES} bytes por ambiente e nunca o versione."
+        )
+    if segredo in JWT_SECRETS_CONHECIDOS:
+        raise InsecureJWTSecretError(
+            "JWT_SECRET usa um valor de desenvolvimento publicado no repositorio. "
+            "Quem conhece o codigo assina token de qualquer usuario com ele. "
+            "Gere um segredo novo e exclusivo deste ambiente."
+        )
+    if len(segredo.encode("utf-8")) < JWT_SECRET_MIN_BYTES:
+        raise InsecureJWTSecretError(
+            f"JWT_SECRET tem menos de {JWT_SECRET_MIN_BYTES} bytes. "
+            "Use um segredo aleatorio com pelo menos esse tamanho."
+        )
+    return segredo
+
+
+# Resolvido no import: a falha derruba o processo antes de servir a primeira
+# requisicao, em vez de aceitar sessoes assinadas com segredo fraco.
+JWT_SECRET = resolve_jwt_secret(os.environ)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRY = int(os.getenv("JWT_EXPIRY", "3600"))
 RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "10"))

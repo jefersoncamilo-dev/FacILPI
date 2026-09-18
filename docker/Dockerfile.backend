@@ -13,12 +13,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend/ ./
 
-# Copia pasta storage vazia se existir (não obrigatório)
-# Garante que alembic.ini usa URL correta via env
-ENV DATABASE_URL=sqlite+aiosqlite:////storage/app.db
+# SAFE2-A: DATABASE_URL e JWT_SECRET NAO tem valor aqui, de proposito.
+#
+# ENV DATABASE_URL apontava para /storage/app.db, que o compose monta a partir do
+# ./storage do host — a mesma pasta do banco historico protegido.
+# ENV JWT_SECRET trazia um segredo publicado; por estar assado na imagem,
+# esquecer a variavel no compose nao gerava falha: o servico subia assinando
+# sessoes com um valor que qualquer leitor do repositorio conhece.
+#
+# As duas passam a vir do ambiente, e a ausencia falha alto no startup.
 ENV STORAGE_PATH=/storage
 ENV PORT=8000
-ENV JWT_SECRET=change-me-in-production-please-min-32-chars
 
 # Expõe porta do backend (não 80)
 EXPOSE 8000
@@ -27,4 +32,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --retries=5 --start-period=10s \
   CMD wget -qO- http://localhost:8000/api/health || exit 1
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000"]
+# SAFE2-A: `alembic upgrade head` saiu do CMD. Migrar deixou de ser efeito
+# colateral de `docker compose up` e passou a ser ato operacional deliberado,
+# executado contra um banco escolhido:
+#   docker compose run --rm backend alembic -x database_url=<url> upgrade head
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]

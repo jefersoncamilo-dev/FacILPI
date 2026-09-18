@@ -3,6 +3,8 @@ import pathlib
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
+from .db_guard import ensure_database_allowed
+
 
 def _normalize_database_url(url: str) -> str:
     url = url.strip()
@@ -18,17 +20,10 @@ def _normalize_database_url(url: str) -> str:
     return url
 
 
-def _resolve_default_sqlite_url() -> str:
-    # B: caminho independente de CWD — resolve para <raiz>/storage/app.db via Path(__file__)
-    # __file__ = .../backend/src/infrastructure/database.py -> parents[3] == <raiz>
-    try:
-        root = pathlib.Path(__file__).resolve().parents[3]
-        default_path = root / "storage" / "app.db"
-        # usa 4 slashes para caminho absoluto posix (ex: sqlite+aiosqlite:////abs/path)
-        # para compatibilidade docker (/storage/app.db) aceita absoluto; local usa absoluto também
-        return f"sqlite+aiosqlite:///{default_path.as_posix()}"
-    except Exception:
-        return "sqlite+aiosqlite:///./storage/app.db"
+# SAFE2-A/B02: `_resolve_default_sqlite_url()` foi removida. Ela montava a URL de
+# <raiz>/storage/app.db e era o fallback de DATABASE_URL, o que fazia a aplicacao
+# abrir o banco historico protegido sempre que a variavel nao estivesse definida.
+# Nao ha substituto: ver `resolve_database_url`, que falha fechado.
 
 
 def _ensure_parent_dir(database_url: str) -> None:
@@ -54,11 +49,29 @@ def _ensure_parent_dir(database_url: str) -> None:
             pass
 
 
-# B: DATABASE_URL explícita tem prioridade; se não definida, usa caminho resolvido independente de CWD
-# No Docker, DATABASE_URL=sqlite+aiosqlite:////storage/app.db (absoluto) via compose
-DATABASE_URL = _normalize_database_url(
-    os.getenv("DATABASE_URL", _resolve_default_sqlite_url())
-)
+class MissingDatabaseUrlError(RuntimeError):
+    """DATABASE_URL nao definida e nao ha default."""
+
+
+def resolve_database_url(env) -> str:
+    """Resolve a URL operacional, falhando fechado.
+
+    SAFE2-A/B02: o fallback anterior era `_resolve_default_sqlite_url()`, que
+    apontava para <raiz>/storage/app.db — o banco historico protegido. Esquecer
+    a variavel abria esse arquivo em modo de escrita, em silencio. Nao ha mais
+    default: a ausencia e erro, e o guard ainda recusa o alvo protegido caso
+    alguem o informe explicitamente.
+    """
+    bruta = env.get("DATABASE_URL")
+    if bruta is None or not bruta.strip():
+        raise MissingDatabaseUrlError(
+            "DATABASE_URL nao definida. Informe o banco do ambiente; nao ha "
+            "default. O banco historico em storage/app.db nao e operacional."
+        )
+    return ensure_database_allowed(_normalize_database_url(bruta))
+
+
+DATABASE_URL = resolve_database_url(os.environ)
 
 _ensure_parent_dir(DATABASE_URL)
 

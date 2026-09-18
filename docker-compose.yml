@@ -7,20 +7,30 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=sqlite+aiosqlite:////storage/app.db
-      # Para Supabase/Postgres, descomente e ajuste:
-      # - DATABASE_URL=postgresql+asyncpg://user:password@host:5432/database?pgbouncer=true
-      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me-min-32-chars-please}
+      # SAFE2-A: as duas sao obrigatorias. `:?` faz o compose abortar com a
+      # mensagem quando a variavel nao esta definida — falha alta e imediata,
+      # em vez de um default que sobe o servico em estado inseguro.
+      #
+      # DATABASE_URL apontava para /storage/app.db, que o bind-mount abaixo
+      # servia a partir do ./storage do host: era o banco historico protegido.
+      # Exemplos validos:
+      #   sqlite+aiosqlite:////data/facilpi.db
+      #   postgresql+asyncpg://user:senha@host:5432/facilpi
+      - DATABASE_URL=${DATABASE_URL:?defina DATABASE_URL do ambiente; nao ha default}
+      - JWT_SECRET=${JWT_SECRET:?gere um segredo aleatorio de 32+ bytes; nao ha default}
       - JWT_ALGORITHM=HS256
       - JWT_EXPIRY=3600
       - PORT=8000
-      - STORAGE_PATH=/storage
+      - STORAGE_PATH=/data
       # Anexos de Documentos ficam em subdiretorio dedicado, nunca ao lado do banco.
-      - UPLOAD_ROOT=/storage/uploads
+      - UPLOAD_ROOT=/data/uploads
       - CORS_ORIGINS=${CORS_ORIGINS:-*}
       - RATE_LIMIT_AUTH=10
     volumes:
-      - ./storage:/storage
+      # SAFE2-A: era ./storage:/storage, o que colocava app.db dentro do
+      # container. O mount passa a ser um subdiretorio dedicado, entao o banco
+      # historico nem sequer e alcancavel de dentro do servico.
+      - ./storage/pilot:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/health"]
       interval: 10s
