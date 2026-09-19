@@ -14,6 +14,7 @@ from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
 from .application.auth import hash_password, verify_password, get_current_user, check_rate_limit, revoke_user_refresh_tokens
+from .application.runtime import docs_urls_for, resolve_cors_origins, resolve_environment
 from .application.audit import add_audit
 from .application.medicacao import (
     medicamentos_router,
@@ -67,15 +68,18 @@ pathlib.Path(STORAGE_PATH).mkdir(parents=True, exist_ok=True)
 UPLOAD_ROOT = pathlib.Path(os.getenv("UPLOAD_ROOT", "./storage/uploads")).resolve()
 UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
 
-# CORS Origins
-default_local_origins = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
-cors_origins = os.getenv("CORS_ORIGINS", default_local_origins)
-if cors_origins.strip() == "*":
-    # Cookies exigem credentials=true; CORS não pode responder com origem '*'.
-    cors_origins = default_local_origins
-allow_origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+# SAFE2-C1: ambiente, CORS e docs saem da mesma leitura canônica (runtime.py).
+ENVIRONMENT = resolve_environment(os.environ)
 
-app = FastAPI(title="FáciLPI API", version="1.0.0")
+# CORS. Em development/test o wildcard continua virando as origens locais; em
+# pilot/production ausência ou '*' é erro de configuração, não fallback — cair
+# em localhost lá dentro bloquearia o frontend real sem dizer por quê.
+allow_origins = resolve_cors_origins(os.environ, ENVIRONMENT)
+
+# Docs desligadas em pilot/production: não vazam dado, mas entregam o mapa das
+# rotas de auth, reset de senha e bootstrap. Só as ROTAS somem — `app.openapi()`
+# continua funcionando.
+app = FastAPI(title="FáciLPI API", version="1.0.0", **docs_urls_for(ENVIRONMENT))
 
 app.add_middleware(
     CORSMiddleware,

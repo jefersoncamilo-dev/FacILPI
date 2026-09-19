@@ -16,6 +16,12 @@ services:
       # Exemplos validos:
       #   sqlite+aiosqlite:////data/facilpi.db
       #   postgresql+asyncpg://user:senha@host:5432/facilpi
+      # SAFE2-C1: ENVIRONMENT tambem e obrigatoria. O codigo assume development
+      # quando a variavel esta ausente — correto para quem desenvolve, errado
+      # para um contêiner. Sem esta linha, subir o compose para um piloto
+      # entregaria cookie de sessao sem `Secure` e /docs aberta.
+      # Valores: development | test | pilot | production
+      - ENVIRONMENT=${ENVIRONMENT:?defina o ambiente: development, test, pilot ou production}
       - DATABASE_URL=${DATABASE_URL:?defina DATABASE_URL do ambiente; nao ha default}
       - JWT_SECRET=${JWT_SECRET:?gere um segredo aleatorio de 32+ bytes; nao ha default}
       - JWT_ALGORITHM=HS256
@@ -24,7 +30,12 @@ services:
       - STORAGE_PATH=/data
       # Anexos de Documentos ficam em subdiretorio dedicado, nunca ao lado do banco.
       - UPLOAD_ROOT=/data/uploads
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      # Repassada vazia quando nao definida. Nao usar `:?` aqui: isso a tornaria
+      # obrigatoria em QUALQUER execucao do compose, inclusive em development,
+      # onde a ausencia deve cair nas origens locais. Quem exige a origem real e
+      # o contrato da aplicacao, e so em pilot/production — onde ausencia e '*'
+      # sao erro, nunca fallback para localhost.
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       - RATE_LIMIT_AUTH=10
     volumes:
       # SAFE2-A: era ./storage:/storage, o que colocava app.db dentro do
