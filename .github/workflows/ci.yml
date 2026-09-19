@@ -71,7 +71,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
-      - run: pip install -r requirements-dev.txt
+      # SAFE2-C3: `-c constraints.txt` fixa o conjunto conhecido-verde. Sem isto
+      # o CI continuaria resolvendo ">=" na data do build e o constraints viraria
+      # documentacao morta.
+      - run: pip install -r requirements-dev.txt -c constraints.txt
 
       # -rs lista os skips no log: um teste pulado em silencio e indistinguivel
       # de um teste que passou, e a suite pula quando o alvo esta indisponivel.
@@ -121,7 +124,10 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements-dev.txt
 
-      - run: pip install -r requirements-dev.txt
+      # SAFE2-C3: mesmo conjunto fixado do job SQLite — os dois precisam instalar
+      # exatamente o mesmo backend para que a comparacao entre motores signifique
+      # alguma coisa.
+      - run: pip install -r requirements-dev.txt -c constraints.txt
 
       # Sem isto, um servico que nao subiu viraria skip dentro dos testes e o job
       # terminaria verde tendo rodado so SQLite. As tres portas sao conferidas
