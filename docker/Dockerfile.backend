@@ -8,8 +8,11 @@ WORKDIR /app
 # Criar diretório de storage antes de qualquer operação que use o banco
 RUN mkdir -p /storage
 
-COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+# SAFE2-C3: a imagem instala sob o mesmo conjunto conhecido-verde do CI. Sem o
+# constraints, `>=` resolveria na data do build e a imagem que vai ao piloto
+# seria outro software — nao o que a regressao aprovou.
+COPY backend/requirements.txt backend/constraints.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
 COPY backend/ ./
 
