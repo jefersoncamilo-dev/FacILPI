@@ -3,10 +3,20 @@ FROM python:3.11-slim
 # Instalar wget para healthcheck e dependências
 RUN apt-get update && apt-get install -y --no-install-recommends wget curl && rm -rf /var/lib/apt/lists/*
 
+# SAFE2-C2/M04: usuario dedicado, sem shell de login. UID/GID fixos e altos, fora
+# da faixa de usuarios humanos do host, para que o dono dos arquivos no volume
+# seja previsivel e nao colida com uma conta real da maquina.
+RUN groupadd --gid 10001 app \
+ && useradd --uid 10001 --gid 10001 --create-home --shell /usr/sbin/nologin app
+
 WORKDIR /app
 
-# Criar diretório de storage antes de qualquer operação que use o banco
-RUN mkdir -p /storage
+# SAFE2-C2: /data e a raiz persistente canonica, criada JA com dono app. Quando o
+# Compose monta um named volume novo aqui, o Docker copia conteudo e ownership do
+# diretorio da imagem — e por isso o servico sobe gravavel sem intervencao no host.
+# Criar so na aplicacao nao bastaria: o mkdir em main.py roda no import, como app,
+# e falharia se o ponto de montagem pertencesse a root.
+RUN mkdir -p /data/uploads && chown -R app:app /data
 
 # SAFE2-C3: a imagem instala sob o mesmo conjunto conhecido-verde do CI. Sem o
 # constraints, `>=` resolveria na data do build e a imagem que vai ao piloto
@@ -14,7 +24,9 @@ RUN mkdir -p /storage
 COPY backend/requirements.txt backend/constraints.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
 
-COPY backend/ ./
+# --chown evita uma camada extra de `chown -R /app` e garante que o Python consiga
+# escrever __pycache__ ao lado dos fontes rodando como app.
+COPY --chown=app:app backend/ ./
 
 # SAFE2-A: DATABASE_URL e JWT_SECRET NAO tem valor aqui, de proposito.
 #
@@ -25,7 +37,10 @@ COPY backend/ ./
 # sessoes com um valor que qualquer leitor do repositorio conhece.
 #
 # As duas passam a vir do ambiente, e a ausencia falha alto no startup.
-ENV STORAGE_PATH=/storage
+# SAFE2-C2: era /storage, mas o Compose sempre sobrepunha para /data e montava so
+# /data — a imagem criava um diretorio orfao e um `docker run` sem o Compose
+# escreveria fora de qualquer volume. /data passa a ser o unico caminho canonico.
+ENV STORAGE_PATH=/data
 ENV PORT=8000
 
 # Expõe porta do backend (não 80)
@@ -39,4 +54,10 @@ HEALTHCHECK --interval=10s --timeout=3s --retries=5 --start-period=10s \
 # colateral de `docker compose up` e passou a ser ato operacional deliberado,
 # executado contra um banco escolhido:
 #   docker compose run --rm backend alembic -x database_url=<url> upgrade head
+# SAFE2-C2/M04: depois de todo COPY e RUN — a instalacao de dependencias continua
+# em build-time, como root, e so o RUNTIME deixa de ser root. Nao ha necessidade
+# de root aqui: a porta 8000 e alta, o healthcheck e um wget local e toda escrita
+# do produto vai para /data.
+USER app
+
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
