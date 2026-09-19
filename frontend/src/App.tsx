@@ -14,9 +14,19 @@ import { Intercorrencias } from './pages/Intercorrencias'
 import { Documentos } from './pages/Documentos'
 import { Placeholder } from './pages/Placeholder'
 import { Equipe } from './pages/Equipe'
+import { PlatformRoute } from './components/PlatformRoute'
+import { PlatformLayout } from './components/PlatformLayout'
+import { PlatformInstituicoes } from './pages/PlatformInstituicoes'
+import { PlatformInstituicaoNova } from './pages/PlatformInstituicaoNova'
+import { PlatformInstituicaoDetalhe } from './pages/PlatformInstituicaoDetalhe'
 
 function Protected({ children }: { children: React.ReactNode }) {
   return <PrivateRoute><Layout>{children}</Layout></PrivateRoute>
+}
+
+/** Central FACILPI: experiência do operador da plataforma, separada da ILPI. */
+function Platform({ children }: { children: React.ReactNode }) {
+  return <PlatformRoute><PlatformLayout>{children}</PlatformLayout></PlatformRoute>
 }
 
 export default function App() {
@@ -27,6 +37,10 @@ export default function App() {
           <Route path="/login" element={<Login />} />
           <Route path="/primeiro-acesso" element={<PrivateRoute><PrimeiroAcesso /></PrivateRoute>} />
           <Route path="/register" element={<Register />} />
+          <Route path="/platform" element={<Navigate to="/platform/instituicoes" replace />} />
+          <Route path="/platform/instituicoes" element={<Platform><PlatformInstituicoes /></Platform>} />
+          <Route path="/platform/instituicoes/nova" element={<Platform><PlatformInstituicaoNova /></Platform>} />
+          <Route path="/platform/instituicoes/:id" element={<Platform><PlatformInstituicaoDetalhe /></Platform>} />
           <Route path="/" element={<Protected><Dashboard /></Protected>} />
           <Route path="/plantao" element={<Protected><MeuPlantao /></Protected>} />
           <Route path="/residentes" element={<Protected><Residentes /></Protected>} />

@@ -30,7 +30,9 @@ export function Login() {
         // Múltiplos contextos: seleção explícita, sem substituir silenciosamente.
         setOptions(res.options)
       } else {
-        navigate('/')
+        // Contexto único global é o operador da plataforma: a aplicação
+        // institucional responderia 403 em tudo.
+        navigate(res.options[0]?.scope === 'global' ? '/platform' : '/')
       }
     } catch (e: any) {
       setErr(mensagemDeErro(e, 'Falha no login. Verifique credenciais.'))
@@ -40,7 +42,7 @@ export function Login() {
 
   async function choose(opt: ContextOption) {
     if (opt.scope === 'global') {
-      navigate('/')
+      navigate('/platform')
       return
     }
     setPicking(true)
