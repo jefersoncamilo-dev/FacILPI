@@ -30,10 +30,12 @@ services:
       - STORAGE_PATH=/data
       # Anexos de Documentos ficam em subdiretorio dedicado, nunca ao lado do banco.
       - UPLOAD_ROOT=/data/uploads
-      # Em pilot/production o codigo recusa ausencia e '*'. O default `-*` que
-      # estava aqui era reescrito silenciosamente para origens localhost, o que
-      # num piloto bloquearia o frontend real sem explicar o motivo.
-      - CORS_ORIGINS=${CORS_ORIGINS:?informe a origem do frontend, ex: https://seu-dominio.com}
+      # Repassada vazia quando nao definida. Nao usar `:?` aqui: isso a tornaria
+      # obrigatoria em QUALQUER execucao do compose, inclusive em development,
+      # onde a ausencia deve cair nas origens locais. Quem exige a origem real e
+      # o contrato da aplicacao, e so em pilot/production — onde ausencia e '*'
+      # sao erro, nunca fallback para localhost.
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       - RATE_LIMIT_AUTH=10
     volumes:
       # SAFE2-A: era ./storage:/storage, o que colocava app.db dentro do

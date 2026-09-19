@@ -111,8 +111,19 @@ def test_auth_deriva_o_flag_do_contrato():
 
 # --------------------------------------------------------------- CORS ------
 
-def test_development_usa_origens_locais_por_default():
-    assert resolve_cors_origins({}, DEVELOPMENT) == list(CORS_ORIGENS_LOCAIS)
+@pytest.mark.parametrize(
+    "ambiente_os",
+    [{}, {"CORS_ORIGINS": ""}, {"CORS_ORIGINS": "   "}],
+    ids=["ausente", "vazia", "so_espaco"],
+)
+def test_development_usa_origens_locais_por_default(ambiente_os):
+    """Inclui a variavel VAZIA: e a forma que o compose emite com `${CORS_ORIGINS:-}`.
+
+    O compose repassa a variavel vazia em vez de exigi-la, entao development
+    nunca ve "ausente" de fato — ve string vazia. Se so o caso `{}` fosse
+    coberto, o caminho realmente exercitado ficaria sem teste.
+    """
+    assert resolve_cors_origins(ambiente_os, DEVELOPMENT) == list(CORS_ORIGENS_LOCAIS)
 
 
 def test_development_reescreve_wildcard_em_vez_de_derrubar():
