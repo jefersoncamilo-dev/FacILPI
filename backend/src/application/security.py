@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..infrastructure.database import get_db
 from ..infrastructure.models import (
     Funcionario,
+    Instituicao,
     Perfil,
     PerfilPermissao,
     Permissao,
@@ -47,6 +48,12 @@ PERMISSION_DENIED = "PERMISSION_DENIED"
 RESOURCE_NOT_FOUND = "RESOURCE_NOT_FOUND"
 PERMISSION_CATALOG_PENDING = "PERMISSION_CATALOG_PENDING"
 FIRST_PASSWORD_CHANGE_REQUIRED = "FIRST_PASSWORD_CHANGE_REQUIRED"
+ILPI_INATIVA = "ILPI_INATIVA"
+
+# GATE-1: grafia canonica de `instituicoes.situacao` para ILPI inativa. O CHECK
+# historico da tabela aceita 'INATIVA' e 'inativa' no mesmo banco, por isso a
+# comparacao normaliza antes de decidir.
+ILPI_SITUACAO_INATIVA = "INATIVA"
 
 # These values are the scope metadata of migration 004.  The database model
 # intentionally stores the permission key, not this catalog annotation.
@@ -453,6 +460,27 @@ async def load_security_context(
             context=context,
         )
     if context.scope == ILPI_SCOPE:
+        # GATE-1: a situacao da ILPI e reconsultada aqui, e nao no token, porque
+        # `load_security_context` roda em TODA requisicao institucional (via
+        # `get_security_context` e via a recarga de `require_permission`). E isso
+        # que faz um token emitido ANTES da inativacao parar de valer na proxima
+        # requisicao, sem depender de revogar sessao alguma.
+        #
+        # Denylist proposital: so `INATIVA` bloqueia. Trocar por uma allowlist
+        # (`!= ATIVA`) fecharia tambem RASCUNHO — que e GATE-2, outro ciclo — e
+        # SUSPENSA, que ainda nao foi avaliada.
+        situacao = (
+            await db.execute(
+                select(Instituicao.situacao).where(Instituicao.id == context.ilpi_id)
+            )
+        ).scalar_one_or_none()
+        if (situacao or "").strip().upper() == ILPI_SITUACAO_INATIVA:
+            _deny(
+                code=ILPI_INATIVA,
+                http_status=status.HTTP_403_FORBIDDEN,
+                message="Instituição inativa",
+                context=context,
+            )
         active_employee = (
             await db.execute(
                 select(Funcionario.id).where(
@@ -777,6 +805,7 @@ __all__ = [
     "PERMISSION_CATALOG_PENDING",
     "FIRST_PASSWORD_CHANGE_REQUIRED",
     "SecurityContext",
+    "ILPI_INATIVA",
     "load_security_context",
     "build_security_context",
     "get_security_context",

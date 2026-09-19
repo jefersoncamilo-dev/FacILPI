@@ -42,6 +42,7 @@ from .bootstrap_state import (
 )
 from .security import (
     GLOBAL_SCOPE,
+    ILPI_INATIVA,
     ILPI_SCOPE,
     SecurityContext,
     load_security_context,
@@ -261,6 +262,11 @@ def _ensure_valid_uf(uf: str | None) -> str:
     return value
 
 
+def _detail_code(exc: HTTPException) -> str | None:
+    detail = exc.detail
+    return detail.get("code") if isinstance(detail, dict) else None
+
+
 async def resolve_token_context(
     db: AsyncSession,
     user: m.User,
@@ -291,7 +297,21 @@ async def resolve_token_context(
                 return {"scope": None, "ilpi_id": None, "perfil_id": None}
             raise
 
-    context = await load_security_context(db, user)
+    try:
+        context = await load_security_context(db, user)
+    except HTTPException as exc:
+        # GATE-1: identidade nao e autorizacao. O usuario de uma ILPI inativa
+        # continua autenticando e trocando a senha; o que ele perde e o contexto
+        # institucional — e o token sai sem `scope`/`ilpi_id`, de modo que toda
+        # rota institucional responde 403.
+        #
+        # Somente ILPI_INATIVA degrada. Qualquer outra negativa (vinculo ausente,
+        # perfil inativo, selecao de perfil necessaria) segue propagando como
+        # antes: alargar isso transformaria falhas de autorizacao em logins
+        # silenciosamente vazios.
+        if _detail_code(exc) != ILPI_INATIVA:
+            raise
+        return {"scope": None, "ilpi_id": None, "perfil_id": None}
     return {"scope": context.scope, "ilpi_id": context.ilpi_id, "perfil_id": context.perfil.id}
 
 
