@@ -935,7 +935,9 @@ async def criar_usuario(
             request=request,
         )
         if payload.perfil_id:
-            await _assign_profile_to_user(db, context, user.id, payload.perfil_id, request)
+            await _assign_profile_to_user(
+                db, context, user.id, payload.perfil_id, request, ilpi_id=context.ilpi_id
+            )
         await db.commit()
         return {**_public_user(user), "senha_temporaria": temp_password}
     except IntegrityError:
@@ -956,7 +958,9 @@ async def atribuir_perfil_usuario(
 ):
     _require_ilpi_context(context)
     try:
-        link = await _assign_profile_to_user(db, context, user_id, payload.perfil_id, request)
+        link = await _assign_profile_to_user(
+            db, context, user_id, payload.perfil_id, request, ilpi_id=context.ilpi_id
+        )
         await db.commit()
         return {"id": link.id, "usuario_id": link.usuario_id, "perfil_id": link.perfil_id, "ilpi_id": link.ilpi_id}
     except IntegrityError:
@@ -973,7 +977,19 @@ async def _assign_profile_to_user(
     user_id: str,
     perfil_id: str,
     request: Request,
+    *,
+    ilpi_id: str,
 ) -> m.UsuarioIlpiPerfil:
+    """Vincula usuario a um perfil institucional de `ilpi_id`.
+
+    PLATFORM-1A: o tenant deixa de ser derivado de `context.ilpi_id` e passa a ser
+    argumento EXPLICITO, keyword-only e sem default. O caminho institucional passa
+    `context.ilpi_id`; o caminho de plataforma passa a ILPI do path, porque o
+    operador global nao tem — nem deve ter — contexto institucional.
+    Sem default implicito de proposito: esta funcao decide de que tenant o vinculo
+    nasce, e um default silencioso aqui seria a origem exata de um vazamento.
+    `context` segue em uso apenas como AUTORIA da auditoria.
+    """
     target = (await db.execute(select(m.User).where(m.User.id == user_id))).scalar_one_or_none()
     if target is None:
         raise _http_error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Usuário não encontrado")
@@ -981,7 +997,7 @@ async def _assign_profile_to_user(
         await db.execute(
             select(m.Perfil).where(
                 m.Perfil.id == perfil_id,
-                m.Perfil.ilpi_id == context.ilpi_id,
+                m.Perfil.ilpi_id == ilpi_id,
                 m.Perfil.escopo == ILPI_SCOPE,
                 m.Perfil.situacao == "ativo",
             )
@@ -992,7 +1008,7 @@ async def _assign_profile_to_user(
     link = m.UsuarioIlpiPerfil(
         id=_new_id(),
         usuario_id=target.id,
-        ilpi_id=context.ilpi_id,
+        ilpi_id=ilpi_id,
         perfil_id=profile.id,
         situacao="ativo",
     )
@@ -1004,8 +1020,8 @@ async def _assign_profile_to_user(
         entidade="usuario_ilpi_perfis",
         registro_id=link.id,
         usuario_id=context.user.id,
-        ilpi_id=context.ilpi_id,
-        valores_posteriores={"usuario_id": target.id, "perfil_id": profile.id, "ilpi_id": context.ilpi_id},
+        ilpi_id=ilpi_id,
+        valores_posteriores={"usuario_id": target.id, "perfil_id": profile.id, "ilpi_id": ilpi_id},
         request=request,
     )
     return link
