@@ -214,10 +214,14 @@ export function PlatformInstituicaoDetalhe() {
           <p className="text-sm text-textMain">
             A instituição passará a constar como <strong>inativa</strong> na plataforma.
           </p>
-          {/* GATE-1 segue aberto: inativar ainda nao revoga vinculos nem impede
-              contexto institucional. Afirmar o contrario aqui seria falso. */}
+          {/* GATE-1: inativar passou a bloquear o contexto institucional na
+              requisicao seguinte, inclusive para quem ja estava com sessao
+              aberta. Os vinculos em si continuam existindo — reativar devolve o
+              acesso — e por isso a frase fala de acesso, nao de exclusao. */}
           <p className="text-sm text-textMuted">
-            Os acessos já concedidos aos usuários da instituição não são revogados por esta ação.
+            Os usuários da instituição deixam de acessar o sistema, mesmo os que já estiverem
+            com sessão aberta. Os cadastros e vínculos são preservados: reativar devolve o
+            acesso.
           </p>
           <div className="flex gap-2">
             <button onClick={() => setConfirmarInativacao(false)} className="btn-secondary flex-1 min-h-[44px]">

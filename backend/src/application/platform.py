@@ -11,8 +11,10 @@ O operador nunca recebe vinculo, perfil institucional nem contexto de tenant: o
 global nao obtem contexto ILPI (`_candidate_for`) e o perfil da plataforma segue
 barrado de modulos clinicos (`_permission_is_allowed`).
 
+GATE-1 fechado fora deste modulo: `load_security_context` recusa contexto
+institucional de ILPI inativa em toda requisicao (`security.py`).
+
 Fora deste ciclo, ja mapeado e NAO corrigido aqui:
-  GATE-1  ILPI INATIVA ainda consegue obter contexto institucional.
   GATE-2  ILPI em rascunho ainda alcanca modulos clinicos.
 """
 
@@ -344,11 +346,10 @@ async def inativar_instituicao_plataforma(
 ):
     """Marca a ILPI como inativa.
 
-    ATENCAO (GATE-1, fora deste ciclo): inativar hoje NAO revoga vinculos, perfis
-    nem funcionarios, e os usuarios seguem obtendo contexto institucional. Este
-    endpoint preserva o comportamento existente de `DELETE /api/instituicoes/{id}`
-    de proposito — corrigir aqui seria corrigir incidentalmente algo que tem ciclo
-    proprio e impacto em fixtures de teste.
+    Vinculos, perfis e funcionarios sao PRESERVADOS — reativar devolve o acesso.
+    O bloqueio nao mora aqui: `load_security_context` recusa contexto institucional
+    de ILPI inativa em toda requisicao (GATE-1), inclusive para token emitido antes
+    desta chamada. Este endpoint continua sendo apenas a mudanca de situacao.
     """
     _require_global_context(context)
     obj = await _load_ilpi(db, ilpi_id)

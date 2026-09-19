@@ -298,7 +298,7 @@ describe('Central — ativação e inativação', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Administrador institucional obrigatório')
   })
 
-  it('19. inativar exige confirmação e não promete revogar acesso', async () => {
+  it('19. inativar exige confirmação e anuncia o bloqueio de acesso', async () => {
     const user = userEvent.setup()
     mockGet.mockResolvedValue({ data: ILPI_ATIVA } as any)
     mockPost.mockResolvedValue({ data: { ...ILPI_ATIVA, situacao: 'INATIVA' } } as any)
@@ -306,8 +306,10 @@ describe('Central — ativação e inativação', () => {
     renderRotas('/platform/instituicoes/ilpi2')
     await user.click(await screen.findByRole('button', { name: 'Inativar instituição' }))
 
-    // GATE-1 segue aberto: a tela não pode afirmar revogação.
-    expect(screen.getByText(/não são revogados/i)).toBeTruthy()
+    // GATE-1 fechado: inativar bloqueia o contexto institucional na requisição
+    // seguinte, então a tela passa a poder — e dever — dizer isso.
+    expect(screen.getByText(/deixam de acessar o sistema/i)).toBeTruthy()
+    expect(screen.getByText(/vínculos são preservados/i)).toBeTruthy()
     expect(mockPost).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Confirmar' }))
