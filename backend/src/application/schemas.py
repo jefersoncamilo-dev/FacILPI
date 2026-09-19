@@ -294,6 +294,35 @@ class ResetPasswordResponse(BaseModel):
     senha_temporaria: str
 
 
+class PlatformPrimeiroGestorCreate(BaseModel):
+    """PLATFORM-1A: primeiro gestor de uma ILPI, criado pelo operador da plataforma.
+
+    Nao aceita `perfil_id`: o perfil e sempre o clone institucional de
+    `ilpi_admin` da propria ILPI. Deixar o chamador escolher abriria caminho para
+    apontar um perfil de outro tenant.
+    """
+
+    nome: str = Field(..., min_length=2, max_length=255)
+    email: EmailStr
+    cpf: Optional[str] = None
+    telefone: Optional[str] = None
+    cargo: Optional[str] = Field(None, max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def lower_email(cls, v):
+        return v.lower().strip()
+
+    @field_validator("cpf")
+    @classmethod
+    def cpf_valid(cls, v):
+        if v is None or v.strip() == "":
+            return None
+        if not validate_cpf(v):
+            raise ValueError("CPF inválido")
+        return re.sub(r"\D", "", v)
+
+
 UF_VALIDAS = {
     "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS",
     "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC",

@@ -42,6 +42,7 @@ from .application.fase3a import (
     usuarios_router,
     issue_session_response,
 )
+from .application.platform import platform_router
 from .application.prontuario import prontuario_router
 from .application.fase5a2d import (
     quartos_leitos_router,
@@ -1401,6 +1402,8 @@ app.include_router(auth_session_router, prefix="/api")
 app.include_router(bootstrap_router, prefix="/api")
 app.include_router(instituicoes_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
+# PLATFORM-1A: porta de provisionamento repetivel, separada do bootstrap acima.
+app.include_router(platform_router, prefix="/api")
 app.include_router(usuarios_router, prefix="/api")
 app.include_router(funcionarios_router, prefix="/api")
 app.include_router(perfis_router, prefix="/api")
