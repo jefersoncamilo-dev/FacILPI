@@ -21,7 +21,11 @@ services:
       # para um contêiner. Sem esta linha, subir o compose para um piloto
       # entregaria cookie de sessao sem `Secure` e /docs aberta.
       # Valores: development | test | pilot | production
-      - ENVIRONMENT=${ENVIRONMENT:?defina o ambiente: development, test, pilot ou production}
+      # Aspas obrigatorias: a mensagem do `:?` contem ": " e, sem elas, o YAML le
+      # a entrada como mapa e o compose recusa o arquivo inteiro. Defeito
+      # introduzido na SAFE2-C1 e so detectavel executando `docker compose`, o que
+      # o CI nao faz.
+      - "ENVIRONMENT=${ENVIRONMENT:?defina o ambiente: development, test, pilot ou production}"
       - DATABASE_URL=${DATABASE_URL:?defina DATABASE_URL do ambiente; nao ha default}
       - JWT_SECRET=${JWT_SECRET:?gere um segredo aleatorio de 32+ bytes; nao ha default}
       - JWT_ALGORITHM=HS256
@@ -39,9 +43,16 @@ services:
       - RATE_LIMIT_AUTH=10
     volumes:
       # SAFE2-A: era ./storage:/storage, o que colocava app.db dentro do
-      # container. O mount passa a ser um subdiretorio dedicado, entao o banco
-      # historico nem sequer e alcancavel de dentro do servico.
-      - ./storage/pilot:/data
+      # container. O banco historico deixou de ser alcancavel de dentro do servico.
+      #
+      # SAFE2-C2: era o bind mount ./storage/pilot:/data. O Docker NAO altera dono
+      # de bind mount, entao num host Linux o diretorio pertenceria ao usuario do
+      # host (tipicamente 1000) e o app (10001) nao conseguiria criar
+      # /data/uploads — o servico morreria no start. No Docker Desktop a camada de
+      # traducao esconde isso, o que faria o defeito passar no laptop e falhar no
+      # piloto. Com named volume, o chown feito na imagem e propagado na primeira
+      # criacao do volume.
+      - facilpi_pilot_data:/data
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/health"]
       interval: 10s
@@ -63,3 +74,10 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  # SAFE2-C2: dados persistentes do piloto (banco SQLite, quando for o caso, e
+  # anexos em /data/uploads). Gerenciado pelo Docker, com dono app:app herdado da
+  # imagem na primeira criacao. Backup e restauracao deste volume pertencem ao
+  # procedimento operacional do piloto, fora do escopo do SAFE2-C2.
+  facilpi_pilot_data:
