@@ -56,6 +56,19 @@ export async function criarPrimeiroGestor(
   return data
 }
 
+/**
+ * Regeneração, não recuperação: a senha anterior deixa de valer. Também devolve
+ * `senha_temporaria` uma única vez — mesma disciplina de `criarPrimeiroGestor`.
+ */
+export async function regerarCredencialPrimeiroGestor(
+  id: string,
+): Promise<PrimeiroGestorCriado> {
+  const { data } = await api.post<PrimeiroGestorCriado>(
+    `/platform/instituicoes/${id}/primeiro-gestor/credencial`,
+  )
+  return data
+}
+
 export async function ativarInstituicao(id: string): Promise<Instituicao> {
   const { data } = await api.post<Instituicao>(`/platform/instituicoes/${id}/ativar`)
   return data
