@@ -1,21 +1,62 @@
 services:
+  # ENV-1: unico ingresso. Nenhum outro servico publica porta no host — o backend
+  # atendendo 8000 em HTTP puro na internet tornava inutil o `Secure` do cookie,
+  # porque bastava acessar pela porta direta.
+  edge:
+    image: caddy:2.8-alpine
+    container_name: facilpi-edge
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      # Resolvido no DEPLOY gate. Nenhum dominio real e assumido aqui.
+      - "PUBLIC_HOST=${PUBLIC_HOST:?defina o host publico do piloto, ex.: piloto.exemplo.com.br}"
+      - "ACME_EMAIL=${ACME_EMAIL:?defina o e-mail de contato do certificado}"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificados e chaves emitidos pelo ACME. Perder este volume nao quebra o
+      # servico, mas forca reemissao — e o Let's Encrypt limita reemissoes.
+      - facilpi_pilot_caddy_data:/data
+      - facilpi_pilot_caddy_config:/config
+    networks:
+      - edge_api
+      - edge_web
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    healthcheck:
+      # Contra a API de administracao local do Caddy, nao contra a porta publica:
+      # o auto-HTTPS responde 308 em :80, o wget segue o redirect para o host
+      # publico e o healthcheck passaria a depender de DNS e certificado — nunca
+      # ficaria verde dentro do conteiner. `/config/` prova processo vivo E
+      # configuracao carregada. A API escuta apenas em loopback.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    logging: &log_rotation
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   backend:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
     container_name: facilpi-backend
-    ports:
-      - "8000:8000"
+    # SEM `ports:` de proposito. Alcancavel apenas pelas redes internas.
+    expose:
+      - "8000"
     environment:
       # SAFE2-A: as duas sao obrigatorias. `:?` faz o compose abortar com a
       # mensagem quando a variavel nao esta definida — falha alta e imediata,
       # em vez de um default que sobe o servico em estado inseguro.
       #
-      # DATABASE_URL apontava para /storage/app.db, que o bind-mount abaixo
-      # servia a partir do ./storage do host: era o banco historico protegido.
-      # Exemplos validos:
-      #   sqlite+aiosqlite:////data/facilpi.db
-      #   postgresql+asyncpg://user:senha@host:5432/facilpi
       # SAFE2-C1: ENVIRONMENT tambem e obrigatoria. O codigo assume development
       # quando a variavel esta ausente — correto para quem desenvolve, errado
       # para um contêiner. Sem esta linha, subir o compose para um piloto
@@ -41,18 +82,35 @@ services:
       # sao erro, nunca fallback para localhost.
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - RATE_LIMIT_AUTH=10
-    volumes:
-      # SAFE2-A: era ./storage:/storage, o que colocava app.db dentro do
-      # container. O banco historico deixou de ser alcancavel de dentro do servico.
+      # ENV-1/HIGH-1: sem isto, `request.client.host` seria o IP do edge para TODA
+      # requisicao. O rate limit do login, que e por IP, viraria um balde unico
+      # para a internet inteira — um usuario errando a senha derrubaria o login de
+      # todos — e a auditoria gravaria o IP do proxy em cada acao, perdendo a
+      # autoria de rede.
       #
-      # SAFE2-C2: era o bind mount ./storage/pilot:/data. O Docker NAO altera dono
-      # de bind mount, entao num host Linux o diretorio pertenceria ao usuario do
-      # host (tipicamente 1000) e o app (10001) nao conseguiria criar
-      # /data/uploads — o servico morreria no start. No Docker Desktop a camada de
-      # traducao esconde isso, o que faria o defeito passar no laptop e falhar no
-      # piloto. Com named volume, o chown feito na imagem e propagado na primeira
-      # criacao do volume.
+      # Uvicorn ja processa X-Forwarded-* por padrao (`proxy_headers=True`), mas so
+      # confia em 127.0.0.1 ate receber esta variavel. O valor e o CIDR da rede
+      # `edge_api`, criada exclusivamente para edge<->backend: IP de container muda
+      # a cada recriacao, a sub-rede declarada nao. Confiar em '*' aqui deixaria
+      # qualquer cliente forjar o proprio IP e escapar do rate limit.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-172.28.10.0/24}
+    volumes:
+      # SAFE2-C2: named volume, nunca bind mount. O Docker NAO altera dono de bind
+      # mount, entao num host Linux o diretorio pertenceria ao usuario do host
+      # (tipicamente 1000) e o app (10001) nao conseguiria criar /data/uploads — o
+      # servico morreria no start. Com named volume, o chown feito na imagem e
+      # propagado na primeira criacao do volume.
+      #
+      # ENV-1: este volume guarda SOMENTE anexos. O banco tem volume proprio: os
+      # dois tem metodos de backup diferentes (dump consistente x copia de arvore
+      # de arquivos), e junta-los forcaria ambos ao metodo pior.
       - facilpi_pilot_data:/data
+    networks:
+      - edge_api
+      - data
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/api/health"]
       interval: 10s
@@ -60,24 +118,86 @@ services:
       retries: 5
       start_period: 15s
     restart: unless-stopped
+    logging: *log_rotation
 
   frontend:
     build:
       context: .
       dockerfile: docker/Dockerfile.frontend
       args:
-        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-http://localhost:8000/api}
+        # ENV-1: relativo de proposito. Frontend e API sao same-origin atras do
+        # edge, entao o bundle deixa de carregar dominio assado — trocar o host do
+        # piloto nao exige mais rebuild da imagem do frontend.
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL:-/api}
     container_name: facilpi-frontend
-    ports:
-      - "8080:8080"
-    depends_on:
-      backend:
-        condition: service_healthy
+    # SEM `ports:`: quem publica e o edge.
+    expose:
+      - "8080"
+    networks:
+      - edge_web
     restart: unless-stopped
+    logging: *log_rotation
+
+  db:
+    # ENV-1: PostgreSQL e o motor que a regressao de fato aprova — o CI executa
+    # 1425 testes nele contra 823 no SQLite, e os testes de constraint, FK
+    # composta, indice parcial e trigger append-only so exercem plenamente aqui.
+    image: postgres:16-alpine
+    container_name: facilpi-db
+    # SEM `ports:`: banco nunca e alcancavel do host nem da internet.
+    expose:
+      - "5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:?defina o nome do banco do piloto}
+      - POSTGRES_USER=${POSTGRES_USER:?defina o usuario do banco do piloto}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?gere uma senha aleatoria; nao ha default}
+      # Dado do idoso e texto em portugues: colacao e codificacao erradas aqui
+      # aparecem depois como ordenacao estranha em lista de residentes.
+      - POSTGRES_INITDB_ARGS=--encoding=UTF8
+    volumes:
+      - facilpi_pilot_db:/var/lib/postgresql/data
+    networks:
+      - data
+    healthcheck:
+      # `-U` e `-d` explicitos: sem eles o pg_isready usa o usuario do SO e
+      # reporta saudavel antes de o banco da aplicacao existir.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    logging: *log_rotation
+
+networks:
+  # Rede dedicada edge<->backend. A sub-rede e declarada porque ela E a fronteira
+  # de confianca dos forwarded headers: o backend so aceita X-Forwarded-For de
+  # quem esta aqui dentro. Nem o frontend nem o banco participam.
+  edge_api:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.10.0/24
+
+  # Edge<->frontend. Separada para que o nginx do frontend fique FORA do CIDR
+  # confiavel do backend: ele nao chama a API (quem chama e o navegador), entao
+  # nao ha razao para poder forjar cabecalhos.
+  edge_web:
+    driver: bridge
+
+  # Backend<->banco. `internal: true` remove roteamento externo: o PostgreSQL nao
+  # alcanca a internet e a internet nao o alcanca.
+  data:
+    driver: bridge
+    internal: true
 
 volumes:
-  # SAFE2-C2: dados persistentes do piloto (banco SQLite, quando for o caso, e
-  # anexos em /data/uploads). Gerenciado pelo Docker, com dono app:app herdado da
-  # imagem na primeira criacao. Backup e restauracao deste volume pertencem ao
-  # procedimento operacional do piloto, fora do escopo do SAFE2-C2.
+  # SAFE2-C2: anexos do piloto, com dono app:app herdado da imagem na primeira
+  # criacao. Backup e restauracao destes volumes pertencem ao BACKUP_RESTORE, que
+  # ainda NAO existe.
   facilpi_pilot_data:
+  # ENV-1: dados do PostgreSQL. Volume separado dos anexos de proposito.
+  facilpi_pilot_db:
+  # Certificados ACME. Preserva-los evita reemissao a cada redeploy.
+  facilpi_pilot_caddy_data:
+  facilpi_pilot_caddy_config:

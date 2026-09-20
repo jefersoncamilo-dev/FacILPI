@@ -1,0 +1,9 @@
+# ENV-1: o `.env` do compose vive na RAIZ, e nenhum dos .gitignore existentes
+# (backend/, frontend/, storage/) alcanca este nivel. Sem esta regra, o arquivo
+# com JWT_SECRET, senha do PostgreSQL e DATABASE_URL do piloto seria rastreavel.
+#
+# Deliberadamente minimo: so segredos. Ampliar a lista esconderia de `git status`
+# arquivos que o processo de revisao espera ver como untracked.
+.env
+.env.*
+!.env.example

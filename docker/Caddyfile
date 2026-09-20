@@ -1,0 +1,44 @@
+# ENV-1 — borda do piloto FacILPI.
+#
+# Nenhum dominio real esta escrito aqui: `{$PUBLIC_HOST}` e resolvido no DEPLOY
+# gate, pelo ambiente. Trocar o host do piloto nao exige editar este arquivo.
+#
+# O Caddy obtem e renova o certificado sozinho (ACME), redireciona HTTP -> HTTPS
+# automaticamente e termina TLS. A rede interna do compose segue em HTTP puro,
+# que e o arranjo que a aplicacao ja esperava: `cookie_secure_for(ENVIRONMENT)`
+# decide o `Secure` do cookie pelo AMBIENTE declarado, nunca pelo esquema da
+# requisicao — atras de um proxy, olhar o esquema marcaria o cookie como inseguro.
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_HOST} {
+	encode zstd gzip
+
+	header {
+		# Um ano, o minimo aceito para preload. So faz efeito sobre HTTPS.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# O servidor nao precisa anunciar o que e.
+		-Server
+	}
+
+	# A API vem primeiro: o path mais especifico ganha, e o restante cai no SPA.
+	# Same-origin de proposito — mantem `SameSite=strict` do cookie de refresh
+	# funcionando sem excecao e torna o CORS praticamente inerte.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:8080
+	}
+}
+
+# CSP NAO foi definida neste BUILD, deliberadamente. O bundle do Vite e o Tailwind
+# geram estilos e scripts cujo inventario de origens precisa ser medido no
+# ambiente montado; publicar uma politica sem essa medicao quebraria a aplicacao
+# em producao ou nasceria tao permissiva que nao protegeria nada. Fica registrado
+# como pendencia do DEPLOY gate, com os demais cabecalhos ja no lugar.
