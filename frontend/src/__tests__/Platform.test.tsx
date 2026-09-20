@@ -316,3 +316,109 @@ describe('Central — ativação e inativação', () => {
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/platform/instituicoes/ilpi2/inativar'))
   })
 })
+
+describe('PLATFORM-2 — regeneração da credencial do primeiro gestor', () => {
+  const URL_REGEN = '/platform/instituicoes/ilpi1/primeiro-gestor/credencial'
+
+  it('20. regenerar exige confirmação e avisa que a senha anterior cai', async () => {
+    const user = userEvent.setup()
+    seed(TOKEN_OPERADOR, { scope: 'global' })
+    mockGet.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+
+    renderRotas('/platform/instituicoes/ilpi1')
+    await user.click(await screen.findByRole('button', { name: 'Regerar credencial' }))
+
+    expect(screen.getByText(/deixará de funcionar/i)).toBeTruthy()
+    // Nada foi enviado antes do aceite explícito.
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('21. confirmada, chama o endpoint e mostra a nova senha uma única vez', async () => {
+    const user = userEvent.setup()
+    seed(TOKEN_OPERADOR, { scope: 'global' })
+    mockGet.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+    mockPost.mockResolvedValue({
+      data: {
+        id: 'u1',
+        nome: 'Gestor',
+        email: 'gestor@serena.com.br',
+        ativo: true,
+        is_superuser: false,
+        exige_troca_senha: true,
+        senha_temporaria: 'Aa1!nova-senha-regerada',
+      },
+    } as any)
+
+    renderRotas('/platform/instituicoes/ilpi1')
+    await user.click(await screen.findByRole('button', { name: 'Regerar credencial' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith(URL_REGEN))
+    // Reutiliza o diálogo de credencial: mesmo aviso de exibição única.
+    expect(await screen.findByTestId('senha-temporaria')).toHaveTextContent(
+      'Aa1!nova-senha-regerada',
+    )
+    expect(screen.getByText(/exibida somente agora/i)).toBeTruthy()
+  })
+
+  it('22. a senha nunca é persistida no navegador', async () => {
+    const user = userEvent.setup()
+    seed(TOKEN_OPERADOR, { scope: 'global' })
+    mockGet.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+    const SENHA = 'Aa1!segredo-que-nao-pode-ficar'
+    mockPost.mockResolvedValue({
+      data: {
+        id: 'u1',
+        nome: 'Gestor',
+        email: 'gestor@serena.com.br',
+        ativo: true,
+        is_superuser: false,
+        exige_troca_senha: true,
+        senha_temporaria: SENHA,
+      },
+    } as any)
+
+    renderRotas('/platform/instituicoes/ilpi1')
+    await user.click(await screen.findByRole('button', { name: 'Regerar credencial' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await screen.findByTestId('senha-temporaria')
+
+    const armazenado = JSON.stringify(localStorage) + JSON.stringify(sessionStorage)
+    expect(armazenado).not.toContain(SENHA)
+
+    // Fechado o diálogo, a tela não oferece o plaintext de volta.
+    await user.click(screen.getByRole('button', { name: 'Já anotei, fechar' }))
+    await waitFor(() => expect(screen.queryByTestId('senha-temporaria')).toBeNull())
+    expect(document.body.textContent || '').not.toContain(SENHA)
+  })
+
+  it('23. ILPI inativa não oferece a ação, e explica por quê', async () => {
+    seed(TOKEN_OPERADOR, { scope: 'global' })
+    mockGet.mockResolvedValue({ data: { ...ILPI_RASCUNHO, situacao: 'INATIVA' } } as any)
+
+    renderRotas('/platform/instituicoes/ilpi1')
+    expect(await screen.findByText(/inativa e não recebe nova credencial/i)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Regerar credencial' })).toBeNull()
+  })
+
+  it('24. erro do backend é exibido sem inventar diagnóstico', async () => {
+    const user = userEvent.setup()
+    seed(TOKEN_OPERADOR, { scope: 'global' })
+    mockGet.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+    mockPost.mockRejectedValue({
+      response: {
+        status: 409,
+        data: { detail: { code: 'PRIMEIRO_GESTOR_INEXISTENTE', message: 'Esta ILPI ainda não possui administrador institucional' } },
+      },
+    })
+
+    renderRotas('/platform/instituicoes/ilpi1')
+    await user.click(await screen.findByRole('button', { name: 'Regerar credencial' }))
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Esta ILPI ainda não possui administrador institucional',
+    )
+    expect(screen.queryByTestId('senha-temporaria')).toBeNull()
+  })
+})

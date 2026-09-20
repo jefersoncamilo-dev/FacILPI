@@ -32,6 +32,7 @@ from .audit import add_audit
 from .auth import hash_password
 from .fase3a import (
     ILPI_ACTIVE,
+    ILPI_ADMIN_KEY,
     ILPI_DRAFT,
     ILPI_INACTIVE,
     _activation_admin_exists,
@@ -46,7 +47,13 @@ from .fase3a import (
     _trim_strings,
     _validate_activation_fields,
 )
-from .security import SecurityContext, require_permission
+from .auth import revoke_user_refresh_tokens
+from .security import (
+    ILPI_SITUACAO_INATIVA,
+    SecurityContext,
+    _normalise_situacao,
+    require_permission,
+)
 
 platform_router = APIRouter(prefix="/platform", tags=["platform"])
 
@@ -291,6 +298,101 @@ async def criar_primeiro_gestor(
     except Exception:
         await db.rollback()
         raise
+
+
+@platform_router.post(
+    "/instituicoes/{ilpi_id}/primeiro-gestor/credencial",
+    response_model=s.UsuarioAdminResponse,
+)
+async def regerar_credencial_primeiro_gestor(
+    ilpi_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("ilpis:criar")),
+):
+    """Emite nova senha temporaria para o gestor ja provisionado desta ILPI.
+
+    Existe porque a senha anterior e mostrada UMA vez: se o operador fechar o
+    dialogo sem anotar, ou o gestor perder o papel, a ILPI ficava sem caminho de
+    acesso pela aplicacao — e a saida seria SQL, exatamente o que o PLATFORM-1A
+    eliminou. Isto e REGENERACAO, nunca recuperacao: a senha antiga deixa de valer.
+
+    NAO e um reset generico. O alvo nao vem do cliente: e derivado da ILPI do path
+    e precisa ser o unico `ilpi_admin` ativo dela. Havendo mais de um, a operacao
+    recusa em vez de escolher — nesse ponto a ILPI ja administra a propria equipe,
+    e redefinir a senha de um usuario institucional e capacidade institucional
+    (`usuarios:redefinir_senha`, que e ILPI-only e inalcancavel pelo operador).
+
+    Nada alem da credencial muda: nenhum vinculo, perfil, tenant ou permissao.
+    """
+    _require_global_context(context)
+    ilpi = await _load_ilpi(db, ilpi_id)
+
+    # GATE-1: instituicao inativa nao recebe credencial nova. A comparacao usa o
+    # mesmo predicado da guarda de contexto — uma fonte de verdade sobre o que e
+    # "inativa". Denylist, entao SUSPENSA segue com o comportamento atual e
+    # permanece NAO AVALIADA: nenhuma politica nova e criada aqui.
+    if _normalise_situacao(ilpi.situacao) == ILPI_SITUACAO_INATIVA:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            "ILPI_INATIVA",
+            "Instituição inativa não recebe nova credencial",
+        )
+
+    gestores = (
+        await db.execute(
+            select(m.User)
+            .join(m.UsuarioIlpiPerfil, m.UsuarioIlpiPerfil.usuario_id == m.User.id)
+            .join(m.Perfil, m.Perfil.id == m.UsuarioIlpiPerfil.perfil_id)
+            .join(m.Funcionario, m.Funcionario.usuario_id == m.User.id)
+            .where(
+                m.UsuarioIlpiPerfil.ilpi_id == ilpi.id,
+                m.UsuarioIlpiPerfil.situacao == "ativo",
+                m.User.ativo.is_(True),
+                m.User.is_superuser.is_(False),
+                m.Perfil.ilpi_id == ilpi.id,
+                m.Perfil.chave == ILPI_ADMIN_KEY,
+                m.Perfil.escopo == "ilpi",
+                m.Perfil.situacao == "ativo",
+                m.Funcionario.ilpi_id == ilpi.id,
+                m.Funcionario.situacao == "ativo",
+            )
+        )
+    ).scalars().unique().all()
+
+    if not gestores:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            "PRIMEIRO_GESTOR_INEXISTENTE",
+            "Esta ILPI ainda não possui administrador institucional",
+        )
+    if len(gestores) > 1:
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            "PRIMEIRO_GESTOR_AMBIGUO",
+            "Esta ILPI possui mais de um administrador; a redefinição é institucional",
+        )
+
+    gestor = gestores[0]
+    temp_password = _temporary_password()
+    gestor.password_hash = hash_password(temp_password)
+    gestor.exige_troca_senha = True
+    # A credencial antiga podia estar com quem nao deveria; as sessoes abertas com
+    # ela caem junto.
+    await revoke_user_refresh_tokens(db, gestor.id)
+    add_audit(
+        db,
+        acao="ilpi.credencial_primeiro_gestor_regenerada",
+        entidade="users",
+        registro_id=gestor.id,
+        usuario_id=context.user.id,
+        ilpi_id=ilpi.id,
+        # _public_user nao inclui senha nem hash.
+        valores_posteriores=_public_user(gestor),
+        request=request,
+    )
+    await db.commit()
+    return {**_public_user(gestor), "senha_temporaria": temp_password}
 
 
 @platform_router.post("/instituicoes/{ilpi_id}/ativar", response_model=s.InstituicaoResponse)

@@ -130,10 +130,23 @@ async def run_bootstrap(provided_token: str | None) -> BootstrapResult:
             raise BootstrapFailure("BOOTSTRAP_CONFLICT", "Bootstrap concorrente ou duplicado") from error
 
 
-def _provided_token_from_args() -> str | None:
+def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Executa bootstrap seguro do FáciLPI")
     parser.add_argument("--token", dest="token", default=None)
-    args = parser.parse_args()
+    # PLATFORM-2: a senha inicial do operador da plataforma e a credencial mais
+    # poderosa do sistema. Imprimi-la sempre a levava para o log do runner de
+    # deploy, que costuma ser retido e compartilhado. Agora a exibicao e um pedido
+    # explicito de quem executa.
+    parser.add_argument(
+        "--show-password",
+        dest="show_password",
+        action="store_true",
+        help="Exibe a senha temporária inicial no terminal (dado sensível).",
+    )
+    return parser.parse_args()
+
+
+def _provided_token(args: argparse.Namespace) -> str | None:
     if args.token:
         return args.token
     env_input = os.getenv("BOOTSTRAP_TOKEN_INPUT")
@@ -143,8 +156,9 @@ def _provided_token_from_args() -> str | None:
 
 
 def main() -> int:
+    args = _parse_args()
     try:
-        result = asyncio.run(run_bootstrap(_provided_token_from_args()))
+        result = asyncio.run(run_bootstrap(_provided_token(args)))
     except BootstrapFailure as error:
         print(f"BLOCKED_BOOTSTRAP: {error.code}: {error}")
         return 1
@@ -152,7 +166,19 @@ def main() -> int:
     print("BOOTSTRAP_OK")
     print(f"email={result.email}")
     print(f"estado={result.state}")
-    print(f"senha_temporaria={result.temporary_password}")
+    if args.show_password:
+        print(f"senha_temporaria={result.temporary_password}")
+        print("ATENCAO: dado sensivel, exibido uma unica vez. Nao fica gravado.")
+    else:
+        # O bootstrap e one-shot por banco: nao ha como repeti-lo para recuperar a
+        # senha. Dizer isso aqui e mais util do que deixar o operador descobrir
+        # depois — so o hash existe no banco.
+        print("senha_temporaria=NAO_EXIBIDA")
+        print(
+            "A senha inicial NAO foi exibida e NAO pode ser recuperada: apenas o "
+            "hash existe no banco. Para obte-la, o bootstrap precisa ser executado "
+            "com --show-password em um banco ainda nao inicializado."
+        )
     return 0
 
 

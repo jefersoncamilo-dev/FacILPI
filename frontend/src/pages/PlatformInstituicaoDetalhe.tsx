@@ -11,6 +11,7 @@ import {
   criarPrimeiroGestor,
   inativarInstituicao,
   obterInstituicao,
+  regerarCredencialPrimeiroGestor,
 } from '../services/platform'
 import { ehAtiva, ehInativa, rotuloSituacao } from '../types/platform'
 import type { Instituicao, InstituicaoPayload, PrimeiroGestorPayload } from '../types/platform'
@@ -29,6 +30,7 @@ export function PlatformInstituicaoDetalhe() {
   const [aviso, setAviso] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const [confirmarInativacao, setConfirmarInativacao] = useState(false)
+  const [confirmarRegeneracao, setConfirmarRegeneracao] = useState(false)
   // Transitório de propósito: sai da memória ao fechar o diálogo.
   const [credencial, setCredencial] = useState<{ email: string; senha: string } | null>(null)
 
@@ -68,6 +70,25 @@ export function PlatformInstituicaoDetalhe() {
       // resposta da instituição não informa se já há gestor, então é o servidor
       // que decide — a tela não adivinha.
       setErro(mensagemDeErro(e, 'Não foi possível cadastrar o primeiro gestor.'))
+    }
+  }
+
+  async function regerarCredencial() {
+    setErro('')
+    setAviso('')
+    setOcupado(true)
+    try {
+      const gestor = await regerarCredencialPrimeiroGestor(id)
+      setConfirmarRegeneracao(false)
+      // Mesmo destino da criação: o plaintext vive só neste estado, até o
+      // diálogo fechar. Nada é gravado.
+      setCredencial({ email: gestor.email, senha: gestor.senha_temporaria })
+    } catch (e) {
+      // 409 PRIMEIRO_GESTOR_INEXISTENTE / _AMBIGUO / ILPI_INATIVA chegam como
+      // mensagem do backend: quem decide é o servidor, a tela não adivinha.
+      setErro(mensagemDeErro(e, 'Não foi possível regerar a credencial.'))
+    } finally {
+      setOcupado(false)
     }
   }
 
@@ -157,7 +178,7 @@ export function PlatformInstituicaoDetalhe() {
 
       <section className="space-y-2">
         <h2 className="font-semibold">Primeiro gestor</h2>
-        <div className="card">
+        <div className="card space-y-3">
           {ativa ? (
             <p className="text-sm text-textMuted">
               A instituição já está ativa, o que significa que possui administrador institucional.
@@ -166,6 +187,23 @@ export function PlatformInstituicaoDetalhe() {
           ) : (
             <PrimeiroGestorForm onSubmit={cadastrarGestor} disabled={ocupado} />
           )}
+
+          <div className="border-t border-slate-200 pt-3 space-y-2">
+            <p className="text-sm text-textMuted">
+              {inativa
+                ? 'A instituição está inativa e não recebe nova credencial. Reative-a antes.'
+                : 'Se a senha temporária foi perdida, gere uma nova para o gestor já cadastrado.'}
+            </p>
+            {!inativa && (
+              <button
+                onClick={() => setConfirmarRegeneracao(true)}
+                disabled={ocupado}
+                className="btn-secondary w-full min-h-[44px] disabled:opacity-60"
+              >
+                Regerar credencial
+              </button>
+            )}
+          </div>
         </div>
       </section>
 
@@ -229,6 +267,37 @@ export function PlatformInstituicaoDetalhe() {
             </button>
             <button onClick={inativar} disabled={ocupado} className="btn-primary flex-1 min-h-[44px] disabled:opacity-60">
               Confirmar
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmarRegeneracao}
+        onClose={() => setConfirmarRegeneracao(false)}
+        title="Regerar credencial do gestor"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-textMain">
+            Uma nova senha temporária será gerada para o gestor desta instituição.
+          </p>
+          <p className="text-sm text-textMuted">
+            A senha anterior <strong>deixará de funcionar</strong> e as sessões abertas com ela
+            serão encerradas. A nova senha aparece uma única vez, agora.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setConfirmarRegeneracao(false)}
+              className="btn-secondary flex-1 min-h-[44px]"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={regerarCredencial}
+              disabled={ocupado}
+              className="btn-primary flex-1 min-h-[44px] disabled:opacity-60"
+            >
+              {ocupado ? 'Gerando...' : 'Confirmar'}
             </button>
           </div>
         </div>
