@@ -55,6 +55,63 @@ ILPI_INATIVA = "ILPI_INATIVA"
 # comparacao normaliza antes de decidir.
 ILPI_SITUACAO_INATIVA = "INATIVA"
 
+# GATE-2: grafias de rascunho reconhecidas. Somente estas — `SUSPENSA` segue
+# NAO AVALIADA e com o comportamento atual, e as grafias legadas de onboarding
+# ('ONBOARDING_IN_PROGRESS', 'READY_FOR_ACTIVATION') tambem nao foram avaliadas:
+# nenhuma delas e escrita pelo codigo atual, que cria ILPI em ILPI_RASCUNHO.
+ILPI_SITUACAO_RASCUNHO = frozenset({"ILPI_RASCUNHO", "RASCUNHO"})
+
+# GATE-2: em RASCUNHO a instituicao ainda esta sendo montada — pode receber
+# configuracao administrativa, nao operacao assistencial.
+#
+# ALLOWLIST, e nao denylist, por uma razao especifica: aqui o eixo e o MODULO, e
+# o desconhecido e o modulo clinico que ainda nao existe. Com denylist, o modulo
+# criado no proximo ciclo nasceria liberado em rascunho ate alguem lembrar de
+# lista-lo; com allowlist ele nasce bloqueado e so abre por decisao explicita.
+# (No GATE-1 o eixo era a SITUACAO e os valores desconhecidos eram grafias
+# legadas ja existentes, por isso la a denylist e que era o lado seguro.)
+#
+# `quartos_leitos` NAO esta aqui, e a razao merece registro: a planta fisica
+# seria setup legitimo, mas `quartos_leitos:atualizar` e a MESMA chave de
+# `alocar_residente`, `liberar_leito` e `transferir_residente`, e
+# `quartos_leitos:ler` habilita `origem=ocupacao` no Prontuario. Nao existe hoje
+# fronteira por modulo ou por chave que conceda estrutura sem conceder operacao.
+# Divida registrada: QUARTOS_LEITOS_SETUP_SPLIT = OPEN — separar configuracao de
+# ocupacao exigiria nova permission key e migration, fora deste ciclo.
+_DRAFT_ALLOWED_MODULES = frozenset(
+    {
+        "ilpis",
+        "usuarios",
+        "funcionarios",
+        "perfis",
+        "configuracoes",
+        "permissoes",
+        "auditoria",
+    }
+)
+
+
+def _normalise_situacao(situacao: str | None) -> str:
+    return (situacao or "").strip().upper()
+
+
+def _permission_key_is_usable(permission_key: str, ilpi_situacao: str | None) -> bool:
+    """Predicado unico do GATE-2: esta chave vale nesta situacao de ILPI?
+
+    Aplicado em dois pontos — no filtro de `permission_keys` ao montar o contexto
+    e em `_permission_is_allowed` — porque existe rota que resolve RBAC lendo
+    `context.permission_keys` direto, sem passar por `require_permission`
+    (o Prontuario). A regra, porem, mora aqui e so aqui.
+    """
+
+    if _normalise_situacao(ilpi_situacao) not in ILPI_SITUACAO_RASCUNHO:
+        return True
+    modulo, separador, acao = permission_key.partition(":")
+    if not separador or not acao:
+        # Chave malformada nao vira permissao em rascunho.
+        return False
+    return modulo in _DRAFT_ALLOWED_MODULES
+
 # These values are the scope metadata of migration 004.  The database model
 # intentionally stores the permission key, not this catalog annotation.
 _GLOBAL_ONLY_PERMISSIONS = frozenset(
@@ -197,6 +254,10 @@ class SecurityContext:
     scope: str
     ilpi_id: str | None
     permission_keys: frozenset[str] = field(default_factory=frozenset)
+    # GATE-2: situacao da ILPI do contexto, lida do banco a cada carga. `None`
+    # em contexto global e para quem constroi o contexto direto — e nesse caso
+    # nenhuma restricao de rascunho se aplica, porque nao ha instituicao.
+    ilpi_situacao: str | None = None
 
     @property
     def profile(self) -> Perfil:
@@ -444,13 +505,30 @@ async def load_security_context(
             .where(PerfilPermissao.perfil_id == candidate.perfil.id)
         )
     ).scalars().all()
+    # A situacao da ILPI e lida ANTES de montar o contexto porque ela participa
+    # do proprio conteudo dele: filtra as permissoes (GATE-2) e decide se o
+    # contexto existe (GATE-1). Uma unica consulta serve aos dois.
+    ilpi_situacao: str | None = None
+    if candidate.scope == ILPI_SCOPE:
+        ilpi_situacao = (
+            await db.execute(
+                select(Instituicao.situacao).where(Instituicao.id == candidate.ilpi_id)
+            )
+        ).scalar_one_or_none()
+
     context = SecurityContext(
         user=database_user,
         perfil=candidate.perfil,
         vinculo=candidate.vinculo,
         scope=candidate.scope,
         ilpi_id=candidate.ilpi_id,
-        permission_keys=frozenset(permissions),
+        # GATE-2: o contexto de uma ILPI em rascunho ja nasce sem as permissoes
+        # que ela nao pode usar. Isso protege inclusive quem le
+        # `context.permission_keys` sem passar por `require_permission`.
+        permission_keys=frozenset(
+            key for key in permissions if _permission_key_is_usable(key, ilpi_situacao)
+        ),
+        ilpi_situacao=ilpi_situacao,
     )
     if not _context_is_valid(context):
         _deny(
@@ -460,21 +538,17 @@ async def load_security_context(
             context=context,
         )
     if context.scope == ILPI_SCOPE:
-        # GATE-1: a situacao da ILPI e reconsultada aqui, e nao no token, porque
-        # `load_security_context` roda em TODA requisicao institucional (via
-        # `get_security_context` e via a recarga de `require_permission`). E isso
-        # que faz um token emitido ANTES da inativacao parar de valer na proxima
-        # requisicao, sem depender de revogar sessao alguma.
+        # GATE-1: a situacao da ILPI e reconsultada a cada requisicao, e nao lida
+        # do token, porque `load_security_context` roda em TODA requisicao
+        # institucional (via `get_security_context` e via a recarga de
+        # `require_permission`). E isso que faz um token emitido ANTES da
+        # inativacao parar de valer na proxima requisicao, sem depender de
+        # revogar sessao alguma.
         #
-        # Denylist proposital: so `INATIVA` bloqueia. Trocar por uma allowlist
-        # (`!= ATIVA`) fecharia tambem RASCUNHO — que e GATE-2, outro ciclo — e
-        # SUSPENSA, que ainda nao foi avaliada.
-        situacao = (
-            await db.execute(
-                select(Instituicao.situacao).where(Instituicao.id == context.ilpi_id)
-            )
-        ).scalar_one_or_none()
-        if (situacao or "").strip().upper() == ILPI_SITUACAO_INATIVA:
+        # Denylist proposital: so `INATIVA` bloqueia o contexto. RASCUNHO nao
+        # perde o contexto — perde permissoes, acima (GATE-2) — e SUSPENSA segue
+        # nao avaliada.
+        if _normalise_situacao(ilpi_situacao) == ILPI_SITUACAO_INATIVA:
             _deny(
                 code=ILPI_INATIVA,
                 http_status=status.HTTP_403_FORBIDDEN,
@@ -637,6 +711,11 @@ async def require_ilpi_context(
 def _permission_is_allowed(context: SecurityContext, permission: Permissao) -> bool:
     key = permission.chave
     if "*" in key:
+        return False
+    # GATE-2: mesmo predicado usado no filtro de `permission_keys`. Aqui ele
+    # protege o caminho de `require_permission`, que consulta a permissao no
+    # banco em vez de olhar o conjunto ja filtrado.
+    if not _permission_key_is_usable(key, context.ilpi_situacao):
         return False
     if context.scope == GLOBAL_SCOPE and key in _ILPI_ONLY_PERMISSIONS:
         return False

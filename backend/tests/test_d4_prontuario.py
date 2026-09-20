@@ -124,7 +124,9 @@ def _new_user(**kwargs):
     uid=_new_id()
     return m.User(id=uid, nome=kwargs.get("nome","Usuario D4"), email=f"d4-{uid}@example.com", password_hash="fixture", ativo=True)
 def _new_inst(name="ILPI D4"):
-    return m.Instituicao(id=_new_id(), razao_social=name, situacao="ILPI_RASCUNHO")
+    # Cenario operacional/clinico: a ILPI precisa estar ATIVA. O ILPI_RASCUNHO
+    # anterior vinha do default do modelo, nao da intencao do teste (GATE-2).
+    return m.Instituicao(id=_new_id(), razao_social=name, situacao="ATIVA")
 def _new_link(uid,pid,iid):
     return m.UsuarioIlpiPerfil(id=_new_id(), usuario_id=uid, perfil_id=pid, ilpi_id=iid, situacao="ativo", data_inicial=datetime.now(timezone.utc)-timedelta(minutes=1))
 async def _grant(db,pid,keys):
