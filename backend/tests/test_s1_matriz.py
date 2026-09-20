@@ -135,7 +135,11 @@ def _new_user(nome="Usuario S.1") -> m.User:
 
 
 def _new_institution(name="ILPI S.1") -> m.Instituicao:
-    return m.Instituicao(id=_new_id(), razao_social=name, situacao="ILPI_RASCUNHO")
+    # A matriz S.1 descreve execucao, medicacao, aprovacao e delegacao de cuidado:
+    # e uma ILPI operando. O ILPI_RASCUNHO anterior era o default do modelo, nao
+    # intencao do teste — e depois do GATE-2 ele contradiz o cenario, porque em
+    # rascunho as chaves clinicas nem entram no contexto.
+    return m.Instituicao(id=_new_id(), razao_social=name, situacao=fase3a.ILPI_ACTIVE)
 
 
 def _new_link(user_id, perfil_id, ilpi_id) -> m.UsuarioIlpiPerfil:
