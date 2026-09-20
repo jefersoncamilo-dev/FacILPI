@@ -105,7 +105,8 @@ async def _seed_legacy(connection, kind="complete"):
     tenant, resident, medicine, prescription, other_tenant = identifiers
     for identifier in (tenant, other_tenant):
         await connection.execute(text(
-            "INSERT INTO instituicoes (id, razao_social, situacao) VALUES (:id, 'ILPI C5', 'ILPI_RASCUNHO')"
+            # Cenario de medicacao: ILPI operando, nao em rascunho (GATE-2).
+            "INSERT INTO instituicoes (id, razao_social, situacao) VALUES (:id, 'ILPI C5', 'ATIVA')"
         ), {"id": identifier})
     await connection.execute(text(
         "INSERT INTO residentes (id, instituicao_id, nome, data_nascimento) "

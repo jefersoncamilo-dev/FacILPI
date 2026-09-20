@@ -147,7 +147,9 @@ def _new_user(**kwargs) -> m.User:
 
 
 def _new_institution(name="ILPI D.2") -> m.Instituicao:
-    return m.Instituicao(id=_new_id(), razao_social=name, situacao="ILPI_RASCUNHO")
+    # Cenario operacional/clinico: a ILPI precisa estar ATIVA. O ILPI_RASCUNHO
+    # anterior vinha do default do modelo, nao da intencao do teste (GATE-2).
+    return m.Instituicao(id=_new_id(), razao_social=name, situacao="ATIVA")
 
 
 def _new_link(user_id, perfil_id, ilpi_id) -> m.UsuarioIlpiPerfil:

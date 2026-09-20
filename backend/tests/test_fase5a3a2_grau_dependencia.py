@@ -180,10 +180,12 @@ def _new_user(*, exige_troca_senha: bool = False, nome: str = "Usuario F5A-3A2")
 
 
 def _new_institution(name: str = "ILPI F5A-3A2") -> m.Instituicao:
+    # Cenario operacional/clinico: a ILPI precisa estar ATIVA. O ILPI_RASCUNHO
+    # anterior vinha do default do modelo, nao da intencao do teste (GATE-2).
     return m.Instituicao(
         id=_new_id(),
         razao_social=name,
-        situacao="ILPI_RASCUNHO",
+        situacao="ATIVA",
     )
 
 
