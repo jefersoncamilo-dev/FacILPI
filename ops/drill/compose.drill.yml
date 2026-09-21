@@ -1,0 +1,16 @@
+# Override APENAS para o ensaio de restore.
+#
+# O compose do piloto fixa `container_name`, o que e correto para um ambiente
+# unico mas impede dois projetos coexistirem — e o ensaio precisa de dois nomes
+# distintos (origem e restaurado) na mesma maquina.
+#
+# Nao usar em piloto real: la o nome fixo e desejavel.
+services:
+  edge:
+    container_name: ${DRILL_PREFIX:?defina DRILL_PREFIX}-edge
+  backend:
+    container_name: ${DRILL_PREFIX:?defina DRILL_PREFIX}-backend
+  frontend:
+    container_name: ${DRILL_PREFIX:?defina DRILL_PREFIX}-frontend
+  db:
+    container_name: ${DRILL_PREFIX:?defina DRILL_PREFIX}-db
