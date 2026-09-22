@@ -69,10 +69,14 @@ ler_env() {
 B2_ENDPOINT="$(ler_env B2_ENDPOINT)"
 B2_REGION="$(ler_env B2_REGION)"
 B2_BUCKET="$(ler_env B2_BUCKET)"
-AGE_BIN="$(ler_env OFFHOST_AGE_BIN)"
-AWS_BIN="$(ler_env OFFHOST_AWS_BIN)"
-[ -n "$AGE_BIN" ] || AGE_BIN="age"
-[ -n "$AWS_BIN" ] || AWS_BIN="aws"
+OFFHOST_RUNTIME="$(ler_env OFFHOST_RUNTIME)"
+OFFHOST_IMAGE="$(ler_env OFFHOST_IMAGE)"
+[ -n "$OFFHOST_RUNTIME" ] || OFFHOST_RUNTIME="local"
+[ -n "$OFFHOST_IMAGE" ] || OFFHOST_IMAGE="facilpi/offhost:1"
+case "$OFFHOST_RUNTIME" in
+    local|container) ;;
+    *) echo "FALHA: OFFHOST_RUNTIME invalido: '$OFFHOST_RUNTIME' (use local ou container)" >&2; exit 2 ;;
+esac
 
 B2_KEY_ID="$(ler_env B2_KEY_ID)"
 B2_APP_KEY="$(ler_env B2_APP_KEY)"
@@ -82,8 +86,68 @@ B2_APP_KEY="$(ler_env B2_APP_KEY)"
 [ -n "$B2_ENDPOINT" ] || { echo "FALHA: B2_ENDPOINT ausente em $ARQUIVO_ENV" >&2; exit 2; }
 [ -n "$B2_REGION" ] || { echo "FALHA: B2_REGION ausente em $ARQUIVO_ENV" >&2; exit 2; }
 
-command -v "$AGE_BIN" >/dev/null 2>&1 || { echo "FALHA: $AGE_BIN nao encontrado." >&2; exit 2; }
-command -v "$AWS_BIN" >/dev/null 2>&1 || { echo "FALHA: $AWS_BIN nao encontrado." >&2; exit 2; }
+# --- runtime ------------------------------------------------------------------
+# PADRAO E `local`, e isso e uma decisao de seguranca, nao de conveniencia.
+#
+# No upload so o recipient PUBLICO circula, entao container nao expoe nada. Aqui
+# e diferente: decifrar exige a chave PRIVADA, que decifra TODOS os backups
+# off-host. Em modo container ela teria de ser bind-montada para dentro de uma
+# imagem — superficie que o modo local simplesmente nao tem.
+if [ "$OFFHOST_RUNTIME" = "local" ]; then
+    command -v age >/dev/null 2>&1 || {
+        echo "FALHA: 'age' nao encontrado neste ambiente." >&2
+        echo "       Instale o age (https://github.com/FiloSottile/age) — e a forma" >&2
+        echo "       recomendada, porque mantem a chave privada fora de container." >&2
+        echo "       Alternativa consciente: OFFHOST_RUNTIME=container, que exige" >&2
+        echo "       montar a chave privada na imagem. Ver docs/RUNBOOK_OFFHOST.md." >&2
+        exit 2
+    }
+    command -v aws >/dev/null 2>&1 || { echo "FALHA: 'aws' (AWS CLI v2) nao encontrado neste ambiente." >&2; exit 2; }
+else
+    command -v docker >/dev/null 2>&1 || { echo "FALHA: docker nao encontrado, e OFFHOST_RUNTIME=container." >&2; exit 2; }
+    docker image inspect "$OFFHOST_IMAGE" >/dev/null 2>&1 || {
+        echo "FALHA: imagem '$OFFHOST_IMAGE' ausente. Construa com:" >&2
+        echo "           docker build -t $OFFHOST_IMAGE ops/offhost" >&2
+        exit 2
+    }
+    echo "AVISO: OFFHOST_RUNTIME=container." >&2
+    echo "       A chave privada age sera montada DENTRO do container para a" >&2
+    echo "       decifra. Ela decifra todos os backups off-host. Prefira o modo" >&2
+    echo "       'local' sempre que houver um binario age disponivel." >&2
+fi
+
+# Executa uma ferramenta no runtime escolhido. Em modo container, `$DESTINO` e o
+# diretorio da identidade sao montados; em modo local nao ha nenhuma montagem.
+executar_age() {
+    if [ "$OFFHOST_RUNTIME" = "local" ]; then
+        age "$@"
+    else
+        docker run --rm -i \
+            -v "$DESTINO:/dados" \
+            -v "$DIR_IDENTIDADE:/chave:ro" \
+            "$OFFHOST_IMAGE" age "$@"
+    fi
+}
+
+executar_aws() {
+    if [ "$OFFHOST_RUNTIME" = "local" ]; then
+        AWS_ACCESS_KEY_ID="$B2_KEY_ID" \
+        AWS_SECRET_ACCESS_KEY="$B2_APP_KEY" \
+        AWS_DEFAULT_REGION="$B2_REGION" \
+        aws "$@"
+    else
+        # Mesma regra do upload: `-e NOME`, nunca `-e NOME=valor`.
+        AWS_ACCESS_KEY_ID="$B2_KEY_ID" \
+        AWS_SECRET_ACCESS_KEY="$B2_APP_KEY" \
+        AWS_DEFAULT_REGION="$B2_REGION" \
+        docker run --rm \
+            -e AWS_ACCESS_KEY_ID \
+            -e AWS_SECRET_ACCESS_KEY \
+            -e AWS_DEFAULT_REGION \
+            -v "$DESTINO:/dados" \
+            "$OFFHOST_IMAGE" aws "$@"
+    fi
+}
 
 # A identidade age e a chave que decifra TODOS os backups off-host. Se ela
 # estiver legivel por outros usuarios da maquina, o problema nao e este restore
@@ -96,9 +160,24 @@ case "$PERMISSOES" in
 esac
 
 mkdir -p "$DESTINO"
+# Caminhos absolutos: `docker run -v` nao aceita caminho relativo, e o modo
+# local nao perde nada com isso.
+DESTINO="$(cd "$DESTINO" && pwd)"
+DIR_IDENTIDADE="$(cd "$(dirname "$IDENTIDADE")" && pwd)"
+NOME_IDENTIDADE="$(basename "$IDENTIDADE")"
 NOME_ARTEFATO="$(basename "$CHAVE_REMOTA")"
 ARTEFATO="$DESTINO/$NOME_ARTEFATO"
 PARCIAL="$ARTEFATO.parcial"
+
+# Onde cada ferramenta enxerga o diretorio de trabalho: no modo local e o
+# proprio caminho do host; no modo container e o ponto de montagem.
+if [ "$OFFHOST_RUNTIME" = "local" ]; then
+    VISAO_DESTINO="$DESTINO"
+    VISAO_IDENTIDADE="$IDENTIDADE"
+else
+    VISAO_DESTINO="/dados"
+    VISAO_IDENTIDADE="/chave/$NOME_IDENTIDADE"
+fi
 
 limpar() { rm -f "$PARCIAL"; }
 trap limpar EXIT INT TERM
@@ -106,14 +185,11 @@ trap limpar EXIT INT TERM
 # --- [1/5] download -----------------------------------------------------------
 echo "[1/5] baixando s3://$B2_BUCKET/$CHAVE_REMOTA"
 rm -f "$PARCIAL"
-AWS_ACCESS_KEY_ID="$B2_KEY_ID" \
-AWS_SECRET_ACCESS_KEY="$B2_APP_KEY" \
-AWS_DEFAULT_REGION="$B2_REGION" \
-"$AWS_BIN" s3api get-object \
+executar_aws s3api get-object \
     --endpoint-url "$B2_ENDPOINT" \
     --bucket "$B2_BUCKET" \
     --key "$CHAVE_REMOTA" \
-    "$PARCIAL" >/dev/null
+    "$VISAO_DESTINO/$NOME_ARTEFATO.parcial" >/dev/null
 mv "$PARCIAL" "$ARTEFATO"
 trap - EXIT INT TERM
 
@@ -125,16 +201,14 @@ if [ -z "$SHA_ESPERADO" ]; then
     # um hash do conteudo.
     echo "      sem manifesto local; lendo a metadata propria do objeto"
     SHA_ESPERADO="$(
-        AWS_ACCESS_KEY_ID="$B2_KEY_ID" \
-        AWS_SECRET_ACCESS_KEY="$B2_APP_KEY" \
-        AWS_DEFAULT_REGION="$B2_REGION" \
-        "$AWS_BIN" s3api head-object \
+        executar_aws s3api head-object \
             --endpoint-url "$B2_ENDPOINT" \
             --bucket "$B2_BUCKET" \
             --key "$CHAVE_REMOTA" \
             --query "Metadata.sha256" \
             --output text 2>/dev/null || echo ""
     )"
+    SHA_ESPERADO="$(printf '%s' "$SHA_ESPERADO" | tr -d ' \r\n')"
     [ "$SHA_ESPERADO" = "None" ] && SHA_ESPERADO=""
 fi
 
@@ -157,7 +231,7 @@ echo "      sha256 confere: $SHA_OBTIDO"
 # --- [3/5] decifra ------------------------------------------------------------
 echo "[3/5] decifrando com a chave privada age"
 TAR_CLARO="$DESTINO/$NOME_ARTEFATO.tar"
-if ! "$AGE_BIN" -d -i "$IDENTIDADE" "$ARTEFATO" > "$TAR_CLARO"; then
+if ! executar_age -d -i "$VISAO_IDENTIDADE" "$VISAO_DESTINO/$NOME_ARTEFATO" > "$TAR_CLARO"; then
     rm -f "$TAR_CLARO"
     echo "FALHA ao decifrar. O SHA-256 ja conferiu, entao o artefato chegou intacto:" >&2
     echo "       a identidade age fornecida nao corresponde ao recipient usado no" >&2

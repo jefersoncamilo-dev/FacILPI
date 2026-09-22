@@ -53,6 +53,41 @@ o bucket vazar é a mesma que o torna irrecuperável sem a chave. Uma chave que
 nunca foi testada não é um backup — por isso o drill (GATE-6) decifra usando a
 cópia custodiada, não uma cópia de conveniência.
 
+## Ferramentas — imagem controlada no upload, binário local no fetch
+
+```
+upload (VPS)        container, imagem própria facilpi/offhost:1
+                    alpine:3.20 pinado por digest + age 1.2.1-r0 + aws-cli 2.15.57-r0
+
+fetch (recuperação) OFFHOST_RUNTIME=local  (padrão)  → binário age do operador
+                    OFFHOST_RUNTIME=container        → opção consciente
+```
+
+**Por que container no upload.** `ops/backup.sh` já usa `docker compose exec db
+pg_dump` e `docker run alpine`. Sem Docker não existe pacote para enviar, então
+exigir Docker no upload **não acrescenta modo de falha novo** — e entrega
+reprodutibilidade que instalar pacotes numa distro arbitrária não entrega.
+
+**Por que binário local no fetch.** Esta é a assimetria que decide o desenho: no
+upload circula apenas o recipient **público**, e um container não teria o que
+vazar. Na recuperação é a chave **privada** que entra em jogo — a que decifra
+*todos* os backups off-host. Em modo `container` ela precisa ser bind-montada
+para dentro da imagem; em modo `local` nunca sai do sistema de arquivos do
+operador. O modo `container` existe para quem não tem o binário, avisa em voz
+alta e **não é o padrão**.
+
+A imagem precisa existir **antes** do primeiro backup (GATE-7). O script **não
+faz pull nem build automático** — se a imagem faltar, ele falha com instrução
+explícita em vez de baixar algo em silêncio no meio da madrugada:
+
+```bash
+docker build -t facilpi/offhost:1 ops/offhost
+```
+
+Construção, preparação offline (`docker save`/`load`), operação sem rede e o
+procedimento de atualização — que exige **revalidar versões e digest** — estão em
+`ops/offhost/README.md`.
+
 ## Configuração
 
 `ops/offhost.env.example` é o modelo. O arquivo real vive **fora do
@@ -282,7 +317,7 @@ Evidências: as 10 do ensaio local, mais
 | GATE-4 | Fixar os prazos reais de retenção | **decidido**: 14d daily / 28d weekly |
 | GATE-5 | Lifecycle rule e retenção padrão do bucket | pendente |
 | GATE-6 | Drill off-host completo | pendente |
-| GATE-7 | Instalar `age` e AWS CLI v2 na VPS; instalar cron e `/etc/facilpi/offhost.env` | pendente |
+| GATE-7 | Construir `facilpi/offhost:1` na VPS; instalar cron e `/etc/facilpi/offhost.env`; garantir `age` no ambiente de recuperação | pendente |
 | GATE-8 | Liberar dado real | **bloqueado** até o drill PASS |
 
 ```

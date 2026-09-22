@@ -77,10 +77,8 @@ B2_BUCKET="$(ler_env B2_BUCKET)"
 OFFHOST_PREFIX="$(ler_env OFFHOST_PREFIX)"
 AGE_RECIPIENT="$(ler_env AGE_RECIPIENT)"
 SENTINELA="$(ler_env OFFHOST_SENTINELA)"
-AGE_BIN="$(ler_env OFFHOST_AGE_BIN)"
-AWS_BIN="$(ler_env OFFHOST_AWS_BIN)"
-[ -n "$AGE_BIN" ] || AGE_BIN="age"
-[ -n "$AWS_BIN" ] || AWS_BIN="aws"
+OFFHOST_IMAGE="$(ler_env OFFHOST_IMAGE)"
+[ -n "$OFFHOST_IMAGE" ] || OFFHOST_IMAGE="facilpi/offhost:1"
 [ -n "$OFFHOST_PREFIX" ] || OFFHOST_PREFIX="facilpi/"
 
 if [ "$CLASSE" = "daily" ]; then
@@ -191,8 +189,24 @@ B2_APP_KEY="$(ler_env B2_APP_KEY)"
 [ -n "$B2_KEY_ID" ] || { echo "FALHA: B2_KEY_ID ausente em $ARQUIVO_ENV" >&2; exit 2; }
 [ -n "$B2_APP_KEY" ] || { echo "FALHA: B2_APP_KEY ausente em $ARQUIVO_ENV" >&2; exit 2; }
 
-command -v "$AGE_BIN" >/dev/null 2>&1 || { echo "FALHA: $AGE_BIN nao encontrado. Instale o age na VPS — um procedimento de disaster recovery nao pode depender de baixar nada no momento do desastre." >&2; exit 2; }
-command -v "$AWS_BIN" >/dev/null 2>&1 || { echo "FALHA: $AWS_BIN nao encontrado. Instale o AWS CLI v2 na VPS." >&2; exit 2; }
+# --- imagem operacional -------------------------------------------------------
+# O backup ja depende de Docker (ops/backup.sh usa `docker compose exec db
+# pg_dump` e `docker run alpine`), entao exigi-lo aqui nao acrescenta modo de
+# falha novo: sem Docker nao existiria pacote para enviar.
+command -v docker >/dev/null 2>&1 || { echo "FALHA: docker nao encontrado. O off-host usa a mesma infraestrutura que ops/backup.sh ja exige." >&2; exit 2; }
+
+# NAO ha pull nem build automatico. Baixar ou construir imagem sozinho, no meio
+# da madrugada, e como um cron decide mudar a propria ferramenta sem ninguem
+# ver. A imagem e preparada antes, no GATE-7, e a ausencia dela e falha.
+if ! docker image inspect "$OFFHOST_IMAGE" >/dev/null 2>&1; then
+    echo "FALHA: imagem '$OFFHOST_IMAGE' nao esta presente neste host." >&2
+    echo "       Este script NAO baixa nem constroi imagem automaticamente." >&2
+    echo "       Prepare-a antes:" >&2
+    echo "           docker build -t $OFFHOST_IMAGE ops/offhost" >&2
+    echo "       Em host sem acesso ao registry, use docker save/load —" >&2
+    echo "       ver ops/offhost/README.md." >&2
+    exit 2
+fi
 
 # Artefato parcial nunca pode sobreviver a uma falha parecendo completo — mesma
 # disciplina do `.parcial` em backup.sh.
@@ -202,7 +216,15 @@ trap limpar EXIT INT TERM
 # --- [2/6] cifra --------------------------------------------------------------
 echo "[2/6] empacotando e cifrando com age (somente recipient publico)"
 rm -f "$PARCIAL"
-tar -cf - -C "$DIR_PAI" "$NOME_PACOTE" | "$AGE_BIN" -r "$AGE_RECIPIENT" > "$PARCIAL"
+# O `tar` fica no HOST e so o `age` entra no container, lendo stdin e escrevendo
+# stdout. Assim nao e preciso montar o diretorio do pacote para cifrar, e o
+# conteudo em claro nunca aparece como arquivo dentro do container.
+#
+# O recipient e PUBLICO, entao pode ir em argv sem risco — ao contrario da
+# credencial do B2, que nunca vai (ver etapa 4).
+tar -cf - -C "$DIR_PAI" "$NOME_PACOTE" \
+    | docker run --rm -i "$OFFHOST_IMAGE" age -r "$AGE_RECIPIENT" \
+    > "$PARCIAL"
 mv "$PARCIAL" "$ARTEFATO"
 trap - EXIT INT TERM
 
@@ -235,16 +257,29 @@ echo "      object lock COMPLIANCE ate $RETAIN_UNTIL"
 #
 # A credencial entra por variavel de ambiente de UM comando, nunca por
 # argumento: argumento e visivel em `ps` para qualquer usuario da maquina.
+#
+# `-e NOME` (so o NOME) faz o docker HERDAR o valor do proprio ambiente e
+# repassar ao container. `-e NOME=valor` colocaria o segredo no argv do
+# `docker run` — a diferenca entre as duas formas e a diferenca entre credencial
+# protegida e credencial publicada em `ps`.
+#
+# O diretorio do pacote entra :ro — o upload nao pode alterar o que envia.
 set +e
 RESPOSTA="$(
     AWS_ACCESS_KEY_ID="$B2_KEY_ID" \
     AWS_SECRET_ACCESS_KEY="$B2_APP_KEY" \
     AWS_DEFAULT_REGION="$B2_REGION" \
-    "$AWS_BIN" s3api put-object \
+    docker run --rm \
+        -e AWS_ACCESS_KEY_ID \
+        -e AWS_SECRET_ACCESS_KEY \
+        -e AWS_DEFAULT_REGION \
+        -v "$DIR_PAI:/dados:ro" \
+        "$OFFHOST_IMAGE" \
+        aws s3api put-object \
         --endpoint-url "$B2_ENDPOINT" \
         --bucket "$B2_BUCKET" \
         --key "$CHAVE_REMOTA" \
-        --body "$ARTEFATO" \
+        --body "/dados/$NOME_PACOTE.tar.age" \
         --checksum-algorithm SHA256 \
         --checksum-sha256 "$SHA_BASE64" \
         --object-lock-mode COMPLIANCE \
