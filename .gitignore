@@ -7,3 +7,15 @@
 .env
 .env.*
 !.env.example
+
+# OFFHOST-1: o arquivo real de configuracao off-host deve viver em
+# /etc/facilpi/offhost.env, fora da arvore de trabalho. Esta regra e cinto de
+# seguranca para o caso de alguem copiar o modelo aqui e preencher: ele conteria
+# a Application Key do B2.
+ops/offhost.env
+
+# OFFHOST-2: artefatos e marcadores do off-host. O .tar.age e o backup inteiro
+# cifrado — grande e, ainda que cifrado, nao pertence ao repositorio.
+*.tar.age
+*.uploaded
+*.offhost_manifest.json

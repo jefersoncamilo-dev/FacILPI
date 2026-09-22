@@ -1,9 +1,10 @@
 # Runbook — backup e restore do piloto
 
 > **Estado.** O mecanismo existe e a recuperação foi **demonstrada** num ensaio
-> em que o ambiente de origem foi destruído antes do restore. O que ainda **não**
-> existe é a cópia off-host: enquanto ela não existir, isto protege contra perda
-> do banco, dos anexos ou de um container — **não** contra perda do host.
+> em que o ambiente de origem foi destruído antes do restore. Isto protege contra
+> perda do banco, dos anexos ou de um container — **não** contra perda do host.
+> A cópia off-host, que fecha essa lacuna, tem código pronto e ainda **não** foi
+> provada contra o provedor: ver `docs/RUNBOOK_OFFHOST.md`.
 
 ## O que o pacote contém
 
@@ -77,10 +78,21 @@ local     7 diários
 off-host  7 diários + 4 semanais
 ```
 
-Compatível com o RPO de 24h. A limpeza deve operar **apenas** dentro do diretório
+Compatível com o RPO de 24h. A limpeza opera **apenas** dentro do diretório
 dedicado de backups e apenas sobre diretórios que casem com o padrão
 `facilpi-backup-<UTC>` contendo um `manifest.json` válido — nunca por wildcard
 amplo.
+
+A retenção local é executada por `ops/retencao_local.sh`, que implementa essas
+travas. **Simulação é o padrão**; nada é removido sem `--apply`:
+
+```bash
+ops/retencao_local.sh -d /var/backups/facilpi -k 7            # simula
+ops/retencao_local.sh -d /var/backups/facilpi -k 7 --apply    # remove
+```
+
+A retenção off-host é executada por lifecycle rule do bucket, não pelo host — a
+credencial de upload não tem `deleteFiles`. Ver `docs/RUNBOOK_OFFHOST.md`.
 
 ## Agendamento (exemplo — não instalado)
 
@@ -95,18 +107,18 @@ ela não está ligada às 3h, não está na mesma rede e não é parte do ambien
 ## Cópia off-host — obrigatória antes de dado real
 
 ```
-LOCAL_BACKUP  = IMPLEMENTADO
-OFF_HOST_COPY = NÃO IMPLEMENTADO / OBRIGATÓRIO ANTES DE DADO REAL
+LOCAL_BACKUP  = IMPLEMENTADO E ENSAIADO
+OFF_HOST_COPY = CÓDIGO PRONTO / NÃO PROVADO CONTRA O PROVEDOR
 ```
 
-O pacote é um diretório de arquivos comuns, então qualquer transporte serve. Os
-requisitos mínimos, independentes de fornecedor:
+O pacote é um diretório de arquivos comuns, então o off-host o consome **depois
+de pronto** e não altera nada deste documento: `ops/backup.sh` e `ops/restore.sh`
+permanecem exatamente como foram ensaiados.
 
-- **cifrar antes de sair do host** (por exemplo `age` ou `gpg` simétrico), com a
-  chave sob custódia separada do destino;
-- canal autenticado e cifrado (TLS/SSH);
-- credencial dedicada, somente-escrita no destino quando o provedor permitir;
-- separação de falha real: outro provedor ou, no mínimo, outra região.
+Implementação, custódia de chaves, Object Lock, capabilities mínimas e o drill
+off-host estão em **`docs/RUNBOOK_OFFHOST.md`**. Nenhuma Application Key foi
+criada, nenhuma chave `age` foi gerada e nenhum upload real foi feito — o
+release para dado real segue bloqueado até o drill passar.
 
 ## RPO e RTO
 
