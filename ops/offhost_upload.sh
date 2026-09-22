@@ -6,6 +6,15 @@
 # falhar, o backup local continua integro e valido — os dois caminhos sao
 # independentes de proposito.
 #
+# SUCESSO DO PUT NAO E SUCESSO FINAL. Este script grava um estado PENDENTE
+# (<pacote>.offhost_pending.json) e para — nunca escreve o marcador
+# `.uploaded` nem o manifesto definitivo. A resposta do PutObject da
+# Backblaze so documenta VersionId e ETag; ela NUNCA confirma Object Lock
+# ou checksum, tenham sido aplicados ou nao (ver GATE-3Q/3R). Exigir isso
+# aqui produzia um falso negativo. A confirmacao real — GetObjectRetention,
+# HeadObject e download+SHA-256 — e feita por `ops/offhost_verify.sh`, fora
+# da VPS, com uma credencial read-only separada que este script nunca usa.
+#
 # Uso:
 #   ops/offhost_upload.sh -b <pacote> -e <arquivo env> [-c daily|weekly] [--dry-run]
 #
@@ -14,7 +23,8 @@
 #   - apagar qualquer coisa no B2 (a credencial nem tem deleteFiles);
 #   - passar segredo por argumento (visivel em `ps`);
 #   - imprimir segredo;
-#   - improvisar se o servidor recusar a verificacao SHA-256 (ver GATE-3).
+#   - improvisar se o servidor recusar a verificacao SHA-256 no PUT (ver GATE-3);
+#   - declarar sucesso definitivo — isso e exclusivo de ops/offhost_verify.sh.
 set -eu
 
 # Git Bash (MSYS) reescreve argumentos que parecem caminho POSIX. Mesma razao e
@@ -76,7 +86,6 @@ B2_REGION="$(ler_env B2_REGION)"
 B2_BUCKET="$(ler_env B2_BUCKET)"
 OFFHOST_PREFIX="$(ler_env OFFHOST_PREFIX)"
 AGE_RECIPIENT="$(ler_env AGE_RECIPIENT)"
-SENTINELA="$(ler_env OFFHOST_SENTINELA)"
 OFFHOST_IMAGE="$(ler_env OFFHOST_IMAGE)"
 [ -n "$OFFHOST_IMAGE" ] || OFFHOST_IMAGE="facilpi/offhost:1"
 [ -n "$OFFHOST_PREFIX" ] || OFFHOST_PREFIX="facilpi/"
@@ -128,8 +137,12 @@ NOME_PACOTE="$(basename "$PACOTE")"
 DIR_PAI="$(cd "$(dirname "$PACOTE")" && pwd)"
 ARTEFATO="$DIR_PAI/$NOME_PACOTE.tar.age"
 PARCIAL="$ARTEFATO.parcial"
+# MARCADOR e o manifesto definitivo (offhost_manifest.json) so passam a
+# existir depois da VERIFICACAO independente (ops/offhost_verify.sh) — nao
+# mais escritos por este script. PENDENTE e o que este script produz ao
+# terminar; MARCADOR aqui so serve para a checagem de idempotencia abaixo.
 MARCADOR="$DIR_PAI/$NOME_PACOTE.uploaded"
-MANIFESTO_OFFHOST="$DIR_PAI/$NOME_PACOTE.offhost_manifest.json"
+PENDENTE="$DIR_PAI/$NOME_PACOTE.offhost_pending.json"
 CHAVE_REMOTA="${OFFHOST_PREFIX}${CLASSE}/${NOME_PACOTE}.tar.age"
 
 RETAIN_UNTIL="$(date -u -d "+$DIAS_LOCK days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || true)"
@@ -137,17 +150,28 @@ RETAIN_UNTIL="$(date -u -d "+$DIAS_LOCK days" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null ||
 
 # --- idempotencia -------------------------------------------------------------
 # A credencial de upload nao tem readFiles nem listFiles de proposito, entao o
-# script NAO pode perguntar ao B2 se o objeto ja existe. O marcador local e o
-# que evita que uma reexecucao (cron repetido, retry manual) crie uma segunda
-# versao travada por Compliance — que ficaria la, cobrando, ate expirar.
-if [ -f "$MARCADOR" ] && [ "$SIMULACAO" -eq 0 ]; then
-    echo "JA ENVIADO  $NOME_PACOTE  (marcador: $MARCADOR)"
-    echo "Nada a fazer. Remova o marcador apenas se tiver certeza de que o envio anterior falhou."
-    exit 0
+# script NAO pode perguntar ao B2 se o objeto ja existe. O marcador/pendente
+# local e o que evita que uma reexecucao (cron repetido, retry manual) crie
+# uma segunda versao travada por Compliance — que ficaria la, cobrando, ate
+# expirar. PENDENTE conta tanto quanto MARCADOR: um upload que ja foi enviado
+# e so aguarda verificacao independente nao deve ser reenviado.
+if [ "$SIMULACAO" -eq 0 ]; then
+    if [ -f "$MARCADOR" ]; then
+        echo "JA ENVIADO E VERIFICADO  $NOME_PACOTE  (marcador: $MARCADOR)"
+        echo "Nada a fazer. Remova o marcador apenas se tiver certeza de que o envio anterior falhou."
+        exit 0
+    fi
+    if [ -f "$PENDENTE" ]; then
+        echo "JA ENVIADO, AGUARDANDO VERIFICACAO  $NOME_PACOTE  (pendente: $PENDENTE)"
+        echo "Execute ops/offhost_verify.sh com a credencial read-only para confirmar"
+        echo "o sucesso. Remova o arquivo pendente apenas se tiver certeza de que o"
+        echo "envio anterior falhou e precisa ser refeito."
+        exit 0
+    fi
 fi
 
-# --- [1/6] integridade do pacote de origem ------------------------------------
-echo "[1/6] verificando o pacote de origem (SHA256SUMS)"
+# --- [1/5] integridade do pacote de origem ------------------------------------
+echo "[1/5] verificando o pacote de origem (SHA256SUMS)"
 # FAIL CLOSED e ANTES da cifra: cifrar um pacote corrompido produziria um
 # artefato perfeitamente valido do ponto de vista do age, travado por Compliance,
 # contendo lixo. O erro so apareceria no dia da recuperacao.
@@ -177,7 +201,8 @@ if [ "$SIMULACAO" -eq 1 ]; then
     echo "objeto nao podera ser apagado nem ter a retencao encurtada por ninguem,"
     echo "inclusive pelo dono da conta."
     echo ""
-    echo "marcador esperado   $MARCADOR"
+    echo "estado pendente     $PENDENTE"
+    echo "marcador definitivo $MARCADOR  (so apos ops/offhost_verify.sh)"
     echo "=== fim do DRY RUN ==="
     exit 0
 fi
@@ -213,8 +238,8 @@ fi
 limpar() { rm -f "$PARCIAL"; }
 trap limpar EXIT INT TERM
 
-# --- [2/6] cifra --------------------------------------------------------------
-echo "[2/6] empacotando e cifrando com age (somente recipient publico)"
+# --- [2/5] cifra --------------------------------------------------------------
+echo "[2/5] empacotando e cifrando com age (somente recipient publico)"
 rm -f "$PARCIAL"
 # O `tar` fica no HOST e so o `age` entra no container, lendo stdin e escrevendo
 # stdout. Assim nao e preciso montar o diretorio do pacote para cifrar, e o
@@ -228,8 +253,8 @@ tar -cf - -C "$DIR_PAI" "$NOME_PACOTE" \
 mv "$PARCIAL" "$ARTEFATO"
 trap - EXIT INT TERM
 
-# --- [3/6] integridade do artefato cifrado ------------------------------------
-echo "[3/6] SHA-256 do artefato cifrado"
+# --- [3/5] integridade do artefato cifrado ------------------------------------
+echo "[3/5] SHA-256 do artefato cifrado"
 SHA_ARTEFATO="$(sha256sum "$ARTEFATO" | cut -d' ' -f1)"
 BYTES_ARTEFATO="$(wc -c < "$ARTEFATO" | tr -d ' ')"
 echo "      sha256=$SHA_ARTEFATO  bytes=$BYTES_ARTEFATO"
@@ -246,8 +271,8 @@ fi
 # O cabecalho de checksum do S3 leva o digest em base64, nao em hexadecimal.
 SHA_BASE64="$(printf '%s' "$SHA_ARTEFATO" | xxd -r -p | base64 | tr -d '\n')"
 
-# --- [4/6] upload -------------------------------------------------------------
-echo "[4/6] enviando ao Backblaze B2 (PUT unico, com retencao no mesmo PUT)"
+# --- [4/5] upload -------------------------------------------------------------
+echo "[4/5] enviando ao Backblaze B2 (PUT unico, com retencao no mesmo PUT)"
 echo "      s3://$B2_BUCKET/$CHAVE_REMOTA"
 echo "      object lock COMPLIANCE ate $RETAIN_UNTIL"
 
@@ -285,7 +310,7 @@ RESPOSTA="$(
         --object-lock-mode COMPLIANCE \
         --object-lock-retain-until-date "$RETAIN_UNTIL" \
         --metadata "sha256=$SHA_ARTEFATO,age-recipient=$AGE_RECIPIENT,package=$NOME_PACOTE" \
-        --query "[VersionId,ChecksumSHA256,ObjectLockRetainUntilDate]" \
+        --query "[VersionId,ETag]" \
         --output text 2>&1
 )"
 CODIGO=$?
@@ -315,35 +340,32 @@ if [ "$CODIGO" -ne 0 ]; then
     exit 1
 fi
 
+# A resposta do PutObject SO documenta VersionId e ETag (Backblaze,
+# confirmado no GATE-3R contra a doc oficial e no GATE-3U contra o B2 real).
+# ChecksumSHA256 e ObjectLockRetainUntilDate NUNCA aparecem aqui, tenham ou
+# nao sido aplicados de verdade — exigir isso da PROPRIA resposta do PUT e
+# o falso negativo que o GATE-3Q expos. A confirmacao real de Object Lock,
+# checksum e integridade e responsabilidade EXCLUSIVA de
+# ops/offhost_verify.sh, com a credencial read-only separada.
 VERSION_ID="$(printf '%s' "$RESPOSTA" | awk '{print $1}')"
-CHECKSUM_ECOADO="$(printf '%s' "$RESPOSTA" | awk '{print $2}')"
-RETAIN_ECOADO="$(printf '%s' "$RESPOSTA" | awk '{print $3}')"
-
-# --- [5/6] conferencia da resposta -------------------------------------------
-echo "[5/6] conferindo a resposta do servidor"
-# Sem readFiles, esta resposta e a UNICA confirmacao que o host consegue obter.
-# A verificacao profunda (download + hash + decifra) roda fora daqui, com a
-# credencial de leitura, no drill e nas auditorias.
-if [ -z "$RETAIN_ECOADO" ] || [ "$RETAIN_ECOADO" = "None" ]; then
-    echo "FALHA: o servidor nao ecoou a data de retencao. O objeto pode ter sido" >&2
-    echo "       gravado SEM Object Lock, e um backup sem lock nao protege contra" >&2
-    echo "       ransomware. Nao gravando marcador de sucesso." >&2
-    exit 1
-fi
-if [ -n "$CHECKSUM_ECOADO" ] && [ "$CHECKSUM_ECOADO" != "None" ] && [ "$CHECKSUM_ECOADO" != "$SHA_BASE64" ]; then
-    echo "FALHA: checksum ecoado difere do enviado." >&2
-    echo "       enviado=$SHA_BASE64  ecoado=$CHECKSUM_ECOADO" >&2
-    exit 1
-fi
+ETAG_RESPOSTA="$(printf '%s' "$RESPOSTA" | awk '{print $2}')"
 echo "      version_id=$VERSION_ID"
-echo "      retain_until=$RETAIN_ECOADO"
 
-# --- [6/6] manifesto, marcador e sentinela ------------------------------------
-echo "[6/6] registrando"
-# Nenhum segredo entra aqui: o recipient age e publico e nao ha credencial alguma.
-cat > "$MANIFESTO_OFFHOST" <<JSON
+# --- [5/5] registrando estado PENDENTE ----------------------------------------
+echo "[5/5] registrando estado pendente (aguardando verificacao independente)"
+# Isto NAO e um marcador de sucesso. E o suficiente para que
+# ops/offhost_verify.sh, rodando fora da VPS com a credencial read-only,
+# confirme de forma independente Object Lock, metadata e integridade antes
+# de promover o backup a sucesso de fato. Os campos "expected_*" sao o que
+# ESTE host pediu — nao o que o servidor confirmou, porque o servidor nao
+# confirma isso aqui.
+#
+# Nenhum segredo entra aqui: o recipient age e publico e nao ha credencial
+# alguma.
+cat > "$PENDENTE" <<JSON
 {
-  "offhost_format_version": 1,
+  "offhost_format_version": 2,
+  "state": "PENDING",
   "package_name": "$NOME_PACOTE",
   "backup_class": "$CLASSE",
   "encryption": "age",
@@ -354,29 +376,23 @@ cat > "$MANIFESTO_OFFHOST" <<JSON
   "remote_provider": "backblaze-b2",
   "remote_bucket": "$B2_BUCKET",
   "remote_endpoint": "$B2_ENDPOINT",
+  "remote_region": "$B2_REGION",
   "remote_key": "$CHAVE_REMOTA",
   "remote_version_id": "$VERSION_ID",
-  "object_lock_mode": "COMPLIANCE",
-  "retain_until": "$RETAIN_ECOADO",
+  "put_etag": "$ETAG_RESPOSTA",
+  "expected_object_lock_mode": "COMPLIANCE",
+  "expected_retain_until": "$RETAIN_UNTIL",
   "uploaded_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "restore_notes": "baixar com ops/offhost_fetch.sh FORA da VPS, com a credencial de leitura e a chave privada age sob custodia separada; conferir o sha256 ANTES de decifrar"
+  "verify_notes": "executar ops/offhost_verify.sh FORA da VPS, com a credencial read-only (readFiles + readFileRetentions), para confirmar Object Lock, metadata e SHA-256 antes de considerar este backup bem-sucedido"
 }
 JSON
 
-date -u +%Y-%m-%dT%H:%M:%SZ > "$MARCADOR"
-
-if [ -n "$SENTINELA" ]; then
-    # Falhar aqui nao invalida um upload que ja aconteceu; apenas avisa que a
-    # monitoracao ficara cega.
-    if mkdir -p "$(dirname "$SENTINELA")" 2>/dev/null && date -u +%Y-%m-%dT%H:%M:%SZ > "$SENTINELA" 2>/dev/null; then
-        echo "      sentinela atualizada: $SENTINELA"
-    else
-        echo "AVISO: nao foi possivel atualizar a sentinela $SENTINELA — a monitoracao" >&2
-        echo "       por frescor ficara cega. O upload em si foi concluido." >&2
-    fi
-fi
-
 echo ""
-echo "OK  $CHAVE_REMOTA"
-echo "sha256=$SHA_ARTEFATO  bytes=$BYTES_ARTEFATO  retain_until=$RETAIN_ECOADO"
-echo "manifesto: $MANIFESTO_OFFHOST"
+echo "PENDENTE  $CHAVE_REMOTA"
+echo "sha256=$SHA_ARTEFATO  bytes=$BYTES_ARTEFATO  expected_retain_until=$RETAIN_UNTIL"
+echo "estado pendente: $PENDENTE"
+echo ""
+echo "Upload aceito pelo servidor, mas isto NAO e sucesso confirmado."
+echo "Execute ops/offhost_verify.sh (fora da VPS, credencial read-only) para"
+echo "confirmar Object Lock, metadata e integridade antes de contar este"
+echo "backup como concluido."

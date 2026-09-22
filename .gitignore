@@ -11,11 +11,16 @@
 # OFFHOST-1: o arquivo real de configuracao off-host deve viver em
 # /etc/facilpi/offhost.env, fora da arvore de trabalho. Esta regra e cinto de
 # seguranca para o caso de alguem copiar o modelo aqui e preencher: ele conteria
-# a Application Key do B2.
+# a Application Key do B2. offhost_verify.env e a mesma protecao para a
+# credencial read-only de verificacao — que, alem disso, nunca deve estar
+# nesta VPS de qualquer forma (ver docs/RUNBOOK_OFFHOST.md).
 ops/offhost.env
+ops/offhost_verify.env
 
 # OFFHOST-2: artefatos e marcadores do off-host. O .tar.age e o backup inteiro
 # cifrado — grande e, ainda que cifrado, nao pertence ao repositorio.
+# offhost_pending.json e o estado provisorio entre upload e verificacao.
 *.tar.age
 *.uploaded
 *.offhost_manifest.json
+*.offhost_pending.json

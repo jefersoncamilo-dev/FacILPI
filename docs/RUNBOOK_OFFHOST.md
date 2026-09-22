@@ -1,9 +1,9 @@
 # Runbook — cópia off-host cifrada (Backblaze B2 + age)
 
-> **Estado.** Os scripts existem e foram exercitados localmente com material
-> sintético. **Nenhum upload real foi feito**, nenhuma Application Key existe e
-> nenhuma chave `age` foi gerada. Enquanto os gates abaixo não forem cumpridos,
-> `OFF_HOST_COPY = CÓDIGO PRONTO / NÃO PROVADO CONTRA O B2`.
+> **Estado.** Upload sintético provado contra o B2 real e confirmado por
+> verificação independente (Object Lock, metadata e SHA-256 do artefato —
+> todos corretos). `REAL DATA = BLOCKED` continua até o drill completo
+> (GATE-6) e o restante dos gates abaixo passarem.
 
 O backup local (`docs/RUNBOOK_BACKUP_RESTORE.md`) protege contra perda do banco,
 dos anexos ou de um container. **Não protege contra perda do host.** É isso que
@@ -11,13 +11,28 @@ esta cópia fecha.
 
 ## Desenho
 
+**Sucesso do PUT não é sucesso final.** A resposta do PutObject da Backblaze
+só documenta `VersionId` e `ETag` — ela nunca confirma Object Lock nem
+checksum, tenham sido aplicados ou não. Exigir isso da própria resposta do PUT
+foi um falso negativo já identificado e corrigido: a confirmação real é uma
+etapa separada, com credencial separada, fora da VPS.
+
 ```
 ops/backup.sh  →  facilpi-backup-<UTC>/          (inalterado, já validado)
                           │
                           ▼
-ops/offhost_upload.sh     roda NA VPS
+ops/offhost_upload.sh     roda NA VPS — credencial write-only
    valida SHA256SUMS → tar → age -r <público> → SHA-256 do cifrado
-   → PUT único no B2 com Object Lock no mesmo PUT → manifesto + marcador
+   → PUT único no B2 com Object Lock no mesmo PUT
+   → grava ESTADO PENDENTE (<pacote>.offhost_pending.json)
+   → NÃO grava marcador de sucesso
+                          │
+                          ▼
+ops/offhost_verify.sh     roda FORA DA VPS — credencial read-only, SEPARADA
+   GetObjectRetention  → confirma Mode == COMPLIANCE e RetainUntilDate
+   HeadObject          → confirma metadata e ContentLength
+   GetObject (download)→ SHA-256 local == SHA-256 calculado antes do upload
+   → só se as três passarem: marcador `.uploaded` + manifesto definitivo
                           │
                           ▼
 ops/offhost_fetch.sh      roda FORA DA VPS
@@ -27,18 +42,28 @@ ops/offhost_fetch.sh      roda FORA DA VPS
 ops/restore.sh            inalterado
 ```
 
-O caminho de backup validado **não muda**. O off-host é um segundo script que
-consome o pacote pronto: se ele falhar, o backup local continua íntegro e válido.
+O caminho de backup validado **não muda**. O off-host é um conjunto de scripts
+que consome o pacote pronto: se qualquer um deles falhar, o backup local
+continua íntegro e válido, e nenhum marcador de sucesso falso é gravado.
 
 ## Separação de custódia — a decisão que sustenta todo o resto
 
 | Onde | O que existe lá | O que **não** pode existir lá |
 |---|---|---|
-| VPS | recipient `age` **público**; credencial de upload (só escreve) | chave privada `age`, credencial de leitura, Master Key |
-| Cofre do responsável | chave privada `age`, credencial de restore | — |
+| VPS | recipient `age` **público**; credencial de upload (só escreve) | chave privada `age`, **qualquer** credencial de leitura (verificação ou restore), Master Key |
+| Cofre do responsável | chave privada `age`; credencial de verificação; credencial de restore | — |
 | Cópia offline, outro local físico | segunda cópia da chave privada `age` | — |
 | Bucket B2 | apenas artefatos cifrados | qualquer chave |
 | Repositório | nada disso | qualquer segredo |
+
+A credencial de **verificação** (`readFiles`+`readFileRetentions`, usada por
+`ops/offhost_verify.sh`) e a credencial de **restore** (`listBuckets`,
+`listFiles`, `readFiles`, `readFileRetentions`, usada por
+`ops/offhost_fetch.sh`) são, por ora, credenciais **separadas** — a de
+verificação é um subconjunto estrito da de restore, mas nenhuma automação as
+unifica. Ambas seguem a mesma regra de localização: nunca na VPS. Se devem ou
+não ser fundidas numa única credencial de Disaster Recovery é decisão futura,
+não tomada aqui.
 
 Duas propriedades precisam valer ao mesmo tempo, e elas puxam para lados opostos:
 
@@ -121,27 +146,56 @@ capabilities  writeFiles
               writeFileRetentions
 ```
 
-`listBuckets` **não** é concedida de saída. Só entra se o GATE-3 provar que o
-endpoint S3 exige; nesse caso a chave é recriada, e o pior caso continua sendo
-enumerar um bucket que ela já podia escrever.
+`listBuckets`/`listAllBucketNames` **não** são concedidas — comprovado
+empiricamente contra o B2 real (GATE-3P) que o `PutObject` executado por este
+script funciona sem nenhuma das duas. A recomendação genérica da Backblaze de
+concedê-las "para compatibilidade com SDKs" não se aplica ao caminho de código
+exato que este script exercita.
 
 Negadas por decisão: `deleteFiles`, `readFiles`, `listFiles`, `deleteBuckets`,
 `writeBuckets`, `writeBucketRetentions`, `bypassGovernance`, `listAllBucketNames`,
-`shareFiles`, `readFileLegalHolds`/`writeFileLegalHolds`, administração de keys,
-qualquer `*Logging` e `*Notifications`.
+`listBuckets`, `shareFiles`, `readFileLegalHolds`/`writeFileLegalHolds`,
+administração de keys, qualquer `*Logging`, `*Notifications` e `*Replications`.
+
+**Atenção ao criar esta key:** o preset **"Write Only" do console web da
+Backblaze concede um conjunto bem mais amplo** do que a lista acima —
+incluindo `deleteFiles`, `bypassGovernance` e mais seis capabilities de
+administração de bucket — comprovado empiricamente criando duas keys distintas
+por esse preset. Use sempre `b2_create_key` (API nativa) com a lista explícita.
 
 Três consequências, todas intencionais:
 
-- **sem `readFiles`**, a VPS não consegue verificar o objeto remoto por download
-  → a verificação profunda roda fora dela (GATE-6 e auditorias);
+- **sem `readFiles`**, a VPS não consegue verificar o objeto remoto por
+  download → a verificação (`ops/offhost_verify.sh`) roda fora dela, com
+  credencial separada, logo após cada upload — não só no drill;
 - **sem `readFiles`/`listFiles`**, a VPS não consegue perguntar se o objeto já
-  existe → a idempotência usa um **marcador local** `<pacote>.uploaded`;
+  existe → a idempotência usa dois arquivos locais: `<pacote>.offhost_pending.json`
+  (enviado, aguardando verificação) e `<pacote>.uploaded` (verificado de fato,
+  escrito só por `ops/offhost_verify.sh`);
 - **sem `deleteFiles`**, a VPS não consegue apagar nada remoto → a retenção
   off-host é executada por **lifecycle rule do bucket**, criada uma vez pelo
   humano, nunca pelo runtime.
 
 Se a VPS for comprometida, o atacante pode subir lixo novo. Não pode ler e não
 pode destruir o que já está lá.
+
+### Verificação — nunca na VPS, roda logo após cada upload
+
+```
+nome          facilpi-pilot-backup-verify
+bucket        facilpi-pilot-backup-x7k9p2   (restrita por bucketId)
+capabilities  readFiles
+              readFileRetentions
+```
+
+Usada exclusivamente por `ops/offhost_verify.sh`: `GetObjectRetention` (Object
+Lock), `HeadObject` (metadata e tamanho) e `GetObject` (download para conferir
+SHA-256). Sem nenhum `write*`, sem `deleteFiles`, sem `bypassGovernance`, sem
+`listFiles`/`listBuckets` — o objeto a verificar já é conhecido pelo estado
+pendente que o upload produziu, nenhuma enumeração é necessária.
+
+Mesmo aviso do preset do console se aplica aqui: crie via `b2_create_key` com
+a lista explícita, não pelo preset "Read Only".
 
 ### Restore — nunca na VPS
 
@@ -155,7 +209,9 @@ capabilities  listBuckets
               readFileRetentions
 ```
 
-Sem nenhum `write*`, sem `deleteFiles`, sem `bypassGovernance`.
+Sem nenhum `write*`, sem `deleteFiles`, sem `bypassGovernance`. Superconjunto
+da credencial de verificação acima — usada para recuperação de desastre, onde
+a chave remota exata pode não ser conhecida de antemão.
 
 ## Object Lock — Compliance é irreversível
 
@@ -192,23 +248,37 @@ tratá-las com prazos diferentes.
 
 O ETag do S3 não é SHA-256 e, em multipart, não é sequer um hash do conteúdo.
 
+A resposta do `PutObject` da Backblaze **não documenta** confirmação de
+checksum nem de Object Lock — só `VersionId` e `ETag`. Exigir isso da própria
+resposta do upload foi um falso negativo já identificado e corrigido: a
+verificação real acontece **depois**, em `ops/offhost_verify.sh`, com uma
+chamada dedicada por tipo de garantia.
+
 ```
-1. pacote            SHA256SUMS revalidado ANTES de cifrar        (fail closed)
-2. artefato cifrado  sha256sum local do .tar.age
-3. no PUT            --checksum-sha256: o servidor recomputa e recusa se divergir
-4. metadata própria  sha256 gravado no objeto, independente do manifesto local
-5. no download       confere o SHA-256 ANTES de decifrar
-6. após extrair      SHA256SUMS interno reconferido
-7. após restore      verificar_restauracao.py já compara documentos.arquivo_hash
+1. pacote              SHA256SUMS revalidado ANTES de cifrar     (fail closed, upload)
+2. artefato cifrado    sha256sum local do .tar.age                (upload)
+3. no PUT              --checksum-sha256: o servidor recomputa e recusa se divergir (upload)
+4. metadata própria    sha256 gravado no objeto                   (upload)
+5. GetObjectRetention  confirma Mode e RetainUntilDate             (verify, credencial separada)
+6. HeadObject          confirma metadata e ContentLength           (verify, credencial separada)
+7. GetObject           download + SHA-256 local == SHA-256 do passo 2 (verify, credencial separada)
+8. no download (fetch) confere o SHA-256 ANTES de decifrar         (restore)
+9. após extrair        SHA256SUMS interno reconferido              (restore)
+10. após restore       verificar_restauracao.py já compara documentos.arquivo_hash
 ```
 
-Conferir o hash **antes** de decifrar separa "chegou corrompido" de "a chave
-está errada" — dois problemas com respostas completamente diferentes no dia do
-desastre.
+Os passos 5-7 são o que transforma um upload **aceito** em um upload
+**confirmado**: nenhum deles depende do que a resposta do PUT diz, e nenhum
+usa a credencial de upload.
 
-**Se o B2 recusar `--checksum-sha256`:** o script para e imprime a evidência
-para o GATE-3. Ele **não** cai para uma alternativa sozinho. Trocar a verificação
-de integridade é mudança de arquitetura e exige decisão do Control Tower.
+Conferir o hash **antes** de decifrar (passo 8) separa "chegou corrompido" de
+"a chave está errada" — dois problemas com respostas completamente diferentes
+no dia do desastre.
+
+**Se o B2 recusar `--checksum-sha256`** no PUT (passo 3): o script para e
+imprime a evidência. Ele **não** cai para uma alternativa sozinho. Trocar a
+verificação de integridade é mudança de arquitetura e exige decisão do
+Control Tower.
 
 ## Operação
 
@@ -220,14 +290,26 @@ ops/backup.sh -p facilpi -e .env -d /var/backups/facilpi
 ops/offhost_upload.sh -b /var/backups/facilpi/facilpi-backup-<UTC> \
     -e /etc/facilpi/offhost.env -c daily --dry-run
 
-# envio
+# envio — NA VPS, credencial write-only. Termina em PENDENTE, não em sucesso.
 ops/offhost_upload.sh -b /var/backups/facilpi/facilpi-backup-<UTC> \
     -e /etc/facilpi/offhost.env -c daily
+
+# verificação — FORA DA VPS, credencial read-only separada. So aqui o backup
+# passa a contar como concluido (grava .uploaded e o manifesto definitivo).
+ops/offhost_verify.sh \
+    -p /var/backups/facilpi/facilpi-backup-<UTC>.offhost_pending.json \
+    -e /caminho/seguro/offhost_verify.env
 
 # retenção local — simulação é o padrão
 ops/retencao_local.sh -d /var/backups/facilpi -k 7
 ops/retencao_local.sh -d /var/backups/facilpi -k 7 --apply
 ```
+
+`ops/offhost_verify.sh` roda em qualquer máquina fora da VPS que tenha Docker
+e a credencial read-only — não precisa ser a mesma usada para restore, embora
+possa usar as mesmas ferramentas (`facilpi/offhost:1`). O arquivo pendente
+(`.offhost_pending.json`) precisa estar acessível a ela — copiá-lo para fora
+da VPS é seguro: ele não contém nenhum segredo, só metadados do que verificar.
 
 ### Agendamento (exemplo — não instalado; GATE-7)
 
@@ -239,19 +321,36 @@ ops/retencao_local.sh -d /var/backups/facilpi -k 7 --apply
 30 5 * * *  root  cd /opt/facilpi && ops/retencao_local.sh -d /var/backups/facilpi -k 7 --apply >> /var/log/facilpi-retencao.log 2>&1
 ```
 
+Este crontab só cobre o **upload** — de propósito, é tudo que a VPS pode fazer.
+A **verificação** (`ops/offhost_verify.sh`) não entra aqui: ela precisa da
+credencial read-only, que esta máquina nunca deve ter. Seu agendamento, se
+houver, vive num crontab separado, em outra máquina, fora do escopo deste
+arquivo de exemplo.
+
 ## Comportamento de falha
 
-Fail closed em cada etapa: checksum do pacote, `AGE_RECIPIENT` ausente ou com
-cara de chave privada, retenção acima do teto, falha do `age`, artefato acima do
-limite de PUT único, erro no upload, ausência de `retain-until` na resposta.
+**No upload**, fail closed em cada etapa: checksum do pacote, `AGE_RECIPIENT`
+ausente ou com cara de chave privada, retenção acima do teto, falha do `age`,
+artefato acima do limite de PUT único, erro no PUT. Em qualquer uma delas: nem
+o pendente nem o marcador são gravados, `exit` diferente de zero, e o artefato
+parcial é removido — mesma disciplina do `.parcial` em `ops/backup.sh`.
 
-Em qualquer uma delas: **sem marcador, sem sentinela, `exit` diferente de zero**,
-e o artefato parcial é removido — mesma disciplina do `.parcial` em
-`ops/backup.sh`. Nunca fica um artefato incompleto parecendo completo.
+**Na verificação**, fail closed em cada checagem: `Mode` diferente de
+`COMPLIANCE`, `RetainUntilDate` fora do instante solicitado, metadata
+divergente, `ContentLength` divergente, SHA-256 do download diferente do
+calculado antes do upload. Qualquer uma delas impede a gravação do marcador
+`.uploaded` e do manifesto definitivo — o estado pendente permanece, disponível
+para nova tentativa de verificação ou investigação.
+
+Nunca fica um artefato incompleto, ou um upload não confirmado, parecendo
+completo.
 
 **Monitoração alarma pela ausência de sucesso recente**, não pela presença de
 erro: o modo de falha real de backup é falhar em silêncio por semanas. A
-sentinela `OFFHOST_SENTINELA` tem como `mtime` o último upload bem-sucedido.
+sentinela `OFFHOST_SENTINELA` tem como `mtime` a **última verificação**
+bem-sucedida — não o último upload. Um upload sem verificação correspondente
+não deve silenciar o alarme; por isso a sentinela agora é responsabilidade de
+`ops/offhost_verify.sh`, não mais de `ops/offhost_upload.sh`.
 
 ```bash
 # alarme se o último sucesso tiver mais de 26h
@@ -286,26 +385,30 @@ Somente dados sintéticos. Reusa integralmente `ops/drill/popular_sintetico.py`,
 procedimento de ensaio de `docs/RUNBOOK_BACKUP_RESTORE.md`. O que o drill
 off-host acrescenta:
 
-1. cifrar e subir ao B2, confirmando objeto e retenção pela resposta do PUT;
+1. cifrar e subir ao B2 (`ops/offhost_upload.sh`), confirmando com
+   `ops/offhost_verify.sh` — **não** pela resposta do PUT, que não confirma
+   Object Lock nem checksum (ver seção Integridade);
 2. **apagar a cópia local do pacote e do `.tar.age`** — sem isso o teste pode
    passar apoiado em estado sobrevivente, o mesmo erro que o ensaio local já
    evita destruindo a origem;
 3. destruir o ambiente de origem (apenas objetos cujo label
    `com.docker.compose.project` seja exatamente o do ensaio, enumerados antes;
    nunca `docker system prune` ou `volume prune`);
-4. recuperar **só** do B2, com a credencial de leitura e a chave privada trazida
+4. recuperar **só** do B2, com a credencial de restore e a chave privada trazida
    de fora;
 5. restaurar em ambiente novo e rodar o verificador existente;
 6. cronometrar e registrar o **RTO observado**.
 
 Evidências: as 10 do ensaio local, mais
 
-11. objeto presente com o `sha256` esperado na metadata;
+11. `ops/offhost_verify.sh` confirma `state: VERIFIED` — Object Lock
+    COMPLIANCE, metadata e SHA-256 do artefato baixado todos corretos;
 12. retenção Compliance aplicada com o `retain_until` esperado;
 13. `DeleteObject` com a credencial de **upload** falha;
-14. `DeleteObject` com a credencial de **restore** falha;
-15. recuperação feita sem nenhum artefato local sobrevivente;
-16. RTO observado registrado — em host não representativo, portanto **não é SLA**.
+14. `DeleteObject` com a credencial de **verificação** falha;
+15. `DeleteObject` com a credencial de **restore** falha;
+16. recuperação feita sem nenhum artefato local sobrevivente;
+17. RTO observado registrado — em host não representativo, portanto **não é SLA**.
 
 ## Gates
 
@@ -313,7 +416,7 @@ Evidências: as 10 do ensaio local, mais
 |---|---|---|
 | GATE-1 | Gerar o par `age` e estabelecer as duas custódias | pendente |
 | GATE-2 | Criar as duas Application Keys; confirmar região/endpoint | pendente |
-| GATE-3 | Upload de prova, sintético, retenção **1 dia**; comprovar `--checksum-sha256` e a necessidade de `listBuckets` | pendente |
+| GATE-3 | Upload de prova, sintético, retenção **1 dia**; comprovar `--checksum-sha256` e a necessidade de `listBuckets` | **feito**: PUT confirmado contra o B2 real; `listBuckets`/`listAllBucketNames` comprovadamente desnecessárias; verificação independente (`ops/offhost_verify.sh`) confirmou Object Lock COMPLIANCE, metadata e SHA-256 corretos |
 | GATE-4 | Fixar os prazos reais de retenção | **decidido**: 14d daily / 28d weekly |
 | GATE-5 | Lifecycle rule e retenção padrão do bucket | pendente |
 | GATE-6 | Drill off-host completo | pendente |
