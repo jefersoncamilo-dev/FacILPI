@@ -108,3 +108,53 @@ export function ehOperadorDaPlataforma(activeContext: ActiveContext | null): boo
   if (activeContext?.scope !== 'global') return false
   return decodeJwt(localStorage.getItem(TOKEN_KEY))?.is_superuser === true
 }
+
+/**
+ * Espelho de `UF_VALIDAS` (backend/src/application/schemas.py:326). O backend
+ * normaliza com `.strip().upper()` antes de comparar, então só a sigla vale —
+ * "Paraná" vira "PARANÁ" e não pertence ao conjunto.
+ *
+ * Ordenado alfabeticamente para a lista; o conjunto é o mesmo do servidor.
+ */
+export const UF_VALIDAS = [
+  'AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS',
+  'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC',
+  'SE', 'SP', 'TO',
+] as const
+
+export function ufEhValida(valor: string): boolean {
+  return (UF_VALIDAS as readonly string[]).includes(valor.trim().toUpperCase())
+}
+
+/**
+ * Espelho de `validate_cnpj` (backend/src/domain/validators.py:21).
+ *
+ * Existe para evitar uma ida ao servidor que já se sabe perdida, NÃO para
+ * substituir o backend, que continua sendo a autoridade: o POST segue enviando
+ * o que o usuário digitou e um 422 do servidor continua sendo exibido.
+ *
+ * A pontuação é irrelevante — o backend também descarta tudo que não é dígito.
+ * O que reprova é o dígito verificador.
+ */
+export function somenteDigitos(valor: string): string {
+  return (valor || '').replace(/\D/g, '')
+}
+
+const CNPJ_PESOS_1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+const CNPJ_PESOS_2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]
+
+function digitoCnpj(base: string, pesos: readonly number[]): string {
+  const soma = pesos.reduce((acc, peso, i) => acc + Number(base[i]) * peso, 0)
+  const resto = soma % 11
+  return resto < 2 ? '0' : String(11 - resto)
+}
+
+export function cnpjEhValido(valor: string): boolean {
+  const d = somenteDigitos(valor)
+  if (d.length !== 14) return false
+  // Mesma recusa do backend: 00000000000000, 11111111111111, etc.
+  if (d === d[0].repeat(14)) return false
+  const base = d.slice(0, 12)
+  const comPrimeiro = base + digitoCnpj(base, CNPJ_PESOS_1)
+  return d === comPrimeiro + digitoCnpj(comPrimeiro, CNPJ_PESOS_2)
+}

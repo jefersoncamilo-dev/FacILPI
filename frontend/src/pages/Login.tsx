@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
@@ -89,7 +89,15 @@ export function Login() {
           <button disabled={loading} className="btn-primary w-full disabled:opacity-60">
             {loading ? 'Entrando...' : 'Entrar'}
           </button>
-          <p className="text-sm text-center text-textMuted">Não tem conta? <Link to="/register" className="text-primary font-semibold hover:underline">Cadastre-se</Link></p>
+          {/* PH-01: o convite "Cadastre-se" levava a /register, que chamava
+              POST /auth/register — desativado no backend (410
+              PUBLIC_REGISTER_DISABLED, main.py:103). O acesso ao FacILPI é
+              sempre provisionado: o operador da plataforma cria o primeiro
+              gestor, e a ILPI cria a própria equipe. Não há autocadastro a
+              oferecer, então a tela deixou de oferecer. */}
+          <p className="text-sm text-center text-textMuted">
+            O acesso é criado pela sua instituição. Procure o administrador da ILPI.
+          </p>
         </form>
       </div>
       <Modal open={open} onClose={() => setOpen(false)} title="Atenção">

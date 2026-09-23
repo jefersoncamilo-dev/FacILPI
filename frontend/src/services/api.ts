@@ -22,8 +22,8 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('facilpi_token')
       localStorage.removeItem('facilpi_user')
-      // evita loop se já em /login
-      if (window.location.pathname !== '/login' && window.location.pathname !== '/register') {
+      // evita loop se já em /login. `/register` saiu com a rota (PH-01).
+      if (window.location.pathname !== '/login') {
         window.location.href = '/login'
       }
     }

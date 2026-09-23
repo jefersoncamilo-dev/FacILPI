@@ -96,8 +96,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <span className="font-bold text-primaryDeep">FáciLPI</span>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => navigate('/plantao')} className="w-11 h-11 rounded-xl bg-primary text-white">🩺</button>
-            <button onClick={logout} className="w-11 h-11 rounded-full bg-primaryLight text-primary font-bold">{user?.nome?.[0] || 'U'}</button>
+            <button onClick={() => navigate('/plantao')} aria-label="Meu Plantão" className="w-11 h-11 rounded-xl bg-primary text-white">🩺</button>
+            {/* PH-01: este avatar ERA o botão de logout — sem rótulo, sem
+                confirmação. Tocar no próprio nome encerrava a sessão. Agora é
+                apenas identificação (não é botão), e sair tem ação explícita,
+                pelo mesmo `logout` do menu lateral. */}
+            <div
+              aria-hidden="true"
+              className="w-9 h-9 rounded-full bg-primaryLight text-primary font-bold flex items-center justify-center shrink-0"
+            >
+              {user?.nome?.[0]?.toUpperCase() || 'U'}
+            </div>
+            <button
+              onClick={logout}
+              className="min-h-[44px] px-3 rounded-xl bg-slate-900 text-white text-xs font-medium"
+            >
+              Sair
+            </button>
           </div>
         </header>
 

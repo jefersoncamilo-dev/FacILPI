@@ -12,19 +12,31 @@ type Stats = { residentes: number; ocupacao: string }
 export function Dashboard() {
   const [stats, setStats] = useState<Stats>({ residentes: 0, ocupacao: '—' })
   const [residentes, setResidentes] = useState<any[]>([])
+  // PH-01: o `.catch(() => ({ data: [] }))` anterior transformava 403 e falha de
+  // rede em "0 residentes" e "Ocupação 0%" — os mesmos números que uma ILPI
+  // recém-criada mostra legitimamente. A indisponibilidade passa a ser explícita,
+  // como já era para pendências e alertas.
+  const [residentesIndisponiveis, setResidentesIndisponiveis] = useState(false)
   const [pendencias, setPendencias] = useState<PlantaoItem[]>([])
   const [pendenciasIndisponiveis, setPendenciasIndisponiveis] = useState(false)
 
   useEffect(() => {
-    async function load() {
-      try {
-        const r = await api.get('/residentes/').catch(() => ({ data: [] }))
-        setResidentes((r.data || []).slice(0, 5))
-        const ocupacao = r.data?.length ? `${Math.min(100, Math.round((r.data.length / 40) * 100))}%` : '0%'
-        setStats({ residentes: r.data.length || 0, ocupacao })
-      } catch {}
-    }
-    load()
+    api.get('/residentes/')
+      .then(r => {
+        const lista = r.data || []
+        setResidentes(lista.slice(0, 5))
+        // Zero aqui é resultado legítimo: a consulta respondeu com lista vazia.
+        setStats({
+          residentes: lista.length,
+          ocupacao: `${Math.min(100, Math.round((lista.length / 40) * 100))}%`,
+        })
+        setResidentesIndisponiveis(false)
+      })
+      .catch(() => {
+        setResidentes([])
+        setStats({ residentes: 0, ocupacao: INDISPONIVEL })
+        setResidentesIndisponiveis(true)
+      })
   }, [])
 
   useEffect(() => {
@@ -45,8 +57,12 @@ export function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="card bg-gradient-to-br from-primary to-primaryDeep text-white border-0">
           <div className="text-sm opacity-90">Residentes ativos</div>
-          <div className="text-3xl font-bold mt-1">{stats.residentes}</div>
-          <div className="text-xs opacity-80 mt-2">Ocupação {stats.ocupacao}</div>
+          <div className="text-3xl font-bold mt-1">
+            {residentesIndisponiveis ? INDISPONIVEL : stats.residentes}
+          </div>
+          <div className="text-xs opacity-80 mt-2">
+            {residentesIndisponiveis ? 'Indisponível no momento' : `Ocupação ${stats.ocupacao}`}
+          </div>
         </div>
         <div className="card">
           <div className="text-sm text-textMuted">Pendências do turno</div>
@@ -75,7 +91,13 @@ export function Dashboard() {
             <h3 className="font-semibold">Residentes recentes</h3>
             <Link to="/residentes" className="text-sm text-primary font-semibold">Ver todos</Link>
           </div>
-          {residentes.length === 0 ? (
+          {residentesIndisponiveis ? (
+            <div className="py-10 text-center text-textMuted" role="alert">
+              <div className="text-4xl mb-2" aria-hidden="true">⚠️</div>
+              <p className="text-sm">Não foi possível carregar os residentes</p>
+              <p className="text-xs mt-1">Isso não significa que não há residentes cadastrados.</p>
+            </div>
+          ) : residentes.length === 0 ? (
             <div className="py-10 text-center text-textMuted">
               <div className="text-4xl mb-2">👥</div>
               <p className="text-sm">Nenhum residente cadastrado</p>

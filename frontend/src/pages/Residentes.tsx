@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, formatDate, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
@@ -9,12 +9,35 @@ export function Residentes() {
   const [form, setForm] = useState<any>({ nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M', situacao: 'Em admissao' })
   const [msg, setMsg] = useState('')
   const [q, setQ] = useState('')
+  // PH-01: antes `load()` não tinha catch. Um 403 (perfil sem `residentes:ler`,
+  // ou ILPI ainda em configuração) virava promise rejeitada em silêncio, a lista
+  // ficava vazia e a tela dizia "0 residentes" — afirmando como fato algo que
+  // nunca foi consultado com sucesso. Carregando, vazio legítimo, acesso negado
+  // e falha de consulta passam a ser quatro estados distintos.
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState('')
+  const [semPermissao, setSemPermissao] = useState(false)
 
-  async function load() {
-    const { data } = await api.get('/residentes/')
-    setItems(data)
-  }
-  useEffect(() => { load() }, [])
+  const load = useCallback(async () => {
+    setCarregando(true)
+    try {
+      const { data } = await api.get('/residentes/')
+      setItems(data || [])
+      setErro('')
+      setSemPermissao(false)
+    } catch (e) {
+      // Zera a lista junto com o erro: dado obsoleto ao lado de uma mensagem de
+      // falha é pior que nenhum dado.
+      setItems([])
+      const status = (e as { response?: { status?: number } })?.response?.status
+      setSemPermissao(status === 403)
+      setErro(mensagemDeErro(e, 'Não foi possível carregar os residentes.'))
+    } finally {
+      setCarregando(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -49,9 +72,35 @@ export function Residentes() {
 
       <div className="card p-3 flex gap-3">
         <input className="input flex-1" placeholder="Buscar por nome ou CPF..." value={q} onChange={e => setQ(e.target.value)} />
-        <span className="hidden sm:inline-flex items-center text-sm text-textMuted whitespace-nowrap">{filtered.length} residentes</span>
+        {/* A contagem só aparece quando houve consulta bem-sucedida. Enquanto
+            carrega ou depois de falhar, "0 residentes" seria uma afirmação
+            sobre dado que a tela não tem. */}
+        {!carregando && !erro && (
+          <span className="hidden sm:inline-flex items-center text-sm text-textMuted whitespace-nowrap">{filtered.length} residentes</span>
+        )}
       </div>
 
+      {carregando ? (
+        <div role="status" aria-live="polite" className="card py-16 text-center text-textMuted">
+          Carregando residentes…
+        </div>
+      ) : semPermissao ? (
+        <div className="card py-10 text-center" role="alert">
+          <div className="text-4xl mb-2" aria-hidden="true">🔒</div>
+          <p className="text-sm font-medium">Você não tem permissão para ver os residentes</p>
+          <p className="text-xs text-textMuted mt-1">
+            Isso também acontece quando a instituição ainda está em configuração. Fale com o
+            administrador da ILPI.
+          </p>
+        </div>
+      ) : erro ? (
+        <div className="card py-10 text-center" role="alert">
+          <div className="text-4xl mb-2" aria-hidden="true">⚠️</div>
+          <p className="text-sm text-danger font-medium">{erro}</p>
+          <p className="text-xs text-textMuted mt-1">Isso não significa que não há residentes cadastrados.</p>
+          <button onClick={load} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
+        </div>
+      ) : (
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(r => (
           // relative: é o bloco de contenção do overlay do link (after:inset-0). min-w-0 impede
@@ -90,8 +139,15 @@ export function Residentes() {
             </div>
           </div>
         ))}
-        {filtered.length===0 && <div className="col-span-full py-16 text-center text-textMuted card">Nenhum residente encontrado</div>}
+        {/* Vazio legítimo: a consulta teve sucesso e devolveu este resultado.
+            Distingue "não há cadastro" de "a busca não achou". */}
+        {filtered.length === 0 && (
+          <div className="col-span-full py-16 text-center text-textMuted card">
+            {items.length === 0 ? 'Nenhum residente cadastrado' : 'Nenhum residente encontrado para esta busca'}
+          </div>
+        )}
       </div>
+      )}
 
       <Modal open={open} onClose={() => setOpen(false)} title="Novo residente">
         <form onSubmit={handleSubmit} className="space-y-4">

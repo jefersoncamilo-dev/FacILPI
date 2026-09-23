@@ -4,7 +4,6 @@ import { Layout } from './components/Layout'
 import { PrivateRoute } from './components/PrivateRoute'
 import { Login } from './pages/Login'
 import { PrimeiroAcesso } from './pages/PrimeiroAcesso'
-import { Register } from './pages/Register'
 import { Dashboard } from './pages/Dashboard'
 import { Residentes } from './pages/Residentes'
 import { ResidenteProntuario } from './pages/ResidenteProntuario'
@@ -36,7 +35,6 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/primeiro-acesso" element={<PrivateRoute><PrimeiroAcesso /></PrivateRoute>} />
-          <Route path="/register" element={<Register />} />
           <Route path="/platform" element={<Navigate to="/platform/instituicoes" replace />} />
           <Route path="/platform/instituicoes" element={<Platform><PlatformInstituicoes /></Platform>} />
           <Route path="/platform/instituicoes/nova" element={<Platform><PlatformInstituicaoNova /></Platform>} />

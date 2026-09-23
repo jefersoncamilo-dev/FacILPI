@@ -105,3 +105,33 @@ describe('Dashboard — indisponibilidade nunca vira zero', () => {
     expect(screen.queryByText('Não foi possível carregar as pendências')).toBeNull()
   })
 })
+
+describe('Dashboard — residentes indisponíveis não viram zero (PH-01)', () => {
+  it('7. falha na consulta de residentes mostra traço, não 0', async () => {
+    mockGet.mockImplementation((url: string) =>
+      url === '/residentes/'
+        ? Promise.reject({ response: { status: 403, data: { detail: { message: 'Permissão não autorizada' } } } })
+        : Promise.resolve({ data: PENDENCIAS } as any),
+    )
+    renderDashboard()
+
+    const cartao = (await screen.findByText('Residentes ativos')).parentElement!
+    await waitFor(() => expect(cartao.textContent).toContain('—'))
+    expect(cartao.textContent).toContain('Indisponível no momento')
+    expect(cartao.textContent).not.toContain('Ocupação 0%')
+    expect(await screen.findByText('Não foi possível carregar os residentes')).toBeTruthy()
+    expect(screen.queryByText('Nenhum residente cadastrado')).toBeNull()
+  })
+
+  it('8. lista vazia legítima continua mostrando zero', async () => {
+    mockGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: url === '/residentes/' ? [] : PENDENCIAS } as any),
+    )
+    renderDashboard()
+
+    expect(await screen.findByText('Nenhum residente cadastrado')).toBeTruthy()
+    const cartao = screen.getByText('Residentes ativos').parentElement!
+    expect(cartao.textContent).toContain('Ocupação 0%')
+    expect(screen.queryByText('Não foi possível carregar os residentes')).toBeNull()
+  })
+})
