@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-Na criação deste documento, a linha integrada utilizada pelo projeto era `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `016_d3_admissao.py`. O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `020_documentos_admin_anexar`. O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -40,8 +40,30 @@ D.5 permanece posterior ao Prontuário. Deve consumir fontes oficiais/projeçõe
 ### Frontend
 Existe frontend funcional, mas a consolidação visual/mobile-first definitiva ainda é uma etapa posterior ao hardening do núcleo operacional. Não iniciar redesign amplo dentro de uma Issue backend.
 
+### Backup, cópia off-host e disaster recovery
+```
+OFF_HOST_COPY              = VERIFIED
+OFF_HOST_RECOVERY_CHAIN    = VERIFIED
+POSTGRES_DISASTER_RESTORE  = VERIFIED
+DISASTER_RECOVERY_OFF_HOST = VERIFIED
+BACKUP_DR                  = CLOSED
+READY_FOR_VPS              = YES
+```
+
+Provado de ponta a ponta com dados **sintéticos**, com o ambiente de origem destruído no meio do ensaio: `pg_dump -Fc` real → `age` → Backblaze B2 com Object Lock COMPLIANCE → verificação independente por credencial read-only separada → destruição da origem (containers e volumes em zero, payload local apagado) → recuperação **exclusivamente** off-host → `pg_restore` em PostgreSQL novo → validação pela aplicação: contagens iguais à linha de base, SHA-256 do anexo conferido contra `documentos.arquivo_hash`, download autenticado íntegro e token do ambiente anterior rejeitado.
+
+Ferramental: `ops/backup.sh`, `ops/restore.sh`, `ops/offhost_upload.sh`, `ops/offhost_verify.sh`, `ops/offhost_fetch.sh` e `ops/drill/*`, com suíte dirigida em `ops/offhost_test.sh`. Operação e custódia em `docs/RUNBOOK_BACKUP_RESTORE.md` e `docs/RUNBOOK_OFFHOST.md`.
+
+Pendências conhecidas desta frente, **nenhuma bloqueando a VPS**: lifecycle rule do bucket (GATE-5), instalação na VPS (GATE-7) e os testes negativos de `DeleteObject` do GATE-6, não executados porque DELETE permaneceu proibido em todos os gates.
+
 ### CI / cloud / produção
-Não assuma CI, homologação cloud ou produção como configurados/concluídos. Verifique a situação atual antes de qualquer ação operacional.
+O CI do GitHub Actions está configurado e é a validação integrada autoritativa: três jobs — `Frontend (testes, TypeScript, build)`, `Backend (SQLite)` e `Backend (PostgreSQL)`. Homologação cloud e produção **não** estão configuradas; a VPS é a próxima frente. Verifique a situação atual antes de qualquer ação operacional.
+
+```
+FEATURE_FREEZE = ACTIVE
+PILOT_GO       = NOT_EVALUATED
+REAL_DATA      = BLOCKED
+```
 
 ## Documentos históricos
 
