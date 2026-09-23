@@ -349,6 +349,19 @@ fi
 # ops/offhost_verify.sh, com a credencial read-only separada.
 VERSION_ID="$(printf '%s' "$RESPOSTA" | awk '{print $1}')"
 ETAG_RESPOSTA="$(printf '%s' "$RESPOSTA" | awk '{print $2}')"
+# O `--output text` entrega o ETag com as aspas do proprio protocolo S3
+# (ex.: "96ec...438f"). Interpolar isso direto no JSON do pendente produziria
+# ""96ec...438f"" e o arquivo deixaria de ser JSON valido. As aspas sao
+# sintaxe de transporte e nao fazem parte do valor: um ETag e hexadecimal,
+# com sufixo -N quando multipart. Remover aspas e barras invertidas normaliza
+# o valor sem perder nada que pertenca a um ETag real, e mantem o pendente
+# valido por construcao — sem precisar de um serializador JSON aqui.
+#
+# Whitelist em vez de blacklist: um ETag legitimo e hexadecimal, com sufixo
+# -N quando multipart. Manter apenas [A-Za-z0-9._:-] preserva o valor inteiro
+# e descarta aspas, barras invertidas e qualquer outro caractere hostil ao
+# JSON, sem depender das regras de escape do proprio `tr`.
+ETAG_RESPOSTA="$(printf '%s' "$ETAG_RESPOSTA" | tr -cd 'A-Za-z0-9._:-')"
 echo "      version_id=$VERSION_ID"
 
 # --- [5/5] registrando estado PENDENTE ----------------------------------------
