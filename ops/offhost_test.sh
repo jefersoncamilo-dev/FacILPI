@@ -19,6 +19,7 @@ VERIFY_SH="$RAIZ/ops/offhost_verify.sh"
 
 FALHAS=0
 TOTAL=0
+IGNORADOS=0
 
 registrar() {
     TOTAL=$((TOTAL + 1))
@@ -28,6 +29,16 @@ registrar() {
         echo "FAIL  $2"
         FALHAS=$((FALHAS + 1))
     fi
+}
+
+# SKIP existe para um caso so: teste que depende de uma caracteristica da
+# PLATAFORMA (a dualidade de caminho MSYS <-> Windows) que simplesmente nao
+# existe em Linux. Nunca serve para esconder falha — aparece no resumo com
+# nome proprio e jamais conta como PASS.
+registrar_skip() {
+    TOTAL=$((TOTAL + 1))
+    IGNORADOS=$((IGNORADOS + 1))
+    echo "SKIP  $2  ($1)"
 }
 
 # --- area de trabalho isolada, fora do repositorio -----------------------------
@@ -58,6 +69,37 @@ if [ "$1" != "run" ]; then
 fi
 shift
 
+# Simula como o Docker resolve o SOURCE de um bind mount.
+#
+#   linux : o texto recebido ja e um caminho do host; vale como veio.
+#   msys  : simula Docker Desktop no Windows. Forma Windows (X:/...) e forma
+#           /x/... sao mapeadas para o disco real, que o shell do host tambem
+#           enxerga. Qualquer OUTRO caminho absoluto (ex.: /tmp/... interno do
+#           MSYS) e resolvido DENTRO da VM Linux do Docker e fica INVISIVEL
+#           para o shell do host — que foi exatamente a falha do GATE-3Y.
+resolver_mount() {
+    CAMINHO="$1"
+    case "${FAKE_DOCKER_PATH_MODE:-linux}" in
+        msys)
+            case "$CAMINHO" in
+                [A-Za-z]:/*)
+                    LETRA="$(printf '%s' "$CAMINHO" | cut -c1 | tr 'A-Z' 'a-z')"
+                    printf '/%s%s' "$LETRA" "$(printf '%s' "$CAMINHO" | cut -c3-)"
+                    ;;
+                /[A-Za-z]/*)
+                    printf '%s' "$CAMINHO"
+                    ;;
+                *)
+                    printf '%s' "${FAKE_VM_DIR:?FAKE_VM_DIR e obrigatorio no modo msys}"
+                    ;;
+            esac
+            ;;
+        *)
+            printf '%s' "$CAMINHO"
+            ;;
+    esac
+}
+
 HOSTDIR=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -65,12 +107,23 @@ while [ $# -gt 0 ]; do
         -i) shift ;;
         -e) shift 2 ;;
         -v)
-            HOSTDIR="${2%%:*}"
+            # "<origem>:/dados[:ro]" — a origem pode conter ':' quando e
+            # caminho Windows (C:/...), entao corta pelo ULTIMO ':', jamais
+            # pelo primeiro.
+            MONTE="${2%:ro}"
+            HOSTDIR="${MONTE%:*}"
             shift 2
             ;;
         *) break ;;
     esac
 done
+
+# Registra o que o script REALMENTE entregou ao docker em `-v`, para que os
+# testes possam afirmar sobre isso sem depender do diretorio temporario
+# interno do script (que e removido pelo trap).
+if [ -n "${FAKE_MOUNT_LOG:-}" ] && [ -n "$HOSTDIR" ]; then
+    printf '%s\n' "$HOSTDIR" >> "$FAKE_MOUNT_LOG"
+fi
 
 IMAGE="$1"; shift
 FERRAMENTA="$1"; shift
@@ -148,7 +201,8 @@ case "$FERRAMENTA" in
                 for ARG in "$@"; do
                     DESTINO="$ARG"
                 done
-                DESTINO_REAL="$HOSTDIR/$(basename "$DESTINO")"
+                DESTINO_REAL="$(resolver_mount "$HOSTDIR")/$(basename "$DESTINO")"
+                mkdir -p "$(dirname "$DESTINO_REAL")"
                 # Copia de ARQUIVO (nunca via variavel de shell): variaveis de
                 # shell/`$()` corrompem bytes NUL, e o artefato cifrado (mesmo
                 # o falso) e binario. FAKE_GETOBJECT_SOURCE aponta pro arquivo
@@ -213,6 +267,52 @@ OFFHOST_IMAGE=facilpi-fake/offhost:test
 B2_KEY_ID=FAKEVERIFYKEYID
 B2_APP_KEY=FAKEVERIFYAPPKEYVALUE
 ENV
+}
+
+# --- capacidades desta maquina -------------------------------------------------
+# Esta plataforma tem a dualidade de caminho MSYS <-> Windows? Em Git Bash,
+# `pwd -W` devolve a forma Windows do diretorio atual; em Linux o builtin nao
+# aceita -W e falha. E exatamente a checagem que ops/offhost_verify.sh faz,
+# entao o teste exercita o mesmo caminho de codigo que roda nesta maquina.
+if CAMINHO_PROVA="$(cd "$AREA" && pwd -W 2>/dev/null)" && [ -n "$CAMINHO_PROVA" ]; then
+    PLATAFORMA_MSYS=1
+else
+    PLATAFORMA_MSYS=0
+fi
+
+# Validador de JSON de verdade: o pendente precisa ser JSON valido, e um grep
+# nao prova isso. Sem parser disponivel o teste vira SKIP explicito — nunca
+# PASS silencioso.
+VALIDADOR_JSON=""
+for CANDIDATO in python node python3; do
+    if command -v "$CANDIDATO" >/dev/null 2>&1; then
+        VALIDADOR_JSON="$CANDIDATO"
+        break
+    fi
+done
+
+# O arquivo entra por STDIN, nunca por caminho: em Git Bash o `python`/`node`
+# encontrado no PATH costuma ser o binario NATIVO do Windows, que nao resolve
+# um caminho MSYS como /tmp/... — a mesma dualidade de caminho que causou o
+# GATE-3Y. Redirecionar deixa o shell abrir o arquivo e entregar o descritor
+# ja aberto, e o validador funciona igual nos dois sistemas.
+json_valido() {
+    case "$VALIDADOR_JSON" in
+        python|python3)
+            "$VALIDADOR_JSON" -c 'import json,sys; json.load(sys.stdin)' < "$1" >/dev/null 2>&1 ;;
+        node)
+            "$VALIDADOR_JSON" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{JSON.parse(s)})' < "$1" >/dev/null 2>&1 ;;
+        *) return 2 ;;
+    esac
+}
+
+json_campo() {
+    case "$VALIDADOR_JSON" in
+        python|python3)
+            "$VALIDADOR_JSON" -c 'import json,sys; sys.stdout.write(str(json.load(sys.stdin)[sys.argv[1]]))' "$2" < "$1" 2>/dev/null ;;
+        node)
+            "$VALIDADOR_JSON" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{process.stdout.write(String(JSON.parse(s)[process.argv[1]]))})' "$2" < "$1" 2>/dev/null ;;
+    esac
 }
 
 # ============================================================================
@@ -408,7 +508,187 @@ RC_T13=0
 { [ "$RC13" -eq 0 ] && printf '%s' "$OUT13" | grep -q "DRY RUN"; } || RC_T13=1
 registrar "$RC_T13" "13: --dry-run funciona sem docker no PATH (sem rede, sem credencial)"
 
+# ============================================================================
+# TESTE 14/15/16 — contrato de PATH do bind mount (regressao do GATE-3Y)
+#
+# No GATE-3Y o verify falhou em Windows + Git Bash + Docker Desktop: `mktemp`
+# devolve /tmp/... (caminho interno do MSYS) e, com MSYS_NO_PATHCONV=1, esse
+# texto chegava cru ao docker, que o resolvia DENTRO da propria VM. O
+# GetObject gravava num diretorio invisivel ao host, o sha256sum seguinte nao
+# achava arquivo nenhum, e um objeto remoto INTEGRO era reprovado.
+#
+# `resolver_mount` (modo msys) reproduz essa semantica sem Docker e sem B2.
+# O teste 14 prova que o FIXTURE reproduz mesmo a falha — sem esse controle
+# negativo, 15 e 16 poderiam passar por nao testarem nada.
+# ============================================================================
+TAB="$(printf '\t')"
+
+if [ "$PLATAFORMA_MSYS" -eq 1 ]; then
+    # --- 14: controle negativo -------------------------------------------------
+    D14="$AREA/t14"; mkdir -p "$D14/msys" "$D14/vm"
+    unset FAKE_GETOBJECT_SOURCE
+    RC_T14=0
+    FAKE_DOCKER_PATH_MODE=msys \
+    FAKE_VM_DIR="$D14/vm" \
+    FAKE_GETOBJECT_STATUS=0 \
+    FAKE_GETOBJECT_CONTENT="conteudo-que-o-host-nao-pode-enxergar" \
+        docker run --rm -v "$D14/msys:/dados" imagem-falsa \
+        aws s3api get-object /dados/artefato.tar.age >/dev/null 2>&1 || RC_T14=1
+    { [ "$RC_T14" -eq 0 ] \
+        && [ ! -f "$D14/msys/artefato.tar.age" ] \
+        && [ -f "$D14/vm/artefato.tar.age" ]; } || RC_T14=1
+    registrar "$RC_T14" "14: fixture reproduz o GATE-3Y — caminho MSYS cru cai na VM, invisivel ao host"
+
+    # --- 15/16: o verify corrigido entrega um caminho que o Docker resolve
+    #            para o MESMO diretorio que o shell le ------------------------
+    D16="$AREA/t16"; mkdir -p "$D16"
+    criar_pacote "$D16/facilpi-backup-20260104T000000Z"
+    criar_env_upload "$D16/env.upload"
+    criar_env_verify "$D16/env.verify"
+    export FAKE_DOCKER_PATH_MODE=linux
+    export FAKE_PUT_STATUS=0
+    export FAKE_PUT_OUTPUT="ver-id-16${TAB}etag-16"
+    sh "$UPLOAD_SH" -b "$D16/facilpi-backup-20260104T000000Z" -e "$D16/env.upload" -c daily >/dev/null 2>&1
+
+    PENDENTE16="$D16/facilpi-backup-20260104T000000Z.offhost_pending.json"
+    ARTEFATO16="$D16/facilpi-backup-20260104T000000Z.tar.age"
+    SHA16="$(sed -n 's/.*"encrypted_artifact_sha256": *"\([^"]*\)".*/\1/p' "$PENDENTE16")"
+    RECIPIENT16="$(sed -n 's/.*"encryption_recipient": *"\([^"]*\)".*/\1/p' "$PENDENTE16")"
+    PACKAGE16="$(sed -n 's/.*"package_name": *"\([^"]*\)".*/\1/p' "$PENDENTE16")"
+    RETAIN16="$(sed -n 's/.*"expected_retain_until": *"\([^"]*\)".*/\1/p' "$PENDENTE16")"
+    BYTES16="$(wc -c < "$ARTEFATO16" | tr -d ' ')"
+
+    export FAKE_RETENTION_STATUS=0
+    export FAKE_RETENTION_OUTPUT="COMPLIANCE${TAB}$RETAIN16"
+    export FAKE_HEAD_STATUS=0
+    export FAKE_HEAD_OUTPUT="$BYTES16${TAB}ver-id-16${TAB}fake-checksum"
+    export FAKE_HEAD_META_SHA="$SHA16"
+    export FAKE_HEAD_META_RECIPIENT="$RECIPIENT16"
+    export FAKE_HEAD_META_PACKAGE="$PACKAGE16"
+    export FAKE_GETOBJECT_STATUS=0
+    unset FAKE_GETOBJECT_CONTENT
+    export FAKE_GETOBJECT_SOURCE="$ARTEFATO16"
+
+    LOG16="$AREA/mount16.log"
+    : > "$LOG16"
+    export FAKE_MOUNT_LOG="$LOG16"
+    export FAKE_DOCKER_PATH_MODE=msys
+    export FAKE_VM_DIR="$AREA/t16vm"
+    mkdir -p "$FAKE_VM_DIR"
+
+    set +e
+    OUT16="$(sh "$VERIFY_SH" -p "$PENDENTE16" -e "$D16/env.verify" 2>&1)"
+    RC16=$?
+    set -e
+    echo "$OUT16" > "$AREA/t16.out"
+
+    unset FAKE_MOUNT_LOG FAKE_VM_DIR
+    export FAKE_DOCKER_PATH_MODE=linux
+
+    RC_T15=0
+    grep -qE '^[A-Za-z]:/' "$LOG16" || RC_T15=1
+    registrar "$RC_T15" "15: verify entrega ao docker a forma Windows (X:/...) do diretorio temporario"
+
+    RC_T16=0
+    { [ "$RC16" -eq 0 ] \
+        && printf '%s' "$OUT16" | grep -q "VERIFIED" \
+        && [ -f "$D16/facilpi-backup-20260104T000000Z.uploaded" ]; } || RC_T16=1
+    registrar "$RC_T16" "16: sob simulacao MSYS+Docker Desktop, host acha o download, SHA-256 confere e verify chega a VERIFIED"
+else
+    registrar_skip "plataforma sem dualidade MSYS<->Windows" "14: fixture reproduz o GATE-3Y"
+    registrar_skip "plataforma sem dualidade MSYS<->Windows" "15: verify entrega a forma Windows ao docker"
+    registrar_skip "plataforma sem dualidade MSYS<->Windows" "16: sob simulacao MSYS, verify chega a VERIFIED"
+fi
+
+# ============================================================================
+# TESTE 17 — caminho Linux (mount identidade) continua funcionando
+# ============================================================================
+D17="$AREA/t17"; mkdir -p "$D17"
+criar_pacote "$D17/facilpi-backup-20260105T000000Z"
+criar_env_upload "$D17/env.upload"
+criar_env_verify "$D17/env.verify"
+export FAKE_DOCKER_PATH_MODE=linux
+export FAKE_PUT_STATUS=0
+export FAKE_PUT_OUTPUT="ver-id-17${TAB}etag-17"
+sh "$UPLOAD_SH" -b "$D17/facilpi-backup-20260105T000000Z" -e "$D17/env.upload" -c daily >/dev/null 2>&1
+
+PENDENTE17="$D17/facilpi-backup-20260105T000000Z.offhost_pending.json"
+ARTEFATO17="$D17/facilpi-backup-20260105T000000Z.tar.age"
+SHA17="$(sed -n 's/.*"encrypted_artifact_sha256": *"\([^"]*\)".*/\1/p' "$PENDENTE17")"
+RECIPIENT17="$(sed -n 's/.*"encryption_recipient": *"\([^"]*\)".*/\1/p' "$PENDENTE17")"
+PACKAGE17="$(sed -n 's/.*"package_name": *"\([^"]*\)".*/\1/p' "$PENDENTE17")"
+RETAIN17="$(sed -n 's/.*"expected_retain_until": *"\([^"]*\)".*/\1/p' "$PENDENTE17")"
+BYTES17="$(wc -c < "$ARTEFATO17" | tr -d ' ')"
+
+export FAKE_RETENTION_STATUS=0
+export FAKE_RETENTION_OUTPUT="COMPLIANCE${TAB}$RETAIN17"
+export FAKE_HEAD_STATUS=0
+export FAKE_HEAD_OUTPUT="$BYTES17${TAB}ver-id-17${TAB}fake-checksum"
+export FAKE_HEAD_META_SHA="$SHA17"
+export FAKE_HEAD_META_RECIPIENT="$RECIPIENT17"
+export FAKE_HEAD_META_PACKAGE="$PACKAGE17"
+export FAKE_GETOBJECT_STATUS=0
+unset FAKE_GETOBJECT_CONTENT
+export FAKE_GETOBJECT_SOURCE="$ARTEFATO17"
+
+set +e
+OUT17="$(sh "$VERIFY_SH" -p "$PENDENTE17" -e "$D17/env.verify" 2>&1)"
+RC17=$?
+set -e
+echo "$OUT17" > "$AREA/t17.out"
+RC_T17=0
+{ [ "$RC17" -eq 0 ] \
+    && printf '%s' "$OUT17" | grep -q "VERIFIED" \
+    && [ -f "$D17/facilpi-backup-20260105T000000Z.uploaded" ]; } || RC_T17=1
+registrar "$RC_T17" "17: caminho Linux (mount identidade) chega a VERIFIED"
+
+# ============================================================================
+# TESTE 18 — o pendente gerado pelo uploader e JSON valido de verdade
+# ============================================================================
+if [ -n "$VALIDADOR_JSON" ]; then
+    RC_T18=0
+    json_valido "$PENDENTE1" || RC_T18=1
+    registrar "$RC_T18" "18: estado pendente gerado pelo uploader e JSON valido ($VALIDADOR_JSON)"
+else
+    registrar_skip "sem parser JSON (python/node) no PATH" "18: estado pendente e JSON valido"
+fi
+
+# ============================================================================
+# TESTE 19/20 — ETag com aspas (o que o `aws --output text` devolve de fato)
+#
+# No GATE-3Y o PUT real retornou o ETag entre aspas e o pendente saiu com
+# "put_etag": ""96ec...438f"" — JSON invalido naquela linha. O uploader
+# normaliza removendo aspas/barras (sintaxe de transporte do S3, nao parte do
+# valor), mantendo o campo recuperavel.
+# ============================================================================
+D19="$AREA/t19"; mkdir -p "$D19"
+criar_pacote "$D19/facilpi-backup-20260106T000000Z"
+criar_env_upload "$D19/env.upload"
+export FAKE_DOCKER_PATH_MODE=linux
+export FAKE_PUT_STATUS=0
+export FAKE_PUT_OUTPUT="ver-id-19${TAB}\"deadbeefcafef00dfeedfacedecafbad\""
+sh "$UPLOAD_SH" -b "$D19/facilpi-backup-20260106T000000Z" -e "$D19/env.upload" -c daily >/dev/null 2>&1
+PENDENTE19="$D19/facilpi-backup-20260106T000000Z.offhost_pending.json"
+
+if [ -n "$VALIDADOR_JSON" ]; then
+    RC_T19=0
+    json_valido "$PENDENTE19" || RC_T19=1
+    registrar "$RC_T19" "19: ETag com aspas ainda produz pendente JSON valido"
+
+    RC_T20=0
+    ETAG_LIDO="$(json_campo "$PENDENTE19" put_etag)" || ETAG_LIDO=""
+    [ "$ETAG_LIDO" = "deadbeefcafef00dfeedfacedecafbad" ] || RC_T20=1
+    registrar "$RC_T20" "20: put_etag e recuperado normalizado, sem aspas e sem perder o valor"
+else
+    registrar_skip "sem parser JSON (python/node) no PATH" "19: ETag com aspas produz JSON valido"
+    registrar_skip "sem parser JSON (python/node) no PATH" "20: put_etag recuperado normalizado"
+fi
+
 # --- resumo -----------------------------------------------------------------
 echo ""
-echo "=== $((TOTAL - FALHAS))/$TOTAL PASS ==="
+if [ "$IGNORADOS" -gt 0 ]; then
+    echo "=== $((TOTAL - FALHAS - IGNORADOS))/$TOTAL PASS, $IGNORADOS SKIP, $FALHAS FAIL ==="
+else
+    echo "=== $((TOTAL - FALHAS))/$TOTAL PASS ==="
+fi
 [ "$FALHAS" -eq 0 ]

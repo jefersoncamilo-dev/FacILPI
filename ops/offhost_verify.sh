@@ -118,9 +118,33 @@ fi
 
 # Diretorio temporario SO para o download de verificacao — nunca o diretorio
 # do pacote original. Removido no fim, sucesso ou falha.
+#
+# Dois nomes de proposito, porque nem sempre sao o mesmo texto:
+#   TEMP_DIR        — como o SHELL do host enxerga (sha256sum, cat, rm);
+#   TEMP_DIR_MONTE  — como o DOCKER deve receber em `-v`.
+#
+# Em Linux sao identicos. Em Git Bash/MSYS + Docker Desktop NAO sao: `mktemp`
+# devolve /tmp/... , que e caminho interno do MSYS, e com MSYS_NO_PATHCONV=1
+# esse texto chega cru ao `docker`, que o resolve dentro da PROPRIA VM Linux.
+# O GetObject grava entao num diretorio que o host nunca enxerga, e o
+# sha256sum seguinte nao acha arquivo nenhum — foi a falha do GATE-3Y, que
+# reprovou um objeto remoto integro. `pwd -W` (builtin do MSYS) devolve a
+# forma Windows (C:/...), que o Docker Desktop mapeia para o MESMO diretorio
+# que o shell le. Em Linux `pwd -W` nao existe, a conversao simplesmente nao
+# acontece e o caminho original continua valendo — sem dependencia nova em
+# nenhum dos dois sistemas.
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/facilpi-offhost-verify.XXXXXX")"
 limpar() { rm -rf -- "$TEMP_DIR"; }
 trap limpar EXIT INT TERM
+
+TEMP_DIR_MONTE="$TEMP_DIR"
+if CAMINHO_WINDOWS="$(cd "$TEMP_DIR" && pwd -W 2>/dev/null)"; then
+    # So aceita a conversao se ela devolveu mesmo uma forma Windows (X:/...).
+    # Qualquer outra coisa mantem o caminho original, fail-safe.
+    case "$CAMINHO_WINDOWS" in
+        ?:/*) TEMP_DIR_MONTE="$CAMINHO_WINDOWS" ;;
+    esac
+fi
 
 # Filtro opcional de versao. Se o pendente nao capturou um VersionId (nao
 # deveria acontecer — a Backblaze documenta que PutObject sempre o retorna
@@ -142,7 +166,7 @@ executar_aws() {
         -e AWS_ACCESS_KEY_ID \
         -e AWS_SECRET_ACCESS_KEY \
         -e AWS_DEFAULT_REGION \
-        -v "$TEMP_DIR:/dados" \
+        -v "$TEMP_DIR_MONTE:/dados" \
         "$OFFHOST_IMAGE" \
         aws "$@"
 }
