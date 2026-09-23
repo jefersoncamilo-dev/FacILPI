@@ -36,6 +36,25 @@ exibiria como documento quebrado.
 
 Por isso o piloto **não precisa de janela de manutenção** para fazer backup.
 
+### Barreiras fail-closed do backup
+
+Antes de gerar o manifesto, `ops/backup.sh` reprova o pacote se:
+
+| Checagem | Por quê |
+|---|---|
+| `database.dump` não começa com `PGDMP` | não é um archive `pg_dump -Fc` |
+| `pg_restore --list` recusa o archive | existe, mas está truncado ou ilegível |
+| `alembic_version` vazio | sem `alembic_head` a conferência do restore vira teatro |
+
+Isso não é zelo abstrato. No GATE-3Y um pacote cujo `database.dump` era texto
+comum foi cifrado, enviado ao B2 e **travado por Object Lock Compliance** — o
+erro só apareceria no dia da recuperação, e o objeto não podia mais ser apagado.
+Duas checagens baratas, no lugar certo, custam menos que um ano de armazenamento
+irreversível.
+
+`ops/restore.sh` repete as duas primeiras barreiras **antes** do `pg_restore`:
+um pacote que não pode ser validado não chega a tocar o banco.
+
 ## Restore — sempre em ambiente NOVO
 
 ```bash

@@ -16,6 +16,9 @@ export MSYS_NO_PATHCONV=1
 RAIZ="$(cd "$(dirname "$0")/.." && pwd)"
 UPLOAD_SH="$RAIZ/ops/offhost_upload.sh"
 VERIFY_SH="$RAIZ/ops/offhost_verify.sh"
+FETCH_SH="$RAIZ/ops/offhost_fetch.sh"
+BACKUP_SH="$RAIZ/ops/backup.sh"
+RESTORE_SH="$RAIZ/ops/restore.sh"
 
 FALHAS=0
 TOTAL=0
@@ -63,6 +66,58 @@ if [ "$1" = "image" ] && [ "$2" = "inspect" ]; then
     exit 0
 fi
 
+# --- `docker compose exec -T db ...` -------------------------------------------
+# ops/backup.sh e ops/restore.sh falam com o PostgreSQL por aqui. Mockar isso e
+# o que permite testar os dois scripts sem subir banco nenhum — inclusive as
+# barreiras fail-closed que reprovam um dump que nao e custom format.
+if [ "$1" = "compose" ]; then
+    while [ $# -gt 0 ] && [ "$1" != "exec" ]; do shift; done
+    [ "$1" = "exec" ] && shift
+    [ "$1" = "-T" ] && shift
+    shift                      # nome do servico (db)
+    FERRAMENTA_PG="$1"; shift
+    case "$FERRAMENTA_PG" in
+        pg_dump)
+            # `texto` reproduz o erro do GATE-3Y: parece backup, nao e archive.
+            if [ "${FAKE_PGDUMP_MODE:-custom}" = "texto" ]; then
+                printf -- '-- isto NAO e um archive pg_dump -Fc\n'
+            else
+                printf 'PGDMP%s' "${FAKE_PGDUMP_CORPO:--corpo-sintetico-do-archive}"
+            fi
+            exit 0
+            ;;
+        pg_restore)
+            CORPO_ARCHIVE="$(cat)"
+            case "$*" in
+                *--list*)
+                    case "$CORPO_ARCHIVE" in
+                        PGDMP*) exit 0 ;;
+                        *) echo "pg_restore: input nao e custom format" >&2; exit 1 ;;
+                    esac
+                    ;;
+                *)
+                    # Marca que o BANCO foi tocado — os testes provam que as
+                    # barreiras do restore param ANTES disto.
+                    if [ -n "${FAKE_PGRESTORE_CHAMADO:-}" ]; then
+                        : > "$FAKE_PGRESTORE_CHAMADO"
+                    fi
+                    exit "${FAKE_PGRESTORE_STATUS:-0}"
+                    ;;
+            esac
+            ;;
+        psql)
+            case "$*" in
+                *server_version*)  printf '%s\n' "${FAKE_PG_VERSION:-16.4}" ;;
+                *alembic_version*) printf '%s\n' "${FAKE_ALEMBIC_HEAD-020_documentos_admin_anexar}" ;;
+                *)                 printf '\n' ;;
+            esac
+            exit 0
+            ;;
+    esac
+    echo "fake-docker: compose/$FERRAMENTA_PG nao mockado" >&2
+    exit 95
+fi
+
 if [ "$1" != "run" ]; then
     echo "fake-docker: comando nao mockado: $*" >&2
     exit 90
@@ -100,42 +155,119 @@ resolver_mount() {
     esac
 }
 
+# O shim usa o caminho resolvido para MEXER no sistema de arquivos, e para isso
+# precisa da forma que o SHELL entende. Um mount em forma Windows (C:/...) e
+# perfeitamente valido para o Docker — mas o `tar` do MSYS leria "C:" como nome
+# de host remoto ("Cannot connect to C:"). Traduzir aqui e o que mantem o
+# fixture fiel nos dois modos: o Docker real aceita as duas formas, o shim
+# tambem precisa aceitar.
+caminho_do_shell() {
+    case "$1" in
+        [A-Za-z]:/*)
+            LETRA_S="$(printf '%s' "$1" | cut -c1 | tr 'A-Z' 'a-z')"
+            printf '/%s%s' "$LETRA_S" "$(printf '%s' "$1" | cut -c3-)"
+            ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# Resolve o mount como o Docker faria E devolve no formato que o shell usa.
+resolver_para_shell() {
+    caminho_do_shell "$(resolver_mount "$1")"
+}
+
 HOSTDIR=""
+MONTE_DADOS=""
+MONTE_CHAVE=""
+MONTE_SAIDA=""
+MONTE_ENTRADA=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --rm) shift ;;
         -i) shift ;;
         -e) shift 2 ;;
         -v)
-            # "<origem>:/dados[:ro]" — a origem pode conter ':' quando e
+            # "<origem>:<alvo>[:ro]" — a origem pode conter ':' quando e
             # caminho Windows (C:/...), entao corta pelo ULTIMO ':', jamais
-            # pelo primeiro.
+            # pelo primeiro. O fetch monta DOIS volumes (/dados e /chave),
+            # entao cada um e guardado pelo seu alvo.
             MONTE="${2%:ro}"
-            HOSTDIR="${MONTE%:*}"
+            ORIGEM="${MONTE%:*}"
+            ALVO="${MONTE##*:}"
+            case "$ALVO" in
+                /dados)   MONTE_DADOS="$ORIGEM" ;;
+                /chave)   MONTE_CHAVE="$ORIGEM" ;;
+                /saida)   MONTE_SAIDA="$ORIGEM" ;;
+                /entrada) MONTE_ENTRADA="$ORIGEM" ;;
+            esac
+            HOSTDIR="$ORIGEM"
+            # Registra o que o script REALMENTE entregou em `-v`, para que os
+            # testes possam afirmar sobre isso sem depender do diretorio
+            # interno do script (removido pelo trap).
+            if [ -n "${FAKE_MOUNT_LOG:-}" ]; then
+                printf '%s %s\n' "$ALVO" "$ORIGEM" >> "$FAKE_MOUNT_LOG"
+            fi
             shift 2
             ;;
         *) break ;;
     esac
 done
 
-# Registra o que o script REALMENTE entregou ao docker em `-v`, para que os
-# testes possam afirmar sobre isso sem depender do diretorio temporario
-# interno do script (que e removido pelo trap).
-if [ -n "${FAKE_MOUNT_LOG:-}" ] && [ -n "$HOSTDIR" ]; then
-    printf '%s\n' "$HOSTDIR" >> "$FAKE_MOUNT_LOG"
-fi
-
 IMAGE="$1"; shift
 FERRAMENTA="$1"; shift
 
 case "$FERRAMENTA" in
     age)
-        # Cifrador falso deterministico: prefixo fixo + o stdin, sem
-        # criptografia real. O upload real usa a imagem de verdade; isto so
-        # testa o FLUXO do script (tamanho, sha256, PENDENTE), nao o age em si
-        # (o age em si ja foi validado no round-trip da reconciliacao).
-        printf 'FAKEAGE-CIPHERTEXT:'
-        cat
+        # Cifrador/decifrador falso deterministico: prefixo fixo + conteudo,
+        # sem criptografia real. O fluxo real usa a imagem de verdade; isto so
+        # testa o CONTRATO dos scripts (tamanho, sha256, montagens, estados),
+        # nao o age em si — que ja foi validado em round-trip proprio.
+        #
+        #   cifra   (upload): `age -r <recipient>`        le stdin, escreve stdout
+        #   decifra (fetch) : `age -d -i <id> <arquivo>`  le ARQUIVO, escreve stdout
+        #
+        # A decifra e o que exercita os DOIS mounts do fetch: a identidade
+        # precisa estar alcancavel por /chave e o artefato por /dados. Se
+        # qualquer um dos dois nao resolver para um diretorio que o host
+        # enxerga, este shim falha — que e exatamente o defeito do GATE-3Y.
+        MODO_DECIFRA=0
+        IDENTIDADE_ARG=""
+        ENTRADA_ARG=""
+        PROXIMO=""
+        for ARG in "$@"; do
+            if [ "$PROXIMO" = "i" ]; then IDENTIDADE_ARG="$ARG"; PROXIMO=""; continue; fi
+            if [ "$PROXIMO" = "r" ]; then PROXIMO=""; continue; fi
+            case "$ARG" in
+                -d) MODO_DECIFRA=1 ;;
+                -i) PROXIMO="i" ;;
+                -r) PROXIMO="r" ;;
+                -*) ;;
+                *) ENTRADA_ARG="$ARG" ;;
+            esac
+        done
+
+        if [ "$MODO_DECIFRA" -eq 0 ]; then
+            printf 'FAKEAGE-CIPHERTEXT:'
+            cat
+            exit 0
+        fi
+
+        IDENTIDADE_REAL="$(resolver_para_shell "$MONTE_CHAVE")/$(basename "$IDENTIDADE_ARG")"
+        if [ ! -f "$IDENTIDADE_REAL" ]; then
+            echo "fake-age: identidade inalcancavel pelo mount /chave: $IDENTIDADE_ARG" >&2
+            exit 93
+        fi
+        ENTRADA_REAL="$(resolver_para_shell "$MONTE_DADOS")/$(basename "$ENTRADA_ARG")"
+        if [ ! -f "$ENTRADA_REAL" ]; then
+            echo "fake-age: artefato inalcancavel pelo mount /dados: $ENTRADA_ARG" >&2
+            exit 94
+        fi
+        # "FAKEAGE-CIPHERTEXT:" tem 19 bytes; o texto claro comeca no 20.
+        if [ "$(head -c 19 "$ENTRADA_REAL")" != "FAKEAGE-CIPHERTEXT:" ]; then
+            echo "fake-age: nao e um artefato deste cifrador (chave errada?)" >&2
+            exit 1
+        fi
+        tail -c +20 "$ENTRADA_REAL"
         exit 0
         ;;
     aws)
@@ -201,7 +333,7 @@ case "$FERRAMENTA" in
                 for ARG in "$@"; do
                     DESTINO="$ARG"
                 done
-                DESTINO_REAL="$(resolver_mount "$HOSTDIR")/$(basename "$DESTINO")"
+                DESTINO_REAL="$(resolver_para_shell "${MONTE_DADOS:-$HOSTDIR}")/$(basename "$DESTINO")"
                 mkdir -p "$(dirname "$DESTINO_REAL")"
                 # Copia de ARQUIVO (nunca via variavel de shell): variaveis de
                 # shell/`$()` corrompem bytes NUL, e o artefato cifrado (mesmo
@@ -219,6 +351,41 @@ case "$FERRAMENTA" in
                 exit 91
                 ;;
         esac
+        ;;
+    tar)
+        # ops/backup.sh: snapshot dos anexos para /saida. Se o mount /saida nao
+        # resolver para um diretorio que o HOST enxerga, o backup seguinte nao
+        # acha uploads.tar.gz e falha — e o teste detecta a regressao de path.
+        SAIDA_REAL="$(resolver_para_shell "$MONTE_SAIDA")"
+        ALVO_TAR=""
+        for ARG in "$@"; do
+            case "$ARG" in /saida/*) ALVO_TAR="$ARG" ;; esac
+        done
+        TMP_UP="$(mktemp -d "${TMPDIR:-/tmp}/fake-uploads.XXXXXX")"
+        mkdir -p "$TMP_UP/uploads"
+        printf '%s' "${FAKE_UPLOAD_CONTEUDO:-anexo-sintetico-do-fixture}" > "$TMP_UP/uploads/anexo.bin"
+        mkdir -p "$SAIDA_REAL"
+        tar -czf "$SAIDA_REAL/$(basename "$ALVO_TAR")" -C "$TMP_UP" uploads
+        rm -rf "$TMP_UP"
+        exit 0
+        ;;
+    sh)
+        COMANDO_SH=""
+        for ARG in "$@"; do COMANDO_SH="$ARG"; done
+        case "$COMANDO_SH" in
+            *"wc -l"*) printf '%s\n' "${FAKE_UPLOAD_COUNT:-1}" ;;
+            *"wc -c"*) printf '%s\n' "${FAKE_UPLOAD_BYTES:-25}" ;;
+            *tar\ -xzf*)
+                # ops/restore.sh: o pacote PRECISA estar alcancavel por /entrada.
+                ENTRADA_REAL="$(resolver_para_shell "$MONTE_ENTRADA")/uploads.tar.gz"
+                if [ ! -f "$ENTRADA_REAL" ]; then
+                    echo "fake-docker: uploads.tar.gz inalcancavel pelo mount /entrada" >&2
+                    exit 96
+                fi
+                ;;
+            *) ;;
+        esac
+        exit 0
         ;;
     *)
         echo "fake-docker: ferramenta nao mockada: $FERRAMENTA" >&2
@@ -522,6 +689,11 @@ registrar "$RC_T13" "13: --dry-run funciona sem docker no PATH (sem rede, sem cr
 # negativo, 15 e 16 poderiam passar por nao testarem nada.
 # ============================================================================
 TAB="$(printf '\t')"
+# \042 e a aspa dupla. Os fixtures precisam conter aspas LITERAIS, porque e
+# assim que o `aws --output text` devolve o ETag. Gerar o caractere por printf
+# — em vez de escreve-lo na fonte — mantem o fixture fiel sem produzir as
+# construcoes ambiguas que o shellcheck sinaliza (SC2089/SC2090).
+ASPA="$(printf '\042')"
 
 if [ "$PLATAFORMA_MSYS" -eq 1 ]; then
     # --- 14: controle negativo -------------------------------------------------
@@ -586,7 +758,7 @@ if [ "$PLATAFORMA_MSYS" -eq 1 ]; then
     export FAKE_DOCKER_PATH_MODE=linux
 
     RC_T15=0
-    grep -qE '^[A-Za-z]:/' "$LOG16" || RC_T15=1
+    grep -qE '^/dados [A-Za-z]:/' "$LOG16" || RC_T15=1
     registrar "$RC_T15" "15: verify entrega ao docker a forma Windows (X:/...) do diretorio temporario"
 
     RC_T16=0
@@ -666,7 +838,7 @@ criar_pacote "$D19/facilpi-backup-20260106T000000Z"
 criar_env_upload "$D19/env.upload"
 export FAKE_DOCKER_PATH_MODE=linux
 export FAKE_PUT_STATUS=0
-export FAKE_PUT_OUTPUT="ver-id-19${TAB}\"deadbeefcafef00dfeedfacedecafbad\""
+export FAKE_PUT_OUTPUT="ver-id-19${TAB}${ASPA}deadbeefcafef00dfeedfacedecafbad${ASPA}"
 sh "$UPLOAD_SH" -b "$D19/facilpi-backup-20260106T000000Z" -e "$D19/env.upload" -c daily >/dev/null 2>&1
 PENDENTE19="$D19/facilpi-backup-20260106T000000Z.offhost_pending.json"
 
@@ -683,6 +855,406 @@ else
     registrar_skip "sem parser JSON (python/node) no PATH" "19: ETag com aspas produz JSON valido"
     registrar_skip "sem parser JSON (python/node) no PATH" "20: put_etag recuperado normalizado"
 fi
+
+# ============================================================================
+# TESTE 21/22/23/24 — contrato de PATH do bind mount no FETCH (recuperacao)
+#
+# O fetch monta DOIS volumes: o destino da recuperacao (/dados) e o diretorio
+# da identidade age (/chave). Ambos vinham de `cd && pwd`, sem a conversao que
+# o verify ja tinha — mesmo defeito latente do GATE-3Y, agora corrigido com
+# DESTINO_MONTE / DIR_IDENTIDADE_MONTE.
+#
+# O fixture serve a cadeia inteira: upload (fake) -> verify (fake) -> manifesto
+# VERIFIED -> fetch. O `age -d` falso so consegue decifrar se conseguir LER a
+# identidade por /chave e o artefato por /dados — se qualquer mount cair na VM,
+# o fetch falha, que e precisamente a regressao que queremos detectar.
+# ============================================================================
+criar_env_fetch() {
+    cat > "$1" <<ENV
+B2_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+B2_REGION=us-east-005
+B2_BUCKET=facilpi-test-bucket
+OFFHOST_RUNTIME=container
+OFFHOST_IMAGE=facilpi-fake/offhost:test
+B2_KEY_ID=FAKEVERIFYKEYID
+B2_APP_KEY=FAKEVERIFYAPPKEYVALUE
+ENV
+}
+
+# Prepara pacote + upload + verify e devolve o manifesto VERIFIED, que e o que
+# o fetch consome com -m.
+PKG_F="facilpi-backup-20260107T000000Z"
+DF="$AREA/tfetch"; mkdir -p "$DF"
+criar_pacote "$DF/$PKG_F"
+criar_env_upload "$DF/env.upload"
+criar_env_verify "$DF/env.verify"
+criar_env_fetch "$DF/env.fetch"
+
+# Identidade age FALSA, em diretorio proprio — e o mount /chave que importa
+# aqui, nao o conteudo (o cifrador do fixture nao usa chave de verdade).
+DIR_CHAVE="$DF/cofre"; mkdir -p "$DIR_CHAVE"
+printf 'AGE-FAKE-IDENTITY-NAO-E-CHAVE-REAL\n' > "$DIR_CHAVE/identidade.agekey"
+chmod 600 "$DIR_CHAVE/identidade.agekey"
+
+export FAKE_DOCKER_PATH_MODE=linux
+export FAKE_PUT_STATUS=0
+export FAKE_PUT_OUTPUT="ver-id-f${TAB}etag-f"
+sh "$UPLOAD_SH" -b "$DF/$PKG_F" -e "$DF/env.upload" -c daily >/dev/null 2>&1
+
+PENDENTE_F="$DF/$PKG_F.offhost_pending.json"
+ARTEFATO_F="$DF/$PKG_F.tar.age"
+SHA_F="$(sed -n 's/.*"encrypted_artifact_sha256": *"\([^"]*\)".*/\1/p' "$PENDENTE_F")"
+RECIPIENT_F="$(sed -n 's/.*"encryption_recipient": *"\([^"]*\)".*/\1/p' "$PENDENTE_F")"
+RETAIN_F="$(sed -n 's/.*"expected_retain_until": *"\([^"]*\)".*/\1/p' "$PENDENTE_F")"
+BYTES_F="$(wc -c < "$ARTEFATO_F" | tr -d ' ')"
+
+export FAKE_RETENTION_STATUS=0
+export FAKE_RETENTION_OUTPUT="COMPLIANCE${TAB}$RETAIN_F"
+export FAKE_HEAD_STATUS=0
+export FAKE_HEAD_OUTPUT="$BYTES_F${TAB}ver-id-f${TAB}fake-checksum"
+export FAKE_HEAD_META_SHA="$SHA_F"
+export FAKE_HEAD_META_RECIPIENT="$RECIPIENT_F"
+export FAKE_HEAD_META_PACKAGE="$PKG_F"
+export FAKE_GETOBJECT_STATUS=0
+unset FAKE_GETOBJECT_CONTENT
+export FAKE_GETOBJECT_SOURCE="$ARTEFATO_F"
+sh "$VERIFY_SH" -p "$PENDENTE_F" -e "$DF/env.verify" >/dev/null 2>&1
+MANIFESTO_F="$DF/$PKG_F.offhost_manifest.json"
+
+if [ "$PLATAFORMA_MSYS" -eq 1 ] && [ -f "$MANIFESTO_F" ]; then
+    LOGF="$AREA/mount_fetch.log"
+    : > "$LOGF"
+    export FAKE_MOUNT_LOG="$LOGF"
+    export FAKE_DOCKER_PATH_MODE=msys
+    export FAKE_VM_DIR="$AREA/tfetchvm"
+    mkdir -p "$FAKE_VM_DIR"
+
+    set +e
+    OUT21="$(sh "$FETCH_SH" -m "$MANIFESTO_F" -e "$DF/env.fetch" \
+        -i "$DIR_CHAVE/identidade.agekey" -d "$DF/recuperado" 2>&1)"
+    RC21=$?
+    set -e
+    echo "$OUT21" > "$AREA/t21.out"
+
+    unset FAKE_MOUNT_LOG FAKE_VM_DIR
+    export FAKE_DOCKER_PATH_MODE=linux
+
+    RC_T21=0
+    grep -qE '^/dados [A-Za-z]:/' "$LOGF" || RC_T21=1
+    registrar "$RC_T21" "21: fetch entrega ao docker a forma Windows (X:/...) do destino (/dados)"
+
+    RC_T22=0
+    grep -qE '^/chave [A-Za-z]:/' "$LOGF" || RC_T22=1
+    registrar "$RC_T22" "22: fetch entrega ao docker a forma Windows (X:/...) do diretorio da identidade (/chave)"
+
+    RC_T23=0
+    { [ "$RC21" -eq 0 ] \
+        && [ -f "$DF/recuperado/$PKG_F/database.dump" ] \
+        && [ -f "$DF/recuperado/$PKG_F/uploads.tar.gz" ] \
+        && [ -f "$DF/recuperado/$PKG_F/manifest.json" ] \
+        && [ -f "$DF/recuperado/$PKG_F/SHA256SUMS" ]; } || RC_T23=1
+    registrar "$RC_T23" "23: sob simulacao MSYS, fetch decifra, extrai e o host enxerga o pacote com SHA256SUMS conferido"
+else
+    registrar_skip "plataforma sem dualidade MSYS<->Windows" "21: fetch entrega forma Windows do destino"
+    registrar_skip "plataforma sem dualidade MSYS<->Windows" "22: fetch entrega forma Windows da identidade"
+    registrar_skip "plataforma sem dualidade MSYS<->Windows" "23: sob simulacao MSYS, fetch recupera o pacote"
+fi
+
+# --- 24: caminho Linux (mount identidade) continua funcionando ---------------
+export FAKE_DOCKER_PATH_MODE=linux
+set +e
+OUT24="$(sh "$FETCH_SH" -m "$MANIFESTO_F" -e "$DF/env.fetch" \
+    -i "$DIR_CHAVE/identidade.agekey" -d "$DF/recuperado_linux" 2>&1)"
+RC24=$?
+set -e
+echo "$OUT24" > "$AREA/t24.out"
+RC_T24=0
+{ [ "$RC24" -eq 0 ] && [ -f "$DF/recuperado_linux/$PKG_F/SHA256SUMS" ]; } || RC_T24=1
+registrar "$RC_T24" "24: fetch em caminho Linux (mount identidade) recupera o pacote normalmente"
+
+# ============================================================================
+# TESTE 25 — anti-divergencia dos bind mounts
+#
+# `caminho_para_montagem` e duplicada em cada script de ops/, como `ler_env`,
+# porque estes scripts precisam sobreviver a uma copia avulsa no dia do
+# desastre. O custo da duplicacao e o risco de alguem acrescentar um `-v` novo
+# com o caminho cru. Este teste e a trava contra isso: todo `-v` cujo lado
+# esquerdo seja variavel tem de ser volume nomeado (VOLUME_*) ou forma
+# convertida (*_MONTE).
+# ============================================================================
+RC_T25=0
+for ARQ in "$BACKUP_SH" "$RESTORE_SH" "$UPLOAD_SH" "$VERIFY_SH" "$FETCH_SH"; do
+    SUSPEITAS="$(grep -o -- '-v "\$[A-Za-z_][A-Za-z0-9_]*' "$ARQ" \
+        | sed 's/.*\$//' | grep -v '_MONTE$' | grep -v '^VOLUME_' || true)"
+    if [ -n "$SUSPEITAS" ]; then
+        echo "      $(basename "$ARQ"): $SUSPEITAS" >&2
+        RC_T25=1
+    fi
+done
+registrar "$RC_T25" "25: todo bind mount de caminho de host em ops/*.sh usa a forma convertida"
+
+# ============================================================================
+# TESTE 26 — upload monta o diretorio do pacote na forma Windows
+# ============================================================================
+if [ "$PLATAFORMA_MSYS" -eq 1 ]; then
+    D26="$AREA/t26"; mkdir -p "$D26"
+    criar_pacote "$D26/facilpi-backup-20260108T000000Z"
+    criar_env_upload "$D26/env.upload"
+    LOG26="$AREA/mount26.log"; : > "$LOG26"
+    export FAKE_MOUNT_LOG="$LOG26"
+    export FAKE_DOCKER_PATH_MODE=msys
+    export FAKE_VM_DIR="$AREA/t26vm"; mkdir -p "$FAKE_VM_DIR"
+    export FAKE_PUT_STATUS=0
+    export FAKE_PUT_OUTPUT="ver-id-26${TAB}etag-26"
+    sh "$UPLOAD_SH" -b "$D26/facilpi-backup-20260108T000000Z" -e "$D26/env.upload" -c daily >/dev/null 2>&1
+    unset FAKE_MOUNT_LOG FAKE_VM_DIR
+    export FAKE_DOCKER_PATH_MODE=linux
+    RC_T26=0
+    grep -qE '^/dados [A-Za-z]:/' "$LOG26" || RC_T26=1
+    registrar "$RC_T26" "26: upload entrega ao docker a forma Windows do diretorio do pacote"
+else
+    registrar_skip "plataforma sem dualidade MSYS<->Windows" "26: upload entrega forma Windows do diretorio do pacote"
+fi
+
+# ============================================================================
+# TESTE 27/28/29 — ops/backup.sh: barreiras fail-closed e path do pacote
+#
+# O GATE-3Y cifrou, enviou e travou por Object Lock um pacote cujo
+# `database.dump` era texto. Estas barreiras existem para que isso nao possa
+# se repetir — e estes testes provam que elas reprovam de verdade.
+# ============================================================================
+criar_env_pg() {
+    cat > "$1" <<ENV
+POSTGRES_USER=drilluser
+POSTGRES_DB=drilldb
+ENVIRONMENT=drill-sintetico
+UPLOAD_ROOT=/data/uploads
+ENV
+}
+
+export FAKE_DOCKER_PATH_MODE=linux
+
+D27="$AREA/t27"; mkdir -p "$D27/saida"
+criar_env_pg "$D27/env.pg"
+export FAKE_PGDUMP_MODE=texto
+set +e
+OUT27="$(sh "$BACKUP_SH" -p proj-t27 -e "$D27/env.pg" -d "$D27/saida" 2>&1)"
+RC27=$?
+set -e
+echo "$OUT27" > "$AREA/t27.out"
+unset FAKE_PGDUMP_MODE
+RC_T27=0
+{ [ "$RC27" -ne 0 ] \
+    && printf '%s' "$OUT27" | grep -q "PGDMP" \
+    && [ -z "$(find "$D27/saida" -name manifest.json 2>/dev/null)" ]; } || RC_T27=1
+registrar "$RC_T27" "27: backup reprova dump que nao e pg_dump -Fc, antes de gerar manifesto"
+
+D28="$AREA/t28"; mkdir -p "$D28/saida"
+criar_env_pg "$D28/env.pg"
+export FAKE_ALEMBIC_HEAD=""
+set +e
+OUT28="$(sh "$BACKUP_SH" -p proj-t28 -e "$D28/env.pg" -d "$D28/saida" 2>&1)"
+RC28=$?
+set -e
+echo "$OUT28" > "$AREA/t28.out"
+unset FAKE_ALEMBIC_HEAD
+RC_T28=0
+{ [ "$RC28" -ne 0 ] \
+    && [ -z "$(find "$D28/saida" -name manifest.json 2>/dev/null)" ]; } || RC_T28=1
+registrar "$RC_T28" "28: backup reprova alembic_version vazio, antes de gerar manifesto"
+
+D29="$AREA/t29"; mkdir -p "$D29/saida"
+criar_env_pg "$D29/env.pg"
+LOG29="$AREA/mount29.log"; : > "$LOG29"
+export FAKE_MOUNT_LOG="$LOG29"
+if [ "$PLATAFORMA_MSYS" -eq 1 ]; then
+    export FAKE_DOCKER_PATH_MODE=msys
+    export FAKE_VM_DIR="$AREA/t29vm"; mkdir -p "$FAKE_VM_DIR"
+fi
+set +e
+OUT29="$(sh "$BACKUP_SH" -p proj-t29 -e "$D29/env.pg" -d "$D29/saida" 2>&1)"
+RC29=$?
+set -e
+echo "$OUT29" > "$AREA/t29.out"
+unset FAKE_MOUNT_LOG FAKE_VM_DIR
+export FAKE_DOCKER_PATH_MODE=linux
+PACOTE29="$(find "$D29/saida" -maxdepth 1 -type d -name 'facilpi-backup-*' | head -1)"
+RC_T29=0
+{ [ "$RC29" -eq 0 ] \
+    && [ -n "$PACOTE29" ] \
+    && [ "$(head -c 5 "$PACOTE29/database.dump")" = "PGDMP" ] \
+    && [ -f "$PACOTE29/uploads.tar.gz" ] \
+    && [ -f "$PACOTE29/SHA256SUMS" ] \
+    && grep -q '"alembic_head": "020_documentos_admin_anexar"' "$PACOTE29/manifest.json" \
+    && ( cd "$PACOTE29" && sha256sum -c SHA256SUMS >/dev/null 2>&1 ); } || RC_T29=1
+if [ "$PLATAFORMA_MSYS" -eq 1 ]; then
+    grep -qE '^/saida [A-Za-z]:/' "$LOG29" || RC_T29=1
+fi
+registrar "$RC_T29" "29: backup produz pacote integro com dump PGDMP e monta /saida na forma correta"
+
+# ============================================================================
+# TESTE 30/31 — ops/restore.sh para ANTES de tocar o banco
+#
+# O mock do pg_restore cria um arquivo-sentinela quando e chamado. Os testes
+# provam que ele NAO e chamado: a evidencia e o banco nunca ter sido tocado,
+# nao apenas o script ter retornado != 0.
+# ============================================================================
+# $4 = formato do manifesto: "pretty" reproduz exatamente o que ops/backup.sh
+# escreve; "compacto" e JSON igualmente valido, sem espaco depois do
+# dois-pontos — serve para provar que o parser nao depende de estilo.
+criar_pacote_pg() {
+    P="$1"; CABECA="$2"; DUMP_OK="$3"; FORMATO="${4:-pretty}"
+    mkdir -p "$P"
+    if [ "$DUMP_OK" = "sim" ]; then
+        printf 'PGDMP-archive-sintetico' > "$P/database.dump"
+    else
+        printf -- '-- isto NAO e um archive\n' > "$P/database.dump"
+    fi
+    # tar.gz de verdade: ops/restore.sh monta o pacote e o fixture confere que
+    # uploads.tar.gz esta alcancavel por /entrada.
+    TMP_P="$(mktemp -d "${TMPDIR:-/tmp}/fake-pkg-uploads.XXXXXX")"
+    mkdir -p "$TMP_P/uploads"
+    printf 'anexo-sintetico' > "$TMP_P/uploads/anexo.bin"
+    tar -czf "$P/uploads.tar.gz" -C "$TMP_P" uploads
+    rm -rf "$TMP_P"
+    if [ "$FORMATO" = "compacto" ]; then
+        printf '{"backup_format_version":1,"alembic_head":"%s","app_git_sha":"x"}\n' "$CABECA" > "$P/manifest.json"
+    elif [ -n "$CABECA" ]; then
+        printf '{\n  "backup_format_version": 1,\n  "alembic_head": "%s",\n  "app_git_sha": "x"\n}\n' "$CABECA" > "$P/manifest.json"
+    else
+        printf '{\n  "backup_format_version": 1,\n  "app_git_sha": "x"\n}\n' > "$P/manifest.json"
+    fi
+    ( cd "$P" && sha256sum database.dump uploads.tar.gz manifest.json > SHA256SUMS )
+}
+
+D30="$AREA/t30"; mkdir -p "$D30"
+criar_env_pg "$D30/env.pg"
+criar_pacote_pg "$D30/pacote-sem-head" "" "sim"
+export FAKE_PGRESTORE_CHAMADO="$D30/pg_restore_foi_chamado"
+rm -f "$FAKE_PGRESTORE_CHAMADO"
+set +e
+OUT30="$(sh "$RESTORE_SH" -p proj-t30 -e "$D30/env.pg" -b "$D30/pacote-sem-head" 2>&1)"
+RC30=$?
+set -e
+echo "$OUT30" > "$AREA/t30.out"
+RC_T30=0
+{ [ "$RC30" -ne 0 ] && [ ! -f "$FAKE_PGRESTORE_CHAMADO" ]; } || RC_T30=1
+registrar "$RC_T30" "30: restore reprova manifesto sem alembic_head SEM tocar o banco"
+
+D31="$AREA/t31"; mkdir -p "$D31"
+criar_env_pg "$D31/env.pg"
+criar_pacote_pg "$D31/pacote-dump-texto" "020_documentos_admin_anexar" "nao"
+export FAKE_PGRESTORE_CHAMADO="$D31/pg_restore_foi_chamado"
+rm -f "$FAKE_PGRESTORE_CHAMADO"
+set +e
+OUT31="$(sh "$RESTORE_SH" -p proj-t31 -e "$D31/env.pg" -b "$D31/pacote-dump-texto" 2>&1)"
+RC31=$?
+set -e
+echo "$OUT31" > "$AREA/t31.out"
+unset FAKE_PGRESTORE_CHAMADO
+RC_T31=0
+{ [ "$RC31" -ne 0 ] \
+    && printf '%s' "$OUT31" | grep -q "PGDMP" \
+    && [ ! -f "$D31/pg_restore_foi_chamado" ]; } || RC_T31=1
+registrar "$RC_T31" "31: restore reprova dump que nao e PGDMP SEM tocar o banco"
+
+# --- 35: caminho positivo do restore, com manifesto em JSON compacto --------
+# Prova duas coisas de uma vez: o restore completo funciona ponta a ponta (com
+# pg_restore, extracao de anexos por /entrada e conferencia de head), e o
+# parser do manifesto nao depende do espaco depois do dois-pontos — estilo de
+# serializacao nao pode decidir se um backup e restauravel.
+D35="$AREA/t35"; mkdir -p "$D35"
+criar_env_pg "$D35/env.pg"
+criar_pacote_pg "$D35/pacote-ok" "020_documentos_admin_anexar" "sim" "compacto"
+export FAKE_PGRESTORE_CHAMADO="$D35/pg_restore_foi_chamado"
+rm -f "$FAKE_PGRESTORE_CHAMADO"
+export FAKE_ALEMBIC_HEAD="020_documentos_admin_anexar"
+set +e
+OUT35="$(sh "$RESTORE_SH" -p proj-t35 -e "$D35/env.pg" -b "$D35/pacote-ok" 2>&1)"
+RC35=$?
+set -e
+echo "$OUT35" > "$AREA/t35.out"
+unset FAKE_PGRESTORE_CHAMADO FAKE_ALEMBIC_HEAD
+RC_T35=0
+{ [ "$RC35" -eq 0 ] \
+    && [ -f "$D35/pg_restore_foi_chamado" ] \
+    && printf '%s' "$OUT35" | grep -q "restore concluido"; } || RC_T35=1
+registrar "$RC_T35" "35: restore completo com manifesto compacto — pg_restore roda e o head confere"
+
+# ============================================================================
+# TESTE 32/33 — custodia do manifesto VERIFIED
+#
+# Sem o manifesto fora do host de origem, uma perda total deixa o objeto
+# remoto indescobrivel: a credencial de leitura nao tem `listFiles`, por
+# decisao de arquitetura. Por isso a custodia e fail-closed.
+# ============================================================================
+preparar_verify_custodia() {
+    DIRT="$1"; CUSTODIA_PATH="$2"; PKGN="$3"
+    mkdir -p "$DIRT"
+    criar_pacote "$DIRT/$PKGN"
+    criar_env_upload "$DIRT/env.upload"
+    export FAKE_DOCKER_PATH_MODE=linux
+    export FAKE_PUT_STATUS=0
+    export FAKE_PUT_OUTPUT="ver-id-c${TAB}etag-c"
+    sh "$UPLOAD_SH" -b "$DIRT/$PKGN" -e "$DIRT/env.upload" -c daily >/dev/null 2>&1
+    PEND_C="$DIRT/$PKGN.offhost_pending.json"
+    ART_C="$DIRT/$PKGN.tar.age"
+    cat > "$DIRT/env.verify" <<ENV
+OFFHOST_IMAGE=facilpi-fake/offhost:test
+B2_KEY_ID=FAKEVERIFYKEYID
+B2_APP_KEY=FAKEVERIFYAPPKEYVALUE
+OFFHOST_CUSTODIA=$CUSTODIA_PATH
+ENV
+    RETAIN_C="$(sed -n 's/.*"expected_retain_until": *"\([^"]*\)".*/\1/p' "$PEND_C")"
+    BYTES_C="$(wc -c < "$ART_C" | tr -d ' ')"
+    SHA_C="$(sed -n 's/.*"encrypted_artifact_sha256": *"\([^"]*\)".*/\1/p' "$PEND_C")"
+    RECIP_C="$(sed -n 's/.*"encryption_recipient": *"\([^"]*\)".*/\1/p' "$PEND_C")"
+    FAKE_RETENTION_OUTPUT="COMPLIANCE${TAB}$RETAIN_C"
+    FAKE_HEAD_OUTPUT="$BYTES_C${TAB}ver-id-c${TAB}fake-checksum"
+    FAKE_HEAD_META_SHA="$SHA_C"
+    FAKE_HEAD_META_RECIPIENT="$RECIP_C"
+    export FAKE_RETENTION_STATUS=0
+    export FAKE_HEAD_STATUS=0
+    export FAKE_RETENTION_OUTPUT FAKE_HEAD_OUTPUT FAKE_HEAD_META_SHA FAKE_HEAD_META_RECIPIENT
+    export FAKE_HEAD_META_PACKAGE="$PKGN"
+    export FAKE_GETOBJECT_STATUS=0
+    unset FAKE_GETOBJECT_CONTENT
+    export FAKE_GETOBJECT_SOURCE="$ART_C"
+}
+
+D32="$AREA/t32"
+preparar_verify_custodia "$D32" "$AREA/t32/cofre" "facilpi-backup-20260109T000000Z"
+set +e
+sh "$VERIFY_SH" -p "$D32/facilpi-backup-20260109T000000Z.offhost_pending.json" -e "$D32/env.verify" >"$AREA/t32.out" 2>&1
+RC32=$?
+set -e
+RC_T32=0
+{ [ "$RC32" -eq 0 ] \
+    && [ -f "$AREA/t32/cofre/facilpi-backup-20260109T000000Z.offhost_manifest.json" ] \
+    && grep -q '"state": "VERIFIED"' "$AREA/t32/cofre/facilpi-backup-20260109T000000Z.offhost_manifest.json" \
+    && [ -f "$D32/facilpi-backup-20260109T000000Z.uploaded" ]; } || RC_T32=1
+registrar "$RC_T32" "32: verify custodia o manifesto VERIFIED no cofre quando OFFHOST_CUSTODIA esta definido"
+
+D33="$AREA/t33"
+mkdir -p "$D33"
+# Cofre impossivel: um caminho DENTRO de um arquivo comum. `mkdir -p` falha em
+# qualquer plataforma, sem depender de permissao.
+printf 'sou um arquivo, nao um diretorio\n' > "$D33/bloqueio"
+preparar_verify_custodia "$D33" "$D33/bloqueio/cofre" "facilpi-backup-20260110T000000Z"
+set +e
+sh "$VERIFY_SH" -p "$D33/facilpi-backup-20260110T000000Z.offhost_pending.json" -e "$D33/env.verify" >"$AREA/t33.out" 2>&1
+RC33=$?
+set -e
+RC_T33=0
+{ [ "$RC33" -ne 0 ] && [ ! -f "$D33/facilpi-backup-20260110T000000Z.uploaded" ]; } || RC_T33=1
+registrar "$RC_T33" "33: custodia impossivel -> verify falha fechado, SEM gravar marcador de sucesso"
+
+# ============================================================================
+# TESTE 34 — o fetch tambem nunca enumera nem escreve no bucket
+# ============================================================================
+RC_T34=0
+grep -qE "list-objects|delete-object|put-object|put-object-retention" "$FETCH_SH" && RC_T34=1
+registrar "$RC_T34" "34: ops/offhost_fetch.sh nunca referencia list/delete/put-object"
 
 # --- resumo -----------------------------------------------------------------
 echo ""

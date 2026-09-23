@@ -45,6 +45,30 @@ ler_env() {
     sed -n "s/^$1=//p" "$ARQUIVO_ENV" | head -1
 }
 
+# Traduz um caminho do SHELL para a forma que o DOCKER precisa receber em `-v`.
+#
+# Em Linux os dois textos sao identicos e esta funcao nao faz nada. Em Git
+# Bash/MSYS + Docker Desktop NAO sao: um caminho interno do MSYS (ex.:
+# /tmp/...) chega cru ao `docker` por causa de MSYS_NO_PATHCONV=1 e e resolvido
+# DENTRO da VM Linux do Docker — o container escreve num diretorio que o host
+# nunca enxerga. Foi a falha do GATE-3Y. `pwd -W` (builtin do MSYS) devolve a
+# forma Windows (C:/...), que o Docker Desktop mapeia para o MESMO diretorio
+# que o shell le; em Linux o builtin nao existe e o caminho original vale.
+#
+# Duplicada de proposito em cada script de ops/, como `ler_env`: estes scripts
+# sao auto-contidos para sobreviverem a uma copia avulsa no dia do desastre.
+# `ops/offhost_test.sh` tem um teste que reprova se alguma montagem de caminho
+# de host deixar de usar a forma convertida.
+caminho_para_montagem() {
+    CAMINHO_MONTE="$1"
+    if CAMINHO_WINDOWS="$(cd "$1" && pwd -W 2>/dev/null)"; then
+        case "$CAMINHO_WINDOWS" in
+            ?:/*) CAMINHO_MONTE="$CAMINHO_WINDOWS" ;;
+        esac
+    fi
+    printf '%s' "$CAMINHO_MONTE"
+}
+
 PG_USER="$(ler_env POSTGRES_USER)"
 PG_DB="$(ler_env POSTGRES_DB)"
 AMBIENTE="$(ler_env ENVIRONMENT)"
@@ -59,6 +83,11 @@ VOLUME_UPLOADS="${PROJETO}_facilpi_pilot_data"
 CARIMBO="$(date -u +%Y%m%dT%H%M%SZ)"
 PACOTE="$DESTINO/facilpi-backup-$CARIMBO"
 mkdir -p "$PACOTE"
+# Absoluto porque `docker run -v` rejeita caminho relativo — um `-d .` quebraria
+# o snapshot dos anexos. PACOTE_MONTE e a forma que vai NO `-v`; o resto do
+# script continua usando PACOTE.
+PACOTE="$(cd "$PACOTE" && pwd)"
+PACOTE_MONTE="$(caminho_para_montagem "$PACOTE")"
 
 echo "[1/4] dump do banco (pg_dump -Fc, dentro do container db)"
 # Executado DENTRO do container: a versao do cliente casa com a do servidor por
@@ -67,11 +96,30 @@ echo "[1/4] dump do banco (pg_dump -Fc, dentro do container db)"
 $COMPOSE exec -T db pg_dump -U "$PG_USER" -d "$PG_DB" -Fc > "$PACOTE/database.dump.parcial"
 mv "$PACOTE/database.dump.parcial" "$PACOTE/database.dump"
 
+# FAIL CLOSED: o dump precisa ser mesmo um archive custom (-Fc), nao um arquivo
+# de texto que so PARECE um backup. O GATE-3Y provou o custo de descobrir isso
+# tarde: um pacote inteiro foi cifrado, enviado e travado por Object Lock
+# carregando um `database.dump` que o `pg_restore` jamais aceitaria. Duas
+# checagens independentes e baratas, aqui, antes de qualquer coisa irreversivel.
+if [ "$(head -c 5 "$PACOTE/database.dump")" != "PGDMP" ]; then
+    echo "FALHA: database.dump nao comeca com PGDMP — nao e um archive pg_dump -Fc." >&2
+    echo "       Backup abortado ANTES do manifesto. Nada sera declarado valido." >&2
+    exit 1
+fi
+# `pg_restore --list` le o indice do archive: se o arquivo estiver truncado ou
+# corrompido, falha aqui em vez de no dia da recuperacao. Roda DENTRO do
+# container db (mesma versao do servidor) e recebe o dump por stdin, sem mount.
+if ! $COMPOSE exec -T db pg_restore --list > /dev/null 2>&1 < "$PACOTE/database.dump"; then
+    echo "FALHA: 'pg_restore --list' recusou o database.dump." >&2
+    echo "       O archive existe mas nao e legivel como custom format." >&2
+    exit 1
+fi
+
 echo "[2/4] snapshot dos anexos (somente leitura)"
 # Container efemero monta o volume :ro — o backup nao pode alterar o que copia.
 docker run --rm \
     -v "$VOLUME_UPLOADS:/dados:ro" \
-    -v "$PACOTE:/saida" \
+    -v "$PACOTE_MONTE:/saida" \
     alpine:3.20 \
     tar -czf /saida/uploads.tar.gz.parcial -C /dados uploads
 mv "$PACOTE/uploads.tar.gz.parcial" "$PACOTE/uploads.tar.gz"
@@ -84,6 +132,15 @@ CONTAGEM_ARQUIVOS="$(docker run --rm -v "$VOLUME_UPLOADS:/dados:ro" alpine:3.20 
 BYTES_ARQUIVOS="$(docker run --rm -v "$VOLUME_UPLOADS:/dados:ro" alpine:3.20 sh -c 'find /dados/uploads -type f -exec cat {} + 2>/dev/null | wc -c' | tr -d ' \r')"
 SHA_DUMP="$(sha256sum "$PACOTE/database.dump" | cut -d' ' -f1)"
 SHA_UPLOADS="$(sha256sum "$PACOTE/uploads.tar.gz" | cut -d' ' -f1)"
+
+# FAIL CLOSED: sem alembic_head o pacote nao e restauravel com verificacao —
+# `ops/restore.sh` compara o head restaurado contra este campo, e um valor
+# vazio transformaria essa checagem em teatro.
+[ -n "$CABECA_ALEMBIC" ] || {
+    echo "FALHA: alembic_version vazio no banco de origem." >&2
+    echo "       Um pacote sem alembic_head nao pode ser validado no restore." >&2
+    exit 1
+}
 
 # Nenhum segredo entra aqui: nem senha, nem JWT_SECRET, nem DATABASE_URL.
 cat > "$PACOTE/manifest.json" <<JSON

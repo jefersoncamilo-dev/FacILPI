@@ -44,6 +44,24 @@ ler_env() {
     sed -n "s/^$1=//p" "$ARQUIVO_ENV" | head -1
 }
 
+# Traduz um caminho do SHELL para a forma que o DOCKER precisa receber em `-v`.
+# Ver a explicacao completa em ops/backup.sh — mesma funcao, duplicada de
+# proposito para manter cada script de ops/ auto-contido.
+caminho_para_montagem() {
+    CAMINHO_MONTE="$1"
+    if CAMINHO_WINDOWS="$(cd "$1" && pwd -W 2>/dev/null)"; then
+        case "$CAMINHO_WINDOWS" in
+            ?:/*) CAMINHO_MONTE="$CAMINHO_WINDOWS" ;;
+        esac
+    fi
+    printf '%s' "$CAMINHO_MONTE"
+}
+
+# Absoluto porque `docker run -v` rejeita caminho relativo; PACOTE_MONTE e a
+# forma que vai NO `-v`, o resto do script continua usando PACOTE.
+PACOTE="$(cd "$PACOTE" && pwd)"
+PACOTE_MONTE="$(caminho_para_montagem "$PACOTE")"
+
 PG_USER="$(ler_env POSTGRES_USER)"
 PG_DB="$(ler_env POSTGRES_DB)"
 [ -n "$PG_USER" ] || { echo "POSTGRES_USER ausente em $ARQUIVO_ENV" >&2; exit 2; }
@@ -58,9 +76,29 @@ if ! ( cd "$PACOTE" && sha256sum -c SHA256SUMS ); then
     echo "FALHA: checksums divergentes. O pacote NAO sera restaurado." >&2
     exit 1
 fi
-CABECA_ESPERADA="$(sed -n 's/.*"alembic_head": "\([^"]*\)".*/\1/p' "$PACOTE/manifest.json")"
-SHA_APP="$(sed -n 's/.*"app_git_sha": "\([^"]*\)".*/\1/p' "$PACOTE/manifest.json")"
+# `: *"` e nao `: "`: o espaco depois do dois-pontos e estilo de serializacao,
+# nao contrato. Exigi-lo fazia um manifesto compacto e valido render campo
+# VAZIO em silencio — e campo vazio aqui vira "sem alembic_head", que aborta o
+# restore de um pacote perfeitamente bom. Mesma tolerancia que
+# ops/offhost_verify.sh ja aplica.
+CABECA_ESPERADA="$(sed -n 's/.*"alembic_head": *"\([^"]*\)".*/\1/p' "$PACOTE/manifest.json")"
+SHA_APP="$(sed -n 's/.*"app_git_sha": *"\([^"]*\)".*/\1/p' "$PACOTE/manifest.json")"
 echo "     manifesto: alembic_head=$CABECA_ESPERADA app_git_sha=$SHA_APP"
+
+# As duas barreiras abaixo vem ANTES do pg_restore de proposito: um pacote que
+# nao pode ser validado nao deve chegar a tocar o banco. Sem elas, a conferencia
+# de head no passo [4/4] aconteceria DEPOIS de o dump ja ter sido aplicado.
+[ -n "$CABECA_ESPERADA" ] || {
+    echo "FALHA: manifest.json sem alembic_head." >&2
+    echo "       Sem ele nao ha como provar que o restore trouxe a versao certa" >&2
+    echo "       do esquema. O banco NAO sera tocado." >&2
+    exit 1
+}
+if [ "$(head -c 5 "$PACOTE/database.dump")" != "PGDMP" ]; then
+    echo "FALHA: database.dump nao comeca com PGDMP — nao e um archive pg_dump -Fc." >&2
+    echo "       O banco NAO sera tocado." >&2
+    exit 1
+fi
 
 echo "[2/4] restaurando banco (pg_restore --no-owner --no-acl)"
 # --no-owner/--no-acl desacoplam do nome do papel de origem: o ambiente novo pode
@@ -72,7 +110,7 @@ echo "[3/4] restaurando anexos e corrigindo dono"
 # conteudo volta com dono errado e o backend nao consegue anexar nada novo.
 docker run --rm \
     -v "$VOLUME_UPLOADS:/dados" \
-    -v "$PACOTE:/entrada:ro" \
+    -v "$PACOTE_MONTE:/entrada:ro" \
     alpine:3.20 \
     sh -c 'tar -xzf /entrada/uploads.tar.gz -C /dados && chown -R 10001:10001 /dados'
 

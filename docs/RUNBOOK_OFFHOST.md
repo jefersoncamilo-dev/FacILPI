@@ -127,6 +127,37 @@ segredo. Segredos entram apenas por esse arquivo, são lidos sem `source` (mesmo
 padrão de `ops/backup.sh`) e nunca são passados por argumento — argumento é
 visível em `ps` para qualquer usuário da máquina.
 
+## Custódia do manifesto VERIFIED — o mapa do backup
+
+A credencial de leitura **não tem `listFiles`**, e isso é decisão, não
+esquecimento. A consequência precisa ser dita com todas as letras: a recuperação
+encontra o objeto pela `remote_key` gravada no **manifesto VERIFIED**, e por mais
+nada.
+
+Se esse manifesto existir só no host de origem, uma perda **total** leva junto o
+único mapa do backup. O objeto continua lá — íntegro, travado por Object Lock,
+cobrando armazenamento — e ninguém sabe o nome dele.
+
+Por isso `ops/offhost_verify.sh` aceita `OFFHOST_CUSTODIA`: o diretório do cofre
+onde já vive a chave privada `age`. Ao promover PENDING → VERIFIED, o script
+copia o manifesto para lá **antes** de gravar o marcador de sucesso, e **falha
+fechado** se não conseguir — um backup que não poderá ser encontrado depois não é
+um backup verificado.
+
+| O que | Onde | Por quê |
+|---|---|---|
+| Chave privada `age` | cofre | decifra o artefato |
+| Manifesto VERIFIED | **mesmo cofre** | diz *qual* artefato buscar e qual SHA-256 esperar |
+
+Guardá-los juntos é deliberado: um sem o outro não recupera nada, então separá-los
+criaria dois modos de falha em vez de um.
+
+**Break-glass.** Numa perda total *sem* manifesto custodiado, a saída não é
+conceder `listFiles` de forma permanente. É criar, **naquele momento**, uma
+credencial de recuperação com a Master Key — que vive com o humano, não na
+infraestrutura. O privilégio mínimo permanece no estado estacionário e a
+recuperabilidade continua garantida.
+
 ## Application Keys — menor privilégio
 
 A **Master Application Key não é usada pelo runtime.** Ela serve uma única vez,
