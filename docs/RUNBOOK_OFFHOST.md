@@ -1,9 +1,21 @@
 # Runbook — cópia off-host cifrada (Backblaze B2 + age)
 
-> **Estado.** Upload sintético provado contra o B2 real e confirmado por
-> verificação independente (Object Lock, metadata e SHA-256 do artefato —
-> todos corretos). `REAL DATA = BLOCKED` continua até o drill completo
-> (GATE-6) e o restante dos gates abaixo passarem.
+> **Estado.** Drill completo executado contra o B2 real, com dados sintéticos e
+> **com o ambiente de origem destruído no meio**: `pg_dump -Fc` real → `age` →
+> B2 com Object Lock COMPLIANCE → verificação independente → perda total →
+> recuperação exclusivamente off-host → `pg_restore` em PostgreSQL novo →
+> validação pela aplicação. `REAL DATA = BLOCKED` continua, agora por causa dos
+> gates de bucket (GATE-5) e de instalação na VPS (GATE-7) — não mais por falta
+> de prova de recuperabilidade.
+
+```
+OFF_HOST_COPY              = VERIFIED
+OFF_HOST_RECOVERY_CHAIN    = VERIFIED
+POSTGRES_DISASTER_RESTORE  = VERIFIED
+DISASTER_RECOVERY_OFF_HOST = VERIFIED
+BACKUP_DR                  = CLOSED
+READY_FOR_VPS              = YES
+```
 
 O backup local (`docs/RUNBOOK_BACKUP_RESTORE.md`) protege contra perda do banco,
 dos anexos ou de um container. **Não protege contra perda do host.** É isso que
@@ -390,13 +402,17 @@ find /var/lib/facilpi/offhost-ultimo-sucesso -mmin +1560 -o ! -name '*' 2>/dev/n
 
 ## Recuperação a partir do off-host
 
-**Fora da VPS**, com a credencial de restore e a chave privada `age`:
+**Fora da VPS**, com a credencial de leitura e a chave privada `age` — ambas do
+cofre, junto do manifesto custodiado. Este é o caminho **efetivamente exercitado**
+no drill:
 
 ```bash
+# -m usa o manifesto VERIFIED custodiado: ele traz remote_key e o SHA-256
+# esperado, e é o que dispensa listFiles na descoberta do objeto.
 ops/offhost_fetch.sh \
-    -k facilpi/daily/facilpi-backup-<UTC>.tar.age \
+    -m /cofre/facilpi-backup-<UTC>.offhost_manifest.json \
     -e /caminho/seguro/offhost-restore.env \
-    -i /caminho/seguro/facilpi-age.key \
+    -i /cofre/facilpi-recovery.agekey \
     -d /recuperacao
 
 # entrega um pacote que o restore consome sem alteração
@@ -404,6 +420,15 @@ docker compose -p facilpi --env-file .env.novo up -d db
 ops/restore.sh -p facilpi -e .env.novo -b /recuperacao/facilpi-backup-<UTC>
 docker compose -p facilpi --env-file .env.novo up -d
 ```
+
+`-k <chave remota>` continua aceito para quem souber a chave de cor, mas `-m` é
+o caminho recomendado: sem o manifesto não há o SHA-256 esperado, e recuperar
+sem poder conferir integridade não é recuperação.
+
+`OFFHOST_RUNTIME=local` é o padrão e mantém a chave privada fora de container.
+Onde não houver binário `age`, `OFFHOST_RUNTIME=container` funciona — foi o modo
+usado no drill, em host Windows — ao custo de bind-montar a chave privada na
+imagem durante a decifra.
 
 `JWT_SECRET` **não** vem do backup: o ambiente novo recebe um segredo novo e
 todas as sessões anteriores deixam de valer. É o ponto natural de revogação num
@@ -437,23 +462,54 @@ Evidências: as 10 do ensaio local, mais
 12. retenção Compliance aplicada com o `retain_until` esperado;
 13. `DeleteObject` com a credencial de **upload** falha;
 14. `DeleteObject` com a credencial de **verificação** falha;
-15. `DeleteObject` com a credencial de **restore** falha;
-16. recuperação feita sem nenhum artefato local sobrevivente;
-17. RTO observado registrado — em host não representativo, portanto **não é SLA**.
+15. recuperação feita sem nenhum artefato local sobrevivente;
+16. RTO observado registrado — em host não representativo, portanto **não é SLA**.
+
+### Execução registrada
+
+O drill foi executado com PostgreSQL sintético real. Cobertas as evidências
+1–12, 15 e 16: `pg_dump -Fc` validado por header `PGDMP` e `pg_restore --list`
+antes do envio; um único PUT com Object Lock COMPLIANCE; verificação
+independente com credencial read-only separada; manifesto custodiado no cofre;
+origem destruída com zero containers e zero volumes remanescentes e payload
+local apagado; recuperação por um único `GetObject`, SHA-256 conferido **antes**
+da decifra, `SHA256SUMS` interno 3/3; `pg_restore` em PostgreSQL novo com head
+`020_documentos_admin_anexar`; e validação pela aplicação — contagens iguais à
+linha de base, SHA-256 do anexo conferido contra `documentos.arquivo_hash`,
+download autenticado íntegro, zero referências pendentes e token do ambiente
+anterior rejeitado com 401.
+
+**Não cobertas: as evidências 13 e 14.** Nenhum `DeleteObject` foi tentado,
+porque DELETE permaneceu explicitamente proibido em todos os gates. O least
+privilege está garantido por construção — a credencial de upload tem apenas
+`writeFiles`+`writeFileRetentions` e a de verificação apenas
+`readFiles`+`readFileRetentions`, ambas criadas por `b2_create_key` com lista
+explícita — mas isso é argumento de configuração, **não** prova empírica.
+Fechar esses dois itens exige um gate próprio que autorize tentativas de DELETE
+contra um objeto descartável.
 
 ## Gates
 
 | Gate | Ação | Estado |
 |---|---|---|
-| GATE-1 | Gerar o par `age` e estabelecer as duas custódias | pendente |
-| GATE-2 | Criar as duas Application Keys; confirmar região/endpoint | pendente |
+| GATE-1 | Gerar o par `age` e estabelecer as duas custódias | **feito**: par gerado fora do repositório; a cópia custodiada decifrou de verdade no drill — chave nunca testada não é backup |
+| GATE-2 | Criar as duas Application Keys; confirmar região/endpoint | **feito**: `facilpi-pilot-backup-upload-min` (`writeFiles`+`writeFileRetentions`) e `facilpi-pilot-backup-verify` (`readFiles`+`readFileRetentions`), ambas por `b2_create_key` com lista explícita; endpoint `s3.us-east-005` e região `us-east-005` confirmados em uso |
 | GATE-3 | Upload de prova, sintético, retenção **1 dia**; comprovar `--checksum-sha256` e a necessidade de `listBuckets` | **feito**: PUT confirmado contra o B2 real; `listBuckets`/`listAllBucketNames` comprovadamente desnecessárias; verificação independente (`ops/offhost_verify.sh`) confirmou Object Lock COMPLIANCE, metadata e SHA-256 corretos |
 | GATE-4 | Fixar os prazos reais de retenção | **decidido**: 14d daily / 28d weekly |
 | GATE-5 | Lifecycle rule e retenção padrão do bucket | pendente |
-| GATE-6 | Drill off-host completo | pendente |
-| GATE-7 | Construir `facilpi/offhost:1` na VPS; instalar cron e `/etc/facilpi/offhost.env`; garantir `age` no ambiente de recuperação | pendente |
-| GATE-8 | Liberar dado real | **bloqueado** até o drill PASS |
+| GATE-6 | Drill off-host completo | **feito, com ressalva**: evidências 1–12, 15 e 16 cobertas; 13 e 14 (`DeleteObject` deve falhar) **não executadas** — DELETE permaneceu proibido |
+| GATE-7 | Construir `facilpi/offhost:1` na VPS; instalar cron e `/etc/facilpi/offhost.env`; garantir `age` no ambiente de recuperação | pendente — próxima frente |
+| GATE-8 | Liberar dado real | **bloqueado**: o drill passou, mas faltam GATE-5 e GATE-7 |
 
 ```
-REAL DATA = BLOCKED
+BACKUP_DR      = CLOSED
+READY_FOR_VPS  = YES
+
+FEATURE_FREEZE = ACTIVE
+PILOT_GO       = NOT_EVALUATED
+REAL DATA      = BLOCKED
 ```
+
+O que ainda separa esta frente de dado real não é recuperabilidade — isso está
+provado. É a lifecycle rule do bucket (GATE-5), a instalação na VPS (GATE-7) e
+a avaliação de `PILOT_GO`.

@@ -123,12 +123,23 @@ credencial de upload não tem `deleteFiles`. Ver `docs/RUNBOOK_OFFHOST.md`.
 O job tem de nascer e morrer na VPS. Não depender da máquina do desenvolvedor:
 ela não está ligada às 3h, não está na mesma rede e não é parte do ambiente.
 
-## Cópia off-host — obrigatória antes de dado real
+## Cópia off-host
 
 ```
-LOCAL_BACKUP  = IMPLEMENTADO E ENSAIADO
-OFF_HOST_COPY = CÓDIGO PRONTO / NÃO PROVADO CONTRA O PROVEDOR
+LOCAL_BACKUP               = IMPLEMENTADO E ENSAIADO
+OFF_HOST_COPY              = VERIFIED
+OFF_HOST_RECOVERY_CHAIN    = VERIFIED
+POSTGRES_DISASTER_RESTORE  = VERIFIED
+DISASTER_RECOVERY_OFF_HOST = VERIFIED
+BACKUP_DR                  = CLOSED
 ```
+
+O drill completo foi executado contra o Backblaze B2 real, com dados
+sintéticos e **com o ambiente de origem destruído no meio**: `pg_dump -Fc` real
+→ `age` → B2 com Object Lock COMPLIANCE → verificação independente → perda
+total → recuperação exclusivamente off-host → `pg_restore` em PostgreSQL novo →
+validação pela aplicação. Evidências e ressalvas em
+[`RUNBOOK_OFFHOST.md`](RUNBOOK_OFFHOST.md).
 
 O pacote é um diretório de arquivos comuns, então o off-host o consome **depois
 de pronto** e não altera nada deste documento: `ops/backup.sh` e `ops/restore.sh`
