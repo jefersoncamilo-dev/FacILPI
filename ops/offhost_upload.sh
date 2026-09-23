@@ -135,6 +135,19 @@ fi
 
 NOME_PACOTE="$(basename "$PACOTE")"
 DIR_PAI="$(cd "$(dirname "$PACOTE")" && pwd)"
+# Forma de MONTAGEM do diretorio do pacote, usada SO no `-v` do docker. Ver a
+# explicacao completa em ops/backup.sh — mesma funcao, duplicada de proposito
+# para manter cada script de ops/ auto-contido.
+caminho_para_montagem() {
+    CAMINHO_MONTE="$1"
+    if CAMINHO_WINDOWS="$(cd "$1" && pwd -W 2>/dev/null)"; then
+        case "$CAMINHO_WINDOWS" in
+            ?:/*) CAMINHO_MONTE="$CAMINHO_WINDOWS" ;;
+        esac
+    fi
+    printf '%s' "$CAMINHO_MONTE"
+}
+DIR_PAI_MONTE="$(caminho_para_montagem "$DIR_PAI")"
 ARTEFATO="$DIR_PAI/$NOME_PACOTE.tar.age"
 PARCIAL="$ARTEFATO.parcial"
 # MARCADOR e o manifesto definitivo (offhost_manifest.json) so passam a
@@ -298,7 +311,7 @@ RESPOSTA="$(
         -e AWS_ACCESS_KEY_ID \
         -e AWS_SECRET_ACCESS_KEY \
         -e AWS_DEFAULT_REGION \
-        -v "$DIR_PAI:/dados:ro" \
+        -v "$DIR_PAI_MONTE:/dados:ro" \
         "$OFFHOST_IMAGE" \
         aws s3api put-object \
         --endpoint-url "$B2_ENDPOINT" \

@@ -73,6 +73,13 @@ B2_KEY_ID="$(ler_env B2_KEY_ID)"
 B2_APP_KEY="$(ler_env B2_APP_KEY)"
 OFFHOST_IMAGE="$(ler_env OFFHOST_IMAGE)"
 SENTINELA="$(ler_env OFFHOST_SENTINELA)"
+# Diretorio de CUSTODIA do manifesto VERIFIED — o cofre onde ja vive a chave
+# privada age. Opcional no arquivo, obrigatorio na pratica: sem o manifesto,
+# uma perda total do host deixa o objeto remoto indescobrivel, porque a
+# credencial de leitura nao tem (nem deve ter) `listFiles`. Guardar manifesto e
+# chave no MESMO cofre e deliberado: um sem o outro nao recupera nada, entao
+# separa-los criaria dois modos de falha em vez de um.
+CUSTODIA="$(ler_env OFFHOST_CUSTODIA)"
 [ -n "$OFFHOST_IMAGE" ] || OFFHOST_IMAGE="facilpi/offhost:1"
 
 [ -n "$B2_KEY_ID" ] || { echo "FALHA: B2_KEY_ID ausente em $ARQUIVO_ENV" >&2; exit 2; }
@@ -137,14 +144,19 @@ TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/facilpi-offhost-verify.XXXXXX")"
 limpar() { rm -rf -- "$TEMP_DIR"; }
 trap limpar EXIT INT TERM
 
-TEMP_DIR_MONTE="$TEMP_DIR"
-if CAMINHO_WINDOWS="$(cd "$TEMP_DIR" && pwd -W 2>/dev/null)"; then
-    # So aceita a conversao se ela devolveu mesmo uma forma Windows (X:/...).
-    # Qualquer outra coisa mantem o caminho original, fail-safe.
-    case "$CAMINHO_WINDOWS" in
-        ?:/*) TEMP_DIR_MONTE="$CAMINHO_WINDOWS" ;;
-    esac
-fi
+# Mesma funcao de ops/backup.sh, duplicada de proposito para manter cada script
+# de ops/ auto-contido. So aceita a conversao se ela devolveu mesmo uma forma
+# Windows (X:/...); qualquer outra coisa mantem o caminho original, fail-safe.
+caminho_para_montagem() {
+    CAMINHO_MONTE="$1"
+    if CAMINHO_WINDOWS="$(cd "$1" && pwd -W 2>/dev/null)"; then
+        case "$CAMINHO_WINDOWS" in
+            ?:/*) CAMINHO_MONTE="$CAMINHO_WINDOWS" ;;
+        esac
+    fi
+    printf '%s' "$CAMINHO_MONTE"
+}
+TEMP_DIR_MONTE="$(caminho_para_montagem "$TEMP_DIR")"
 
 # Filtro opcional de versao. Se o pendente nao capturou um VersionId (nao
 # deveria acontecer — a Backblaze documenta que PutObject sempre o retorna
@@ -336,6 +348,31 @@ cat > "$MANIFESTO_OFFHOST" <<JSON
   "restore_notes": "baixar com ops/offhost_fetch.sh FORA da VPS, com a credencial de leitura e a chave privada age sob custodia separada; conferir o sha256 ANTES de decifrar"
 }
 JSON
+
+# CUSTODIA antes do marcador, e fail-closed: o marcador significa "este backup
+# esta recuperavel", e um backup cujo manifesto nao chegou ao cofre nao esta —
+# ele so sera encontravel enquanto o host de origem existir, que e exatamente a
+# premissa que o disaster recovery nao pode assumir.
+if [ -n "$CUSTODIA" ]; then
+    if ! mkdir -p "$CUSTODIA" 2>/dev/null; then
+        echo "FALHA: nao foi possivel criar o diretorio de custodia: $CUSTODIA" >&2
+        echo "Nao gravando marcador de sucesso." >&2
+        exit 1
+    fi
+    if ! cp "$MANIFESTO_OFFHOST" "$CUSTODIA/$PACKAGE_NAME.offhost_manifest.json" 2>/dev/null; then
+        echo "FALHA: nao foi possivel custodiar o manifesto em $CUSTODIA." >&2
+        echo "       Sem o manifesto fora deste host, uma perda total deixaria o" >&2
+        echo "       objeto remoto indescobrivel (a credencial de leitura nao tem" >&2
+        echo "       listFiles, por decisao de arquitetura)." >&2
+        echo "Nao gravando marcador de sucesso." >&2
+        exit 1
+    fi
+    echo "manifesto custodiado: $CUSTODIA/$PACKAGE_NAME.offhost_manifest.json"
+else
+    echo "AVISO: OFFHOST_CUSTODIA nao definido — o manifesto VERIFIED fica so" >&2
+    echo "       neste host. Numa perda total nao havera como descobrir a chave" >&2
+    echo "       remota do objeto. Ver docs/RUNBOOK_OFFHOST.md." >&2
+fi
 
 date -u +%Y-%m-%dT%H:%M:%SZ > "$MARCADOR"
 

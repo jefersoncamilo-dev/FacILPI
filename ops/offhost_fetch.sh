@@ -57,8 +57,12 @@ done
 SHA_ESPERADO=""
 if [ -n "$MANIFESTO" ]; then
     [ -f "$MANIFESTO" ] || { echo "manifesto nao encontrado: $MANIFESTO" >&2; exit 2; }
-    [ -n "$CHAVE_REMOTA" ] || CHAVE_REMOTA="$(sed -n 's/.*"remote_key": "\([^"]*\)".*/\1/p' "$MANIFESTO")"
-    SHA_ESPERADO="$(sed -n 's/.*"encrypted_artifact_sha256": "\([^"]*\)".*/\1/p' "$MANIFESTO")"
+    # `: *"` e nao `: "`: o espaco depois do dois-pontos e estilo de
+    # serializacao, nao contrato. Exigi-lo faria um manifesto compacto e valido
+    # render campo vazio em silencio — e aqui isso significaria recuperar sem
+    # poder conferir o SHA-256.
+    [ -n "$CHAVE_REMOTA" ] || CHAVE_REMOTA="$(sed -n 's/.*"remote_key": *"\([^"]*\)".*/\1/p' "$MANIFESTO")"
+    SHA_ESPERADO="$(sed -n 's/.*"encrypted_artifact_sha256": *"\([^"]*\)".*/\1/p' "$MANIFESTO")"
 fi
 [ -n "$CHAVE_REMOTA" ] || { echo "falta -k <chave remota> (ou um manifesto que a contenha)" >&2; uso; }
 
@@ -116,15 +120,40 @@ else
     echo "       'local' sempre que houver um binario age disponivel." >&2
 fi
 
+# Traduz um caminho do SHELL para a forma que o DOCKER precisa receber em `-v`.
+#
+# Em Linux os dois textos sao identicos e esta funcao nao faz nada. Em Git
+# Bash/MSYS + Docker Desktop NAO sao: um caminho interno do MSYS (ex.:
+# /tmp/...) chega cru ao `docker` por causa de MSYS_NO_PATHCONV=1 e e
+# resolvido DENTRO da VM Linux do Docker — o container escreve num diretorio
+# que o host nunca enxerga. Foi exatamente a falha do GATE-3Y, ja corrigida em
+# ops/offhost_verify.sh com este mesmo padrao. `pwd -W` (builtin do MSYS)
+# devolve a forma Windows (C:/...), que o Docker Desktop mapeia para o MESMO
+# diretorio que o shell le. Em Linux `pwd -W` nao existe, a conversao nao
+# acontece e o caminho original continua valendo — sem dependencia nova em
+# nenhum dos dois sistemas.
+caminho_para_montagem() {
+    CAMINHO_MONTE="$1"
+    if CAMINHO_WINDOWS="$(cd "$1" && pwd -W 2>/dev/null)"; then
+        # So aceita a conversao se ela devolveu mesmo forma Windows (X:/...).
+        # Qualquer outra coisa mantem o caminho original, fail-safe.
+        case "$CAMINHO_WINDOWS" in
+            ?:/*) CAMINHO_MONTE="$CAMINHO_WINDOWS" ;;
+        esac
+    fi
+    printf '%s' "$CAMINHO_MONTE"
+}
+
 # Executa uma ferramenta no runtime escolhido. Em modo container, `$DESTINO` e o
-# diretorio da identidade sao montados; em modo local nao ha nenhuma montagem.
+# diretorio da identidade sao montados — pelas formas *_MONTE, nunca pelos
+# caminhos que o shell usa; em modo local nao ha nenhuma montagem.
 executar_age() {
     if [ "$OFFHOST_RUNTIME" = "local" ]; then
         age "$@"
     else
         docker run --rm -i \
-            -v "$DESTINO:/dados" \
-            -v "$DIR_IDENTIDADE:/chave:ro" \
+            -v "$DESTINO_MONTE:/dados" \
+            -v "$DIR_IDENTIDADE_MONTE:/chave:ro" \
             "$OFFHOST_IMAGE" age "$@"
     fi
 }
@@ -144,7 +173,7 @@ executar_aws() {
             -e AWS_ACCESS_KEY_ID \
             -e AWS_SECRET_ACCESS_KEY \
             -e AWS_DEFAULT_REGION \
-            -v "$DESTINO:/dados" \
+            -v "$DESTINO_MONTE:/dados" \
             "$OFFHOST_IMAGE" aws "$@"
     fi
 }
@@ -152,12 +181,23 @@ executar_aws() {
 # A identidade age e a chave que decifra TODOS os backups off-host. Se ela
 # estiver legivel por outros usuarios da maquina, o problema nao e este restore
 # — e a custodia inteira.
-PERMISSOES="$(stat -c '%a' "$IDENTIDADE" 2>/dev/null || echo "")"
-case "$PERMISSOES" in
-    ""|600|400) ;;
-    *) echo "AVISO: $IDENTIDADE esta com permissao $PERMISSOES. A chave privada age" >&2
-       echo "       deveria ser 0600. Ela decifra TODOS os backups off-host." >&2 ;;
-esac
+# Em MSYS o modo POSIX e uma TRADUCAO da ACL do NTFS, nao a permissao real: um
+# arquivo perfeitamente restrito aparece como 644 so porque nao ha bits de grupo
+# equivalentes. Avisar ali seria alarme falso — e alarme falso recorrente treina
+# o operador a ignorar avisos. Onde o modo e a permissao de verdade, o aviso
+# continua valendo.
+if [ -n "$(cd / && pwd -W 2>/dev/null)" ]; then
+    echo "NOTA: neste host (MSYS/Windows) o modo POSIX do arquivo nao representa a" >&2
+    echo "      permissao real. Confira a custodia da chave privada pela ACL do" >&2
+    echo "      NTFS (icacls), nao por chmod." >&2
+else
+    PERMISSOES="$(stat -c '%a' "$IDENTIDADE" 2>/dev/null || echo "")"
+    case "$PERMISSOES" in
+        ""|600|400) ;;
+        *) echo "AVISO: $IDENTIDADE esta com permissao $PERMISSOES. A chave privada age" >&2
+           echo "       deveria ser 0600. Ela decifra TODOS os backups off-host." >&2 ;;
+    esac
+fi
 
 mkdir -p "$DESTINO"
 # Caminhos absolutos: `docker run -v` nao aceita caminho relativo, e o modo
@@ -165,6 +205,11 @@ mkdir -p "$DESTINO"
 DESTINO="$(cd "$DESTINO" && pwd)"
 DIR_IDENTIDADE="$(cd "$(dirname "$IDENTIDADE")" && pwd)"
 NOME_IDENTIDADE="$(basename "$IDENTIDADE")"
+# Formas de MONTAGEM, usadas SO nos `-v` do docker. O shell continua lendo e
+# escrevendo por $DESTINO/$DIR_IDENTIDADE — separar os dois e o que impede o
+# container gravar num lugar que o host nao enxerga.
+DESTINO_MONTE="$(caminho_para_montagem "$DESTINO")"
+DIR_IDENTIDADE_MONTE="$(caminho_para_montagem "$DIR_IDENTIDADE")"
 NOME_ARTEFATO="$(basename "$CHAVE_REMOTA")"
 ARTEFATO="$DESTINO/$NOME_ARTEFATO"
 PARCIAL="$ARTEFATO.parcial"
@@ -256,7 +301,7 @@ if ! ( cd "$PACOTE" && sha256sum -c SHA256SUMS ); then
     exit 1
 fi
 
-CABECA="$(sed -n 's/.*"alembic_head": "\([^"]*\)".*/\1/p' "$PACOTE/manifest.json")"
+CABECA="$(sed -n 's/.*"alembic_head": *"\([^"]*\)".*/\1/p' "$PACOTE/manifest.json")"
 echo ""
 echo "OK  $PACOTE"
 echo "alembic_head=$CABECA"
