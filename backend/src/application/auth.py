@@ -190,6 +190,38 @@ def decode_access_token(token: str) -> dict[str, Any]:
         raise _authentication_required("invalid_token")
 
 
+def access_session_identity_for_logout(request: Request) -> tuple[str, str] | None:
+    """Identifica sessao para revogacao sem transformar logout em autenticacao.
+
+    Logout e reducao de privilegio: um token expirado, mas ainda validamente
+    assinado, continua sendo prova suficiente para encerrar a familia que ele
+    nomeia. Bearer ausente, malformado, com assinatura invalida ou sem sid nao
+    deve impedir o cliente de limpar a sessao local nem revelar detalhes.
+    """
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM],
+            options={"verify_exp": False},
+        )
+    except (jwt.InvalidTokenError, TypeError, ValueError):
+        return None
+    user_id = payload.get("sub")
+    sid = payload.get("sid")
+    if not isinstance(user_id, str) or not user_id:
+        return None
+    if not isinstance(sid, str) or not sid:
+        return None
+    return user_id, sid
+
+
 def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
