@@ -101,12 +101,11 @@ REQUIRE_ACCESS_SESSION_ID = ENVIRONMENT in {"pilot", "production"}
 logger = logging.getLogger("facilpi.security")
 security = HTTPBearer(auto_error=False)
 
-# Limite por IP existente. Continua como primeira barreira.
+# Limite por IP existente. Continua como primeira barreira. O mesmo
+# armazenamento process-local recebe chaves namespaced do limite por conta;
+# isso preserva o reset atomico que a suite ja faz com `_rate_store.clear()`.
 _rate_store: Dict[str, list] = {}
-# PH-02/PR-2: limite adicional por login normalizado. E propositalmente em
-# memoria nesta etapa; protege distribuicao por varios IPs sem criar lockout
-# permanente ou nova dependencia de infraestrutura.
-_login_failure_store: Dict[str, list] = {}
+_login_failure_store = _rate_store
 
 
 def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 60):
@@ -124,25 +123,76 @@ def normalize_login(login: str) -> str:
     return login.strip().lower()
 
 
+def _login_limit_keys(login: str) -> tuple[str, str]:
+    normalized = normalize_login(login)
+    return f"login-fail:{normalized}", f"login-pending:{normalized}"
+
+
+def _active_login_failures(failure_key: str, now: float) -> list[float]:
+    failures = [
+        float(t)
+        for t in _rate_store.get(failure_key, [])
+        if now - float(t) < LOGIN_FAILURE_WINDOW_SEC
+    ]
+    if failures:
+        _rate_store[failure_key] = failures
+    else:
+        _rate_store.pop(failure_key, None)
+    return failures
+
+
 def check_login_failure_limit(login: str) -> None:
-    key = normalize_login(login)
+    """Consulta sem reservar; mantida para diagnostico/testes."""
+    failure_key, pending_key = _login_limit_keys(login)
     now = time.time()
-    failures = [t for t in _login_failure_store.get(key, []) if now - t < LOGIN_FAILURE_WINDOW_SEC]
-    _login_failure_store[key] = failures
-    if len(failures) >= LOGIN_FAILURE_LIMIT:
+    failures = _active_login_failures(failure_key, now)
+    pending = _rate_store.get(pending_key, [])
+    if len(failures) + len(pending) >= LOGIN_FAILURE_LIMIT:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
 
 
-def register_login_failure(login: str) -> None:
-    key = normalize_login(login)
+def reserve_login_attempt(login: str) -> str:
+    """Reserva uma das 10 vagas antes do primeiro await da autenticação.
+
+    A reserva impede que varias requisicoes concorrentes vejam o mesmo contador
+    e todas ultrapassem o teto. Ela so vira falha depois de credencial invalida.
+    """
+    failure_key, pending_key = _login_limit_keys(login)
     now = time.time()
-    failures = [t for t in _login_failure_store.get(key, []) if now - t < LOGIN_FAILURE_WINDOW_SEC]
+    failures = _active_login_failures(failure_key, now)
+    pending = list(_rate_store.get(pending_key, []))
+    if len(failures) + len(pending) >= LOGIN_FAILURE_LIMIT:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    reservation = secrets.token_urlsafe(12)
+    pending.append(reservation)
+    _rate_store[pending_key] = pending
+    return reservation
+
+
+def release_login_reservation(login: str, reservation: str) -> None:
+    _, pending_key = _login_limit_keys(login)
+    pending = [item for item in _rate_store.get(pending_key, []) if item != reservation]
+    if pending:
+        _rate_store[pending_key] = pending
+    else:
+        _rate_store.pop(pending_key, None)
+
+
+def register_login_failure(login: str, reservation: str | None = None) -> None:
+    failure_key, _ = _login_limit_keys(login)
+    now = time.time()
+    failures = _active_login_failures(failure_key, now)
+    if reservation is not None:
+        release_login_reservation(login, reservation)
     failures.append(now)
-    _login_failure_store[key] = failures
+    _rate_store[failure_key] = failures
 
 
-def clear_login_failures(login: str) -> None:
-    _login_failure_store.pop(normalize_login(login), None)
+def clear_login_failures(login: str, reservation: str | None = None) -> None:
+    failure_key, _ = _login_limit_keys(login)
+    _rate_store.pop(failure_key, None)
+    if reservation is not None:
+        release_login_reservation(login, reservation)
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
