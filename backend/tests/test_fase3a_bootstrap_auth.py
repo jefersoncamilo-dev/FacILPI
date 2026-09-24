@@ -355,6 +355,105 @@ def test_logout_aceita_bearer_expirado_assinado_e_revoga_familia(fase3a_db, monk
     asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
 
 
+def test_logout_com_assinatura_invalida_e_uniforme_sem_revogar(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        login = await _login(client, bootstrap.temporary_password)
+        assert login.status_code == 200, login.text
+        refresh = client.cookies.get("refresh_token")
+        assert refresh
+
+        client.cookies.clear()
+        invalid = auth.jwt.encode(
+            {"sub": "forjado", "sid": "familia-forjada", "exp": 4_102_444_800},
+            "segredo-incorreto-com-tamanho-suficiente-123456789",
+            algorithm=auth.JWT_ALGORITHM,
+        )
+        logout = await client.post(
+            "/api/auth/logout",
+            headers=_auth_headers(invalid),
+        )
+        assert logout.status_code == 200, logout.text
+        assert logout.json() == {"mensagem": "Sessão encerrada"}
+
+        # A prova inválida é ignorada para revogação; a sessão real segue ativa.
+        still_active = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh}"},
+        )
+        assert still_active.status_code == 200, still_active.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_logout_com_cookie_e_bearer_divergentes_revoga_as_duas_familias(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        initial = await _login(client, bootstrap.temporary_password)
+        assert initial.status_code == 200, initial.text
+        first_access = await client.put(
+            "/api/auth/primeiro-acesso",
+            headers=_auth_headers(initial.json()["access_token"]),
+            json={"nova_senha": FIRST_PASSWORD, "confirmar": FIRST_PASSWORD},
+        )
+        assert first_access.status_code == 200, first_access.text
+
+        client.cookies.clear()
+        session_a = await _login(client, FIRST_PASSWORD)
+        access_a = session_a.json()["access_token"]
+        refresh_a = client.cookies.get("refresh_token")
+        assert refresh_a
+
+        client.cookies.clear()
+        session_b = await _login(client, FIRST_PASSWORD)
+        access_b = session_b.json()["access_token"]
+        refresh_b = client.cookies.get("refresh_token")
+        assert refresh_b and refresh_b != refresh_a
+
+        client.cookies.clear()
+        mismatch = await client.post(
+            "/api/auth/logout",
+            headers={
+                **_auth_headers(access_a),
+                "Cookie": f"refresh_token={refresh_b}",
+            },
+        )
+        assert mismatch.status_code == 200, mismatch.text
+        assert mismatch.json() == {"mensagem": "Sessão encerrada"}
+
+        for access in (access_a, access_b):
+            after = await client.get("/api/instituicoes/", headers=_auth_headers(access))
+            assert after.status_code == 401, after.text
+
+        for refresh in (refresh_a, refresh_b):
+            client.cookies.clear()
+            after = await client.post(
+                "/api/auth/refresh",
+                headers={"Cookie": f"refresh_token={refresh}"},
+            )
+            assert after.status_code == 401, after.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_pilot_production_recusa_access_token_sem_sid(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        user = (
+            await db.execute(select(m.User).where(m.User.email == ADMIN_EMAIL))
+        ).scalar_one()
+        legacy = auth.create_access_token(user)
+        monkeypatch.setattr(auth, "REQUIRE_ACCESS_SESSION_ID", True)
+
+        response = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(legacy),
+        )
+        assert response.status_code == 401, response.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
 def test_migration_004_to_005_preserves_legacy_users(fase3a_db, monkeypatch):
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         version = (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
