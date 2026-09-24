@@ -15,7 +15,6 @@ from .infrastructure import models as m
 from .application import schemas as s
 from .application.auth import (
     access_session_identity,
-    check_login_failure_limit,
     check_rate_limit,
     clear_login_failures,
     get_current_user,
