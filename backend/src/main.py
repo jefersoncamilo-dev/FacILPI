@@ -173,21 +173,27 @@ async def update_password(payload: s.PasswordUpdate, request: Request, db: Async
         # Trocar a senha temporária por ela mesma zerava exige_troca_senha e
         # encerrava o primeiro acesso sem que senha alguma mudasse.
         raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da senha atual")
+    mandatory_change = bool(current_user.exige_troca_senha)
     current_user.password_hash = hash_password(payload.nova_senha)
     current_user.exige_troca_senha = False
 
-    # Troca feita pelo proprio usuario preserva a sessao atual e encerra as
-    # demais. Reset administrativo continua revogando todas em fase3a.py.
-    current_session = access_session_identity(request, require_sid=False)
-    if current_session is not None and current_session[0] == current_user.id:
-        await revoke_user_refresh_tokens_except_family(
-            db,
-            current_user.id,
-            current_session[1],
-        )
-    else:
-        # Compatibilidade apenas para tokens antigos de development/test sem sid.
+    if mandatory_change:
+        # Credencial temporaria/primeiro acesso: nenhuma sessao aberta com a
+        # senha temporaria sobrevive. O frontend autentica novamente depois.
         await revoke_user_refresh_tokens(db, current_user.id)
+    else:
+        # Troca voluntaria: preserva apenas a familia autenticada e encerra as
+        # demais. Reset administrativo continua revogando todas em fase3a.py.
+        current_session = access_session_identity(request, require_sid=False)
+        if current_session is not None and current_session[0] == current_user.id:
+            await revoke_user_refresh_tokens_except_family(
+                db,
+                current_user.id,
+                current_session[1],
+            )
+        else:
+            # Compatibilidade apenas para tokens antigos de development/test sem sid.
+            await revoke_user_refresh_tokens(db, current_user.id)
 
     add_audit(
         db,
