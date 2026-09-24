@@ -313,6 +313,48 @@ def test_logout_revoga_so_familia_atual_e_preserva_sessao_independente(fase3a_db
     asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
 
 
+def test_logout_aceita_bearer_expirado_assinado_e_revoga_familia(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        login = await _login(client, bootstrap.temporary_password)
+        assert login.status_code == 200, login.text
+        access = login.json()["access_token"]
+        refresh = client.cookies.get("refresh_token")
+        assert refresh
+
+        payload = auth.decode_access_token(access)
+        payload["exp"] = 1
+        expired_but_signed = auth.jwt.encode(
+            payload,
+            auth.JWT_SECRET,
+            algorithm=auth.JWT_ALGORITHM,
+        )
+
+        client.cookies.clear()
+        logout = await client.post(
+            "/api/auth/logout",
+            headers=_auth_headers(expired_but_signed),
+        )
+        assert logout.status_code == 200, logout.text
+        assert logout.json() == {"mensagem": "Sessão encerrada"}
+
+        # O access original ainda estaria dentro do exp, mas a familia foi
+        # revogada pelo bearer expirado: precisa falhar pela sessao, nao pelo TTL.
+        old_access = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access),
+        )
+        assert old_access.status_code == 401, old_access.text
+
+        old_refresh = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh}"},
+        )
+        assert old_refresh.status_code == 401, old_refresh.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
 def test_migration_004_to_005_preserves_legacy_users(fase3a_db, monkeypatch):
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         version = (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one()
