@@ -186,6 +186,23 @@ async def _login(client: httpx.AsyncClient, password: str, **context) -> httpx.R
     return await client.post("/api/auth/token", json=payload)
 
 
+def test_reserva_do_rate_limit_por_conta_e_atomica(monkeypatch):
+    auth._rate_store.clear()
+    monkeypatch.setattr(auth.time, "time", lambda: 2_000_000.0)
+    login = "concorrencia@facilpi.com.br"
+
+    reservas = [auth.reserve_login_attempt(login) for _ in range(auth.LOGIN_FAILURE_LIMIT)]
+    with pytest.raises(HTTPException) as exc:
+        auth.reserve_login_attempt(login)
+    assert exc.value.status_code == 429
+
+    # Reservas pendentes nao sao falhas: ao libera-las, a conta volta a ter vagas.
+    for reserva in reservas:
+        auth.release_login_reservation(login, reserva)
+    nova = auth.reserve_login_attempt(login)
+    auth.release_login_reservation(login, nova)
+
+
 def test_login_failure_limit_por_conta_normalizada(fase3a_db, monkeypatch):
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
