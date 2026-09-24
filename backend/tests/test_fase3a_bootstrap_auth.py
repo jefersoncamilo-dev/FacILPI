@@ -233,7 +233,7 @@ def test_login_failure_limit_por_conta_normalizada(fase3a_db, monkeypatch):
         assert recovered.status_code == 401, recovered.text
 
         # Conta inexistente recebe a mesma política e a mesma classe de resposta.
-        unknown = "naoexiste@example.test"
+        unknown = "naoexiste@facilpi.com.br"
         for _ in range(10):
             failed_unknown = await client.post(
                 "/api/auth/token",
