@@ -21,6 +21,8 @@ from .application.auth import (
     get_current_user,
     hash_password,
     register_login_failure,
+    release_login_reservation,
+    reserve_login_attempt,
     revoke_user_refresh_tokens,
     revoke_user_refresh_tokens_except_family,
     verify_password,
@@ -129,32 +131,40 @@ async def token(payload: s.UserLogin, request: Request, response: Response, db: 
     check_rate_limit(f"token:{client_ip}")
 
     login = payload.email.lower().strip()
-    # PH-02/PR-2: conta inexistente e senha incorreta percorrem a mesma politica
-    # de falhas. A verificacao vem antes da consulta/senha para que o bloqueio nao
-    # revele se a conta existe.
-    check_login_failure_limit(login)
-    result = await db.execute(select(m.User).where(m.User.email == login))
-    user = result.scalar_one_or_none()
-    if not user or not verify_password(payload.password, user.password_hash):
-        register_login_failure(login)
-        raise HTTPException(status_code=401, detail="Credenciais inválidas")
-    if not user.ativo:
-        raise HTTPException(status_code=401, detail="Usuário inativo")
+    # Reserva antes do primeiro await: duas requisicoes concorrentes nao podem
+    # observar o mesmo contador e exceder o teto de 10. A reserva so vira falha
+    # quando a credencial e de fato invalida.
+    reservation = reserve_login_attempt(login)
+    try:
+        result = await db.execute(select(m.User).where(m.User.email == login))
+        user = result.scalar_one_or_none()
+        if not user or not verify_password(payload.password, user.password_hash):
+            register_login_failure(login, reservation)
+            reservation = ""
+            raise HTTPException(status_code=401, detail="Credenciais inválidas")
+        if not user.ativo:
+            release_login_reservation(login, reservation)
+            reservation = ""
+            raise HTTPException(status_code=401, detail="Usuário inativo")
 
-    # Credencial correta encerra a janela de falhas da conta. Erros posteriores
-    # de contexto/autorizacao nao sao tentativa de senha e nao alimentam lockout.
-    clear_login_failures(login)
-    session_payload = await issue_session_response(
-        db,
-        user,
-        response,
-        request,
-        scope=payload.scope,
-        ilpi_id=payload.ilpi_id,
-        perfil_id=payload.perfil_id,
-    )
-    await db.commit()
-    return session_payload
+        # Credencial correta encerra a janela de falhas da conta. Erros posteriores
+        # de contexto/autorizacao nao sao tentativa de senha e nao alimentam lockout.
+        clear_login_failures(login, reservation)
+        reservation = ""
+        session_payload = await issue_session_response(
+            db,
+            user,
+            response,
+            request,
+            scope=payload.scope,
+            ilpi_id=payload.ilpi_id,
+            perfil_id=payload.perfil_id,
+        )
+        await db.commit()
+        return session_payload
+    finally:
+        if reservation:
+            release_login_reservation(login, reservation)
 
 @auth_router.put("/password")
 async def update_password(payload: s.PasswordUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
