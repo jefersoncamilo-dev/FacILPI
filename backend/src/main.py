@@ -13,7 +13,18 @@ import pathlib
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
-from .application.auth import hash_password, verify_password, get_current_user, check_rate_limit, revoke_user_refresh_tokens
+from .application.auth import (
+    access_session_identity,
+    check_login_failure_limit,
+    check_rate_limit,
+    clear_login_failures,
+    get_current_user,
+    hash_password,
+    register_login_failure,
+    revoke_user_refresh_tokens,
+    revoke_user_refresh_tokens_except_family,
+    verify_password,
+)
 from .application.runtime import docs_urls_for, resolve_cors_origins, resolve_environment
 from .application.audit import add_audit
 from .application.medicacao import (
@@ -116,12 +127,23 @@ async def register(request: Request):
 async def token(payload: s.UserLogin, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
     check_rate_limit(f"token:{client_ip}")
-    result = await db.execute(select(m.User).where(m.User.email == payload.email.lower().strip()))
+
+    login = payload.email.lower().strip()
+    # PH-02/PR-2: conta inexistente e senha incorreta percorrem a mesma politica
+    # de falhas. A verificacao vem antes da consulta/senha para que o bloqueio nao
+    # revele se a conta existe.
+    check_login_failure_limit(login)
+    result = await db.execute(select(m.User).where(m.User.email == login))
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.password_hash):
+        register_login_failure(login)
         raise HTTPException(status_code=401, detail="Credenciais inválidas")
     if not user.ativo:
         raise HTTPException(status_code=401, detail="Usuário inativo")
+
+    # Credencial correta encerra a janela de falhas da conta. Erros posteriores
+    # de contexto/autorizacao nao sao tentativa de senha e nao alimentam lockout.
+    clear_login_failures(login)
     session_payload = await issue_session_response(
         db,
         user,
@@ -153,7 +175,20 @@ async def update_password(payload: s.PasswordUpdate, request: Request, db: Async
         raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da senha atual")
     current_user.password_hash = hash_password(payload.nova_senha)
     current_user.exige_troca_senha = False
-    await revoke_user_refresh_tokens(db, current_user.id)
+
+    # Troca feita pelo proprio usuario preserva a sessao atual e encerra as
+    # demais. Reset administrativo continua revogando todas em fase3a.py.
+    current_session = access_session_identity(request, require_sid=False)
+    if current_session is not None and current_session[0] == current_user.id:
+        await revoke_user_refresh_tokens_except_family(
+            db,
+            current_user.id,
+            current_session[1],
+        )
+    else:
+        # Compatibilidade apenas para tokens antigos de development/test sem sid.
+        await revoke_user_refresh_tokens(db, current_user.id)
+
     add_audit(
         db,
         acao="auth.senha_alterada",
