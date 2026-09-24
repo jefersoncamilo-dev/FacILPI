@@ -477,10 +477,9 @@ async def logout_session(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
-    # Cookie e Bearer podem identificar a mesma familia. Nunca escolhemos um
-    # silenciosamente quando divergem: se forem do mesmo usuario, ambas as
-    # familias sao encerradas; se apontarem para usuarios diferentes, nenhuma
-    # sessao e escolhida por heuristica.
+    # Cookie e Bearer podem identificar familias diferentes. Nunca escolhemos
+    # uma prova silenciosamente: na divergencia, cada prova revoga exatamente a
+    # familia que nomeia e o evento fica registrado em auditoria.
     access_identity = access_session_identity_for_logout(request)
     raw_refresh = request.cookies.get(REFRESH_COOKIE_NAME)
     row = await load_refresh_token(db, raw_refresh or "")
