@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react'
 import { api } from '../services/api'
-import { contextApi, resolveContextLabels } from '../services/context'
+import { contextApi, logoutServidor, resolveContextLabels } from '../services/context'
 import {
   TOKEN_KEY, USER_KEY, CONTEXT_KEY, CONTEXT_CHANGED_EVENT,
   decodeJwt, isTokenExpired, contextFromToken, sameContext,
@@ -20,7 +20,8 @@ type AuthContextType = {
   /** Troca obrigatória pendente (primeiro acesso). Bloqueia app normal e context switch. */
   requiresPasswordChange: boolean
   login: (email: string, password: string) => Promise<LoginResult>
-  logout: () => void
+  /** Avisa o servidor e limpa a sessão local; a limpeza acontece mesmo se a chamada falhar. */
+  logout: () => Promise<void>
   updatePassword: (atual: string, nova: string, confirmar: string) => Promise<void>
   /** Troca obrigatória: PUT /auth/password + re-login (token/claims atualizados). */
   completePasswordChange: (atual: string, nova: string, confirmar: string) => Promise<LoginResult>
@@ -95,15 +96,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearContextError = useCallback(() => setContextError(null), [])
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
-    localStorage.removeItem(CONTEXT_KEY)
-    setUser(null)
-    setActiveContext(null)
-    setAvailableContexts([])
-    setRequiresPasswordChange(false)
-    window.location.href = '/login'
+  /**
+   * PH-01: sair passou a avisar o servidor antes de limpar o cliente.
+   *
+   * A ordem é deliberada — pedir a revogação primeiro, limpar sempre depois.
+   * A limpeza local e o redirect acontecem no `finally`: rede fora, 500 ou
+   * timeout não podem prender o usuário numa sessão que ele já mandou encerrar.
+   *
+   * LOGOUT_SERVER_REVOCATION = NOT_PROVEN (dependência registrada, fora deste
+   * escopo): o cookie de refresh é `SameSite=Strict` e o frontend publicado vive
+   * em origem diferente da API (facilpi-web × facilpi-api no Render). Nessa
+   * topologia o navegador não guarda nem envia esse cookie, então a requisição
+   * chega sem ele, `load_refresh_token` devolve None e o handler responde 200
+   * sem revogar nada. O 200 aqui significa "o servidor recebeu o pedido", não
+   * "a sessão foi revogada". Provar revogação real exige mudar SameSite/CORS ou
+   * a topologia de origem — decisão de backend/infra, não desta rodada.
+   */
+  const logout = useCallback(async () => {
+    try {
+      await logoutServidor()
+    } catch {
+      // Sem tratamento por design: a saída local não depende do resultado.
+    } finally {
+      localStorage.removeItem(TOKEN_KEY)
+      localStorage.removeItem(USER_KEY)
+      localStorage.removeItem(CONTEXT_KEY)
+      setUser(null)
+      setActiveContext(null)
+      setAvailableContexts([])
+      setRequiresPasswordChange(false)
+      window.location.href = '/login'
+    }
   }, [])
 
   /** Reconcilia o contexto armazenado com as claims do token (token vence). */

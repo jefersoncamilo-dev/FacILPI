@@ -181,9 +181,10 @@ describe('Central — criação e edição', () => {
 
   it('12. capacidade zero não chega à rede', async () => {
     // O backend recusa com CAPACIDADE_REQUIRED; a tela nem chega a perguntar.
-    // Quem barra primeiro é a restrição nativa `min=1` do campo — por isso a
-    // asserção é sobre o que importa (nada é enviado), e não sobre qual das duas
-    // camadas interceptou.
+    // Desde a PH-01 quem barra é a validação por campo do formulário (o `required`
+    // nativo saiu junto com o `noValidate`, para que a mensagem da tela apareça em
+    // vez do balão do navegador). A asserção segue sobre o que importa — nada é
+    // enviado — e não sobre qual camada interceptou.
     const user = userEvent.setup()
     renderRotas('/platform/instituicoes/nova')
     await user.type(screen.getByLabelText(/Razão social/), 'Casa Serena')
@@ -420,5 +421,82 @@ describe('PLATFORM-2 — regeneração da credencial do primeiro gestor', () => 
       'Esta ILPI ainda não possui administrador institucional',
     )
     expect(screen.queryByTestId('senha-temporaria')).toBeNull()
+  })
+})
+
+describe('PH-01 — formulário de instituição: UF e CNPJ', () => {
+  beforeEach(() => seed(TOKEN_OPERADOR, { scope: 'global' }))
+
+  it('14. UF é uma seleção fechada, não campo livre', async () => {
+    renderRotas('/platform/instituicoes/nova')
+    const uf = await screen.findByLabelText('UF')
+
+    expect(uf.tagName).toBe('SELECT')
+    // 27 siglas + a opção vazia "Selecione...".
+    expect((uf as HTMLSelectElement).options).toHaveLength(28)
+    expect([...(uf as HTMLSelectElement).options].map(o => o.value)).toContain('PR')
+    // "Paraná" não existe como valor: digitar o nome do estado deixou de ser possível.
+    expect([...(uf as HTMLSelectElement).options].some(o => o.value.length > 2)).toBe(false)
+  })
+
+  it('15. CNPJ com dígito verificador errado não chega à rede', async () => {
+    const user = userEvent.setup()
+    renderRotas('/platform/instituicoes/nova')
+
+    await user.type(screen.getByLabelText(/Razão social/), 'Casa Serena')
+    await user.type(screen.getByLabelText(/Capacidade/), '20')
+    await user.type(screen.getByLabelText('CNPJ'), '11.222.333/0001-82')
+    await user.click(screen.getByRole('button', { name: 'Criar instituição' }))
+
+    expect(await screen.findByText(/dígito verificador não confere/)).toBeTruthy()
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('16. CNPJ válido e UF selecionada são enviados ao backend', async () => {
+    const user = userEvent.setup()
+    mockPost.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+    mockGet.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+    renderRotas('/platform/instituicoes/nova')
+
+    await user.type(screen.getByLabelText(/Razão social/), 'Casa Serena')
+    await user.type(screen.getByLabelText(/Capacidade/), '20')
+    await user.type(screen.getByLabelText('CNPJ'), '11.222.333/0001-81')
+    await user.selectOptions(screen.getByLabelText('UF'), 'PR')
+    await user.click(screen.getByRole('button', { name: 'Criar instituição' }))
+
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/platform/instituicoes', {
+        razao_social: 'Casa Serena',
+        capacidade: 20,
+        cnpj: '11.222.333/0001-81',
+        uf: 'PR',
+      }),
+    )
+  })
+
+  it('17. CNPJ e UF seguem OPCIONAIS na criação', async () => {
+    const user = userEvent.setup()
+    mockPost.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+    mockGet.mockResolvedValue({ data: ILPI_RASCUNHO } as any)
+    renderRotas('/platform/instituicoes/nova')
+
+    await user.type(screen.getByLabelText(/Razão social/), 'Casa Serena')
+    await user.type(screen.getByLabelText(/Capacidade/), '20')
+    await user.click(screen.getByRole('button', { name: 'Criar instituição' }))
+
+    await waitFor(() =>
+      expect(mockPost).toHaveBeenCalledWith('/platform/instituicoes', {
+        razao_social: 'Casa Serena',
+        capacidade: 20,
+      }),
+    )
+  })
+
+  it('18. a tela avisa que CNPJ e UF serão exigidos na ativação', async () => {
+    renderRotas('/platform/instituicoes/nova')
+    // O texto é quebrado por <strong>, então a asserção é sobre o parágrafo inteiro.
+    const aviso = (await screen.findByText(/obrigatórios para ativá-la/)).closest('p')!
+    expect(aviso.textContent).toMatch(/CNPJ.*UF.*opcionais para criar/s)
+    expect(aviso.textContent).toMatch(/obrigatórios para ativá-la/)
   })
 })
