@@ -33,6 +33,19 @@ function jwt(payload: object): string {
 const FUTURE = Math.floor(Date.now() / 1000) + 3600
 const GLOBAL_TOKEN = jwt({ sub: 'u-admin', email: 'admin@ilpi.com', is_superuser: true, exp: FUTURE })
 const ILPI_TOKEN = jwt({ sub: 'u-admin', email: 'admin@ilpi.com', scope: 'ilpi', ilpi_id: 'ilpi1', perfil_id: 'p1', exp: FUTURE })
+// Usuário com vínculo em duas ILPIs: a transição ilpi1 -> ilpi2 é aceita pelo backend.
+const GESTOR_ILPI1 = jwt({ sub: 'u-gestor', email: 'gestor@ilpi.com', scope: 'ilpi', ilpi_id: 'ilpi1', perfil_id: 'p1', exp: FUTURE })
+const GESTOR_ILPI2 = jwt({ sub: 'u-gestor', email: 'gestor@ilpi.com', scope: 'ilpi', ilpi_id: 'ilpi2', perfil_id: 'p2', exp: FUTURE })
+const OPCAO_ILPI2 = { key: 'ilpi:ilpi2', scope: 'ilpi' as const, ilpi_id: 'ilpi2', label: 'ILPI 2', sublabel: 'Contexto institucional' }
+// Token global reemitido: difere do primeiro para provar a substituição.
+const GLOBAL_TOKEN_2 = jwt({ sub: 'u-admin', email: 'admin@ilpi.com', is_superuser: true, exp: FUTURE, jti: 'reemitido' })
+
+function semearGestor() {
+  localStorage.setItem(TOKEN_KEY, GESTOR_ILPI1)
+  localStorage.setItem(USER_KEY, JSON.stringify({ id: 'u-gestor', nome: 'gestor', email: 'gestor@ilpi.com' }))
+  localStorage.setItem(CONTEXT_KEY, JSON.stringify({ scope: 'ilpi', ilpi_id: 'ilpi1', perfil_id: 'p1' }))
+}
+
 const ILPI_LIST = [{ id: 'ilpi1', razao_social: 'ILPI Modelo', nome_fantasia: null, situacao: 'ILPI_RASCUNHO' }]
 
 function Harness({ onReady }: { onReady: (ctx: ReturnType<typeof useAuth>) => void }) {
@@ -59,18 +72,26 @@ beforeEach(() => {
 })
 
 describe('ContextSwitch — login e contexto', () => {
-  it('1. login global persiste token e contexto Plataforma', async () => {
+  // PH02-04 (#72 / H01): os testes 1, 3, 4, 5, 8 e 9 simulavam o superusuário
+  // recebendo e escolhendo ILPIs como contexto, com /auth/contexto mockado em
+  // sucesso — uma troca que o backend real recusa (403 AUTH_CONTEXT_REQUIRED). O 7
+  // mockava uma volta ILPI -> global de quem não tem vínculo global. Foram
+  // recriados sobre transições que o backend aceita: o superusuário fica na
+  // Plataforma, e a mecânica de switchContext é exercida por um usuário com
+  // vínculo em duas ILPIs.
+  it('1. login do superusuário oferece só Plataforma — ILPIs visíveis não viram contexto', async () => {
     mockPost.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
     const { get } = renderAuth()
-    await get().login('admin@ilpi.com', 'senha')
-    // O token chega ao localStorage de forma sincrona dentro do login, antes de
-    // setActiveContext/setAvailableContexts; fechar o gate nele libera antes do
-    // commit do estado React. Aguardar o estado, como nos testes 3-8.
+    const { options } = await get().login('admin@ilpi.com', 'senha')
+    expect(options).toHaveLength(1)
+    expect(options[0].scope).toBe('global')
     await waitFor(() => {
       expect(get().activeContext?.scope).toBe('global')
-      expect(get().availableContexts.length).toBe(2)
+      expect(get().availableContexts).toHaveLength(1)
     })
     expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN)
+    // A lista de ILPIs não é mais consultada para montar opções de contexto.
+    expect(mockListInst).not.toHaveBeenCalled()
   })
 
   it('2. contexto atual exibido (Plataforma)', async () => {
@@ -80,39 +101,35 @@ describe('ContextSwitch — login e contexto', () => {
     expect(await screen.findByText('Plataforma')).toBeTruthy()
   })
 
-  it('3. seleção ILPI chama /auth/contexto corretamente (sem perfil fabricado)', async () => {
-    mockPost.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
-    mockSelect.mockResolvedValueOnce({ data: { access_token: ILPI_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
+  it('3. troca entre ILPIs chama /auth/contexto corretamente (sem perfil fabricado)', async () => {
+    semearGestor()
+    mockSelect.mockResolvedValueOnce({ data: { access_token: GESTOR_ILPI2, token_type: 'bearer', exige_troca_senha: false } } as any)
     const { get } = renderAuth()
-    await get().login('admin@ilpi.com', 'senha')
-    await waitFor(() => expect(get().availableContexts.length).toBe(2))
-    const opt = get().availableContexts.find(o => o.scope === 'ilpi')!
-    await get().switchContext(opt)
-    expect(mockSelect).toHaveBeenCalledWith({ scope: 'ilpi', ilpi_id: 'ilpi1' })
+    await waitFor(() => expect(get().activeContext?.ilpi_id).toBe('ilpi1'))
+    await get().switchContext(OPCAO_ILPI2)
+    expect(mockSelect).toHaveBeenCalledWith({ scope: 'ilpi', ilpi_id: 'ilpi2' })
   })
 
   it('4. token ativo é substituído após a troca', async () => {
-    mockPost.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
-    mockSelect.mockResolvedValueOnce({ data: { access_token: ILPI_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
+    semearGestor()
+    mockSelect.mockResolvedValueOnce({ data: { access_token: GESTOR_ILPI2, token_type: 'bearer', exige_troca_senha: false } } as any)
     const { get } = renderAuth()
-    await get().login('admin@ilpi.com', 'senha')
-    await waitFor(() => expect(get().availableContexts.length).toBe(2))
-    await get().switchContext(get().availableContexts.find(o => o.scope === 'ilpi')!)
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(ILPI_TOKEN)
-    await waitFor(() => expect(get().activeContext?.scope).toBe('ilpi'))
+    await waitFor(() => expect(get().activeContext?.ilpi_id).toBe('ilpi1'))
+    await get().switchContext(OPCAO_ILPI2)
+    expect(localStorage.getItem(TOKEN_KEY)).toBe(GESTOR_ILPI2)
+    await waitFor(() => expect(get().activeContext?.ilpi_id).toBe('ilpi2'))
   })
 
   it('5. troca dispara recarregamento dos dados (/equipe escuta o evento)', async () => {
-    mockPost.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
-    mockSelect.mockResolvedValueOnce({ data: { access_token: ILPI_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
+    semearGestor()
+    mockSelect.mockResolvedValueOnce({ data: { access_token: GESTOR_ILPI2, token_type: 'bearer', exige_troca_senha: false } } as any)
     const events: string[] = []
     const listener = () => events.push('changed')
     window.addEventListener('facilpi:context-changed', listener)
     try {
       const { get } = renderAuth()
-      await get().login('admin@ilpi.com', 'senha')
-      await waitFor(() => expect(get().availableContexts.length).toBe(2))
-      await get().switchContext(get().availableContexts.find(o => o.scope === 'ilpi')!)
+      await waitFor(() => expect(get().activeContext?.ilpi_id).toBe('ilpi1'))
+      await get().switchContext(OPCAO_ILPI2)
       expect(events).toContain('changed')
     } finally {
       window.removeEventListener('facilpi:context-changed', listener)
@@ -134,41 +151,43 @@ describe('ContextSwitch — login e contexto', () => {
     expect(await screen.findByText('ILPI Modelo')).toBeTruthy()
   })
 
-  it('7. troca de volta para global usa payload {scope:global}', async () => {
-    localStorage.setItem(TOKEN_KEY, ILPI_TOKEN)
+  it('7. contexto global é reemitido com payload {scope:global}', async () => {
+    // Transição que o backend aceita: o superusuário, já na Plataforma, pede o
+    // contexto global de novo e recebe um token novo.
+    localStorage.setItem(TOKEN_KEY, GLOBAL_TOKEN)
     localStorage.setItem(USER_KEY, JSON.stringify({ id: 'u-admin', nome: 'admin', email: 'admin@ilpi.com' }))
-    localStorage.setItem(CONTEXT_KEY, JSON.stringify({ scope: 'ilpi', ilpi_id: 'ilpi1' }))
-    mockSelect.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
+    localStorage.setItem(CONTEXT_KEY, JSON.stringify({ scope: 'global' }))
+    mockSelect.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN_2, token_type: 'bearer', exige_troca_senha: false } } as any)
     const { get } = renderAuth()
-    await waitFor(() => expect(get().activeContext?.scope).toBe('ilpi'))
+    await waitFor(() => expect(get().activeContext?.scope).toBe('global'))
     await get().switchContext({ key: 'global', scope: 'global', label: 'Plataforma', sublabel: 'Superusuário' })
     expect(mockSelect).toHaveBeenCalledWith({ scope: 'global' })
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN)
+    expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN_2)
     await waitFor(() => expect(get().activeContext?.scope).toBe('global'))
   })
 
-  it('8. contexto não autorizado é rejeitado e o token permanece', async () => {
-    mockPost.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
+  it('8. troca recusada pelo backend mantém o token e expõe o erro', async () => {
+    // Ex.: o vínculo com a ILPI 2 foi revogado entre a listagem e o clique.
+    semearGestor()
     mockSelect.mockRejectedValueOnce({ response: { status: 403, data: { detail: { code: 'AUTH_CONTEXT_REQUIRED', message: 'Contexto de autorização não disponível' } } } })
     const { get } = renderAuth()
-    await get().login('admin@ilpi.com', 'senha')
-    await waitFor(() => expect(get().availableContexts.length).toBe(2))
-    await expect(get().switchContext(get().availableContexts.find(o => o.scope === 'ilpi')!)).rejects.toBeTruthy()
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN)
+    await waitFor(() => expect(get().activeContext?.ilpi_id).toBe('ilpi1'))
+    await expect(get().switchContext(OPCAO_ILPI2)).rejects.toBeTruthy()
+    expect(localStorage.getItem(TOKEN_KEY)).toBe(GESTOR_ILPI1)
     await waitFor(() => expect(get().contextError).toContain('Contexto de autorização não disponível'))
   })
 
-  it('9. erro de troca é exibido na UI (sem alert)', async () => {
+  it('9. seletor do superusuário não oferece ILPI — nenhum 403 provocado pela UI', async () => {
     const user = userEvent.setup()
     mockPost.mockResolvedValueOnce({ data: { access_token: GLOBAL_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
-    mockSelect.mockRejectedValueOnce({ response: { status: 403, data: { detail: { code: 'PERMISSION_DENIED', message: 'Permissão não autorizada' } } } })
     const { get } = renderAuth(<ContextSwitcher />)
     await get().login('admin@ilpi.com', 'senha')
     const btn = await screen.findByLabelText('Contexto atual')
+    expect(btn).toBeDisabled()
     await user.click(btn)
-    const opt = await screen.findByText('ILPI Modelo')
-    await user.click(opt)
-    expect(await screen.findByText('Permissão não autorizada')).toBeTruthy()
+    expect(screen.queryByText('ILPI Modelo')).toBeNull()
+    expect(screen.queryByText('Trocar para esta ILPI')).toBeNull()
+    expect(mockSelect).not.toHaveBeenCalled()
   })
 
   it('10. usuário de contexto único não recebe picker', async () => {

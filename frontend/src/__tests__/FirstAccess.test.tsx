@@ -287,15 +287,19 @@ describe('FirstAccess — troca obrigatória', () => {
   })
 
   it('14. context switch funciona após a troca', async () => {
+    // PH02-04 (#72 / H01): antes o ator era o superusuário trocando para uma ILPI
+    // com /auth/contexto mockado em sucesso — troca que o backend recusa. A
+    // intenção se mantém (após a nova senha, a troca volta a funcionar) com um
+    // ator válido: usuário institucional com vínculo em duas ILPIs.
     seedPending()
     mockPut.mockResolvedValueOnce({ data: { mensagem: 'Senha alterada com sucesso' } } as any)
-    const SUPER = jwt({ sub: 'u1', email: 'admin@ilpi.com', is_superuser: true, exp: Math.floor(Date.now() / 1000) + 3600 })
-    mockPost.mockResolvedValueOnce({ data: { access_token: SUPER, token_type: 'bearer', exige_troca_senha: false } } as any)
+    mockPost.mockResolvedValueOnce({ data: { access_token: ILPI_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
     const { get } = renderAuth()
     await get().completePasswordChange('Temp1234', 'Nova1234', 'Nova1234')
     await waitFor(() => expect(get().requiresPasswordChange).toBe(false))
-    mockSelect.mockResolvedValueOnce({ data: { access_token: ILPI_TOKEN, token_type: 'bearer', exige_troca_senha: false } } as any)
-    await get().switchContext({ key: 'ilpi:ilpi1', scope: 'ilpi', ilpi_id: 'ilpi1', label: 'ILPI', sublabel: '' })
-    expect(mockSelect).toHaveBeenCalledWith({ scope: 'ilpi', ilpi_id: 'ilpi1' })
+    const OUTRA_ILPI = jwt({ sub: 'u9', email: 'novo@ilpi.com', scope: 'ilpi', ilpi_id: 'ilpi2', perfil_id: 'p2', exp: Math.floor(Date.now() / 1000) + 3600 })
+    mockSelect.mockResolvedValueOnce({ data: { access_token: OUTRA_ILPI, token_type: 'bearer', exige_troca_senha: false } } as any)
+    await get().switchContext({ key: 'ilpi:ilpi2', scope: 'ilpi', ilpi_id: 'ilpi2', label: 'ILPI 2', sublabel: '' })
+    expect(mockSelect).toHaveBeenCalledWith({ scope: 'ilpi', ilpi_id: 'ilpi2' })
   })
 })

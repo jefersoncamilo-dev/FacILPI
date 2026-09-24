@@ -7,10 +7,14 @@ import { getPlantao, type PlantaoItem } from '../services/plantao'
 // mostra este traço; exibir 0 afirmaria que não há pendência nenhuma.
 const INDISPONIVEL = '—'
 
-type Stats = { residentes: number; ocupacao: string }
+// Teto padrão de GET /residentes/ (limit=100 na factory, main.py). Ao atingi-lo a
+// tela não sabe o total — mostra "100+" em vez de afirmar exatamente 100.
+const LIMITE_LISTAGEM = 100
+
+type Stats = { residentes: number }
 
 export function Dashboard() {
-  const [stats, setStats] = useState<Stats>({ residentes: 0, ocupacao: '—' })
+  const [stats, setStats] = useState<Stats>({ residentes: 0 })
   const [residentes, setResidentes] = useState<any[]>([])
   // PH-01: o `.catch(() => ({ data: [] }))` anterior transformava 403 e falha de
   // rede em "0 residentes" e "Ocupação 0%" — os mesmos números que uma ILPI
@@ -26,15 +30,14 @@ export function Dashboard() {
         const lista = r.data || []
         setResidentes(lista.slice(0, 5))
         // Zero aqui é resultado legítimo: a consulta respondeu com lista vazia.
-        setStats({
-          residentes: lista.length,
-          ocupacao: `${Math.min(100, Math.round((lista.length / 40) * 100))}%`,
-        })
+        // PH02-03 (#71): sem "Ocupação". O cálculo dividia pela constante 40, que
+        // não é a capacidade da ILPI — e residente cadastrado não é leito ocupado.
+        setStats({ residentes: lista.length })
         setResidentesIndisponiveis(false)
       })
       .catch(() => {
         setResidentes([])
-        setStats({ residentes: 0, ocupacao: INDISPONIVEL })
+        setStats({ residentes: 0 })
         setResidentesIndisponiveis(true)
       })
   }, [])
@@ -55,14 +58,18 @@ export function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* PH02-03 (#71): "cadastrados", não "ativos" — o número é o total
+            existente, e o domínio ainda não tem estado ativo/inativo governado. */}
         <div className="card bg-gradient-to-br from-primary to-primaryDeep text-white border-0">
-          <div className="text-sm opacity-90">Residentes ativos</div>
+          <div className="text-sm opacity-90">Residentes cadastrados</div>
           <div className="text-3xl font-bold mt-1">
-            {residentesIndisponiveis ? INDISPONIVEL : stats.residentes}
+            {residentesIndisponiveis
+              ? INDISPONIVEL
+              : stats.residentes >= LIMITE_LISTAGEM ? `${LIMITE_LISTAGEM}+` : stats.residentes}
           </div>
-          <div className="text-xs opacity-80 mt-2">
-            {residentesIndisponiveis ? 'Indisponível no momento' : `Ocupação ${stats.ocupacao}`}
-          </div>
+          {residentesIndisponiveis && (
+            <div className="text-xs opacity-80 mt-2">Indisponível no momento</div>
+          )}
         </div>
         <div className="card">
           <div className="text-sm text-textMuted">Pendências do turno</div>
@@ -78,10 +85,14 @@ export function Dashboard() {
           <div className="text-3xl font-bold text-danger mt-1">{INDISPONIVEL}</div>
           <span className="text-xs text-textMuted mt-2 inline-block">Indisponível — sem fonte oficial</span>
         </div>
+        {/* PH02-03 (#71): antes "✅ Em dia — Licenças verificadas" fixo no código,
+            inclusive para ILPI em configuração e sem rede. Não existe fonte de
+            conformidade no sistema; afirmar "em dia" seria fabricar um fato
+            regulatório. Mesma convenção do cartão de Alertas. */}
         <div className="card">
           <div className="text-sm text-textMuted">Conformidade</div>
-          <div className="text-2xl font-bold text-success mt-1">✅ Em dia</div>
-          <span className="text-xs text-textMuted mt-2 inline-block">Licenças verificadas</span>
+          <div className="text-3xl font-bold text-textMuted mt-1">{INDISPONIVEL}</div>
+          <span className="text-xs text-textMuted mt-2 inline-block">Não avaliada — sem fonte oficial</span>
         </div>
       </div>
 
@@ -112,7 +123,9 @@ export function Dashboard() {
                     <div className="font-medium truncate">{r.nome}</div>
                     <div className="text-xs text-textMuted truncate">{r.situacao} • {r.grau_dependencia || 'Sem grau'}</div>
                   </div>
-                  <span className="badge-warning text-[11px]">Ativo</span>
+                  {/* PH02-03 (#71): sem selo "Ativo" fixo. A situação real já
+                      aparece na linha acima; o selo afirmava "Ativo" até para
+                      residente em admissão. */}
                 </div>
               ))}
             </div>

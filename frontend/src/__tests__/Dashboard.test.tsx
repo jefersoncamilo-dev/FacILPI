@@ -115,10 +115,11 @@ describe('Dashboard — residentes indisponíveis não viram zero (PH-01)', () =
     )
     renderDashboard()
 
-    const cartao = (await screen.findByText('Residentes ativos')).parentElement!
+    const cartao = (await screen.findByText('Residentes cadastrados')).parentElement!
     await waitFor(() => expect(cartao.textContent).toContain('—'))
     expect(cartao.textContent).toContain('Indisponível no momento')
-    expect(cartao.textContent).not.toContain('Ocupação 0%')
+    // PH02-03: não existe mais "Ocupação" — nem com zero, nem com número algum.
+    expect(cartao.textContent).not.toContain('Ocupação')
     expect(await screen.findByText('Não foi possível carregar os residentes')).toBeTruthy()
     expect(screen.queryByText('Nenhum residente cadastrado')).toBeNull()
   })
@@ -130,8 +131,92 @@ describe('Dashboard — residentes indisponíveis não viram zero (PH-01)', () =
     renderDashboard()
 
     expect(await screen.findByText('Nenhum residente cadastrado')).toBeTruthy()
-    const cartao = screen.getByText('Residentes ativos').parentElement!
-    expect(cartao.textContent).toContain('Ocupação 0%')
+    const cartao = screen.getByText('Residentes cadastrados').parentElement!
+    // PH02-03: antes o zero era provado por "Ocupação 0%", um número calculado
+    // contra a constante 40. Agora o próprio contador precisa mostrar 0.
+    expect(cartao.textContent).toMatch(/^Residentes cadastrados\s*0$/)
     expect(screen.queryByText('Não foi possível carregar os residentes')).toBeNull()
+  })
+})
+
+describe('Dashboard — só afirma o que tem fonte (PH-02 / #71)', () => {
+  function residentes(n: number, situacao = 'Em admissao') {
+    return Array.from({ length: n }, (_, i) => ({ id: `r-${i}`, nome: `Residente ${i}`, situacao, grau_dependencia: null }))
+  }
+
+  function responde(lista: unknown[] | Error) {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/plantao/') return Promise.resolve({ data: [] } as any)
+      if (url === '/residentes/') {
+        return lista instanceof Error ? Promise.reject(lista) : Promise.resolve({ data: lista } as any)
+      }
+      throw new Error(`URL inesperada no Dashboard: ${url}`)
+    })
+  }
+
+  function semConformidadePositiva() {
+    const cartao = screen.getByText('Conformidade').parentElement!
+    expect(cartao.textContent).toContain('—')
+    expect(cartao.textContent).toContain('Não avaliada — sem fonte oficial')
+    expect(document.body.textContent).not.toMatch(/Em dia|Licenças verificadas|✅/)
+  }
+
+  it('9. conformidade nunca é afirmada — com residentes, vazio ou sem rede', async () => {
+    responde(residentes(3))
+    const { unmount } = renderDashboard()
+    await screen.findByText('Residente 0')
+    semConformidadePositiva()
+    unmount()
+
+    responde([])
+    const segunda = renderDashboard()
+    await screen.findByText('Nenhum residente cadastrado')
+    semConformidadePositiva()
+    segunda.unmount()
+
+    responde(new Error('Network Error'))
+    renderDashboard()
+    await screen.findByText('Não foi possível carregar os residentes')
+    semConformidadePositiva()
+  })
+
+  it('10. nenhuma ocupação é calculada — nem percentual em lugar algum', async () => {
+    // Com a constante antiga, 20 residentes virariam "Ocupação 50%".
+    responde(residentes(20))
+    renderDashboard()
+    await screen.findByText('Residente 0')
+    expect(screen.queryByText(/Ocupação/)).toBeNull()
+    expect(document.body.textContent).not.toMatch(/\d+\s*%/)
+  })
+
+  it('11. o total é chamado de "cadastrados", nunca de "ativos"', async () => {
+    responde(residentes(2))
+    renderDashboard()
+    const cartao = (await screen.findByText('Residentes cadastrados')).parentElement!
+    await waitFor(() => expect(cartao.textContent).toMatch(/^Residentes cadastrados\s*2$/))
+    expect(screen.queryByText('Residentes ativos')).toBeNull()
+  })
+
+  it('12. nenhum selo "Ativo" é inventado — a situação exibida é a real', async () => {
+    responde(residentes(1, 'Em admissao'))
+    renderDashboard()
+    expect(await screen.findByText(/^Em admissao •/)).toBeTruthy()
+    expect(screen.queryByText('Ativo')).toBeNull()
+  })
+
+  it('13. no teto da listagem o total não é afirmado: 100 vira "100+"', async () => {
+    // GET /residentes/ devolve no máximo 100 por padrão; com 100 na resposta a tela
+    // não sabe se existem 100 ou 140.
+    responde(residentes(100))
+    renderDashboard()
+    const cartao = (await screen.findByText('Residentes cadastrados')).parentElement!
+    await waitFor(() => expect(cartao.textContent).toMatch(/^Residentes cadastrados\s*100\+$/))
+  })
+
+  it('14. abaixo do teto o número é exato', async () => {
+    responde(residentes(99))
+    renderDashboard()
+    const cartao = (await screen.findByText('Residentes cadastrados')).parentElement!
+    await waitFor(() => expect(cartao.textContent).toMatch(/^Residentes cadastrados\s*99$/))
   })
 })

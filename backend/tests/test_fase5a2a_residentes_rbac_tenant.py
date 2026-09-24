@@ -500,6 +500,62 @@ def test_residentes_rbac_tenant_endpoints(residentes_db):
     asyncio.run(_with_client(residentes_db, scenario))
 
 
+def _observavel(response: httpx.Response) -> tuple:
+    """Tudo o que um cliente externo consegue comparar entre duas respostas."""
+    return (
+        response.status_code,
+        response.json(),
+        response.headers.get("content-type"),
+        response.headers.get("content-length"),
+    )
+
+
+def test_ph02_02_404_cross_tenant_indistinguivel_de_inexistente(residentes_db):
+    """PH02-02 (#70 / H14): na factory, inexistente e outra ILPI são o mesmo 404.
+
+    Os casos 07/08 e 14 acima checam status e code de cada resposta isoladamente.
+    Este compara as duas respostas por inteiro — é a comparação que o cliente
+    externo faria para descobrir se um id existe em outra instituição.
+    """
+
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi_a = _new_institution("ILPI A PH02-02")
+        ilpi_b = _new_institution("ILPI B PH02-02")
+        perms = {"residentes:ler", "residentes:criar", "residentes:atualizar"}
+        writer_a = await _create_ilpi_user(db, ilpi_a, permissions=perms, profile_key="writer_a")
+        writer_b = await _create_ilpi_user(db, ilpi_b, permissions=perms, profile_key="writer_b")
+        await db.commit()
+        headers_a = _auth_headers(writer_a, scope="ilpi", ilpi_id=ilpi_a.id)
+        headers_b = _auth_headers(writer_b, scope="ilpi", ilpi_id=ilpi_b.id)
+
+        own = await client.post("/api/residentes/", headers=headers_a, json=_residente_payload("Residente A"))
+        assert own.status_code == 201, own.text
+        other = await client.post("/api/residentes/", headers=headers_b, json=_residente_payload("Residente B"))
+        assert other.status_code == 201, other.text
+        own_id, other_id, missing_id = own.json()["id"], other.json()["id"], _new_id()
+
+        # Próprio tenant: resposta normal.
+        assert (await client.get(f"/api/residentes/{own_id}", headers=headers_a)).status_code == 200
+
+        # GET: outra ILPI x inexistente.
+        cross_get = await client.get(f"/api/residentes/{other_id}", headers=headers_a)
+        missing_get = await client.get(f"/api/residentes/{missing_id}", headers=headers_a)
+        assert cross_get.status_code == 404
+        assert _detail_code(cross_get) == RESOURCE_NOT_FOUND
+        assert _observavel(cross_get) == _observavel(missing_get)
+
+        # PUT: outra ILPI x inexistente — e o registro da outra ILPI fica intacto.
+        body = {"nome": "Tentativa PH02-02"}
+        cross_put = await client.put(f"/api/residentes/{other_id}", headers=headers_a, json=body)
+        missing_put = await client.put(f"/api/residentes/{missing_id}", headers=headers_a, json=body)
+        assert cross_put.status_code == 404
+        assert _observavel(cross_put) == _observavel(missing_put)
+        intact = await client.get(f"/api/residentes/{other_id}", headers=headers_b)
+        assert intact.json()["nome"] == "Residente B"
+
+    asyncio.run(_with_client(residentes_db, scenario))
+
+
 def test_outros_modulos_clinicos_permanecem_fail_closed(residentes_db):
     """F5A-2A libera SOMENTE Residentes; demais módulos seguem fail-closed (20).
 
