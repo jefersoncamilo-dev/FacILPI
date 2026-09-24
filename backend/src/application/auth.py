@@ -78,6 +78,8 @@ JWT_SECRET = resolve_jwt_secret(os.environ)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRY = int(os.getenv("JWT_EXPIRY", "3600"))
 RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "10"))
+LOGIN_FAILURE_LIMIT = 10
+LOGIN_FAILURE_WINDOW_SEC = 15 * 60
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
@@ -90,12 +92,22 @@ REFRESH_COOKIE_PATH = "/api/auth"
 # nao aceita override: em pilot/production, `Secure` nao se negocia.
 ENVIRONMENT = resolve_environment(os.environ)
 REFRESH_COOKIE_SECURE = cookie_secure_for(ENVIRONMENT)
+# PH-02/PR-2: sessoes reais emitidas pela aplicacao carregam sid=token_family.
+# Pilot/production recusam access tokens legados sem sid imediatamente apos o
+# deploy; development/test mantem compatibilidade com testes unitarios antigos
+# que constroem JWT diretamente, sem afrouxar tokens que ja possuem sid.
+REQUIRE_ACCESS_SESSION_ID = ENVIRONMENT in {"pilot", "production"}
 
 logger = logging.getLogger("facilpi.security")
 security = HTTPBearer(auto_error=False)
 
-# Simple in-memory rate limit per IP (for demo; production should use redis)
+# Limite por IP existente. Continua como primeira barreira.
 _rate_store: Dict[str, list] = {}
+# PH-02/PR-2: limite adicional por login normalizado. E propositalmente em
+# memoria nesta etapa; protege distribuicao por varios IPs sem criar lockout
+# permanente ou nova dependencia de infraestrutura.
+_login_failure_store: Dict[str, list] = {}
+
 
 def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 60):
     now = time.time()
@@ -106,6 +118,31 @@ def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 6
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
     lst.append(now)
     _rate_store[key] = lst
+
+
+def normalize_login(login: str) -> str:
+    return login.strip().lower()
+
+
+def check_login_failure_limit(login: str) -> None:
+    key = normalize_login(login)
+    now = time.time()
+    failures = [t for t in _login_failure_store.get(key, []) if now - t < LOGIN_FAILURE_WINDOW_SEC]
+    _login_failure_store[key] = failures
+    if len(failures) >= LOGIN_FAILURE_LIMIT:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+
+
+def register_login_failure(login: str) -> None:
+    key = normalize_login(login)
+    now = time.time()
+    failures = [t for t in _login_failure_store.get(key, []) if now - t < LOGIN_FAILURE_WINDOW_SEC]
+    failures.append(now)
+    _login_failure_store[key] = failures
+
+
+def clear_login_failures(login: str) -> None:
+    _login_failure_store.pop(normalize_login(login), None)
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -122,6 +159,7 @@ def create_access_token(
     scope: str | None = None,
     ilpi_id: str | None = None,
     perfil_id: str | None = None,
+    sid: str | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     exp = now + timedelta(seconds=JWT_EXPIRY)
@@ -134,6 +172,8 @@ def create_access_token(
         "is_superuser": bool(getattr(user, "is_superuser", False)),
         "exige_troca_senha": bool(getattr(user, "exige_troca_senha", False)),
     }
+    if sid is not None:
+        payload["sid"] = sid
     if scope is not None:
         payload["scope"] = scope
         payload["ilpi_id"] = ilpi_id
@@ -228,6 +268,46 @@ async def load_refresh_token(db: AsyncSession, raw_token: str) -> RefreshToken |
     ).scalar_one_or_none()
 
 
+async def load_active_session_token(
+    db: AsyncSession,
+    user_id: str,
+    token_family: str,
+) -> RefreshToken | None:
+    """Retorna o unico refresh ativo que ancora uma familia de sessao."""
+    row = (
+        await db.execute(
+            select(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family == token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+            .order_by(RefreshToken.created_at.desc())
+        )
+    ).scalars().first()
+    return row if refresh_token_is_valid(row) else None
+
+
+def access_session_identity(request: Request, *, require_sid: bool = True) -> tuple[str, str] | None:
+    """Extrai (user_id, sid) de Bearer assinado sem escolher sessao por heuristica."""
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise _authentication_required("missing_or_invalid_scheme")
+    payload = decode_access_token(token)
+    user_id = payload.get("sub")
+    sid = payload.get("sid")
+    if not isinstance(user_id, str) or not user_id:
+        raise _authentication_required("missing_subject")
+    if sid is None and not require_sid:
+        return None
+    if not isinstance(sid, str) or not sid:
+        raise _authentication_required("missing_session_id")
+    return user_id, sid
+
+
 def refresh_token_is_valid(row: RefreshToken | None) -> bool:
     if row is None or row.revoked_at is not None:
         return False
@@ -276,6 +356,27 @@ async def revoke_user_refresh_tokens(db: AsyncSession, user_id: str) -> None:
         row.revoked_at = now
 
 
+async def revoke_user_refresh_tokens_except_family(
+    db: AsyncSession,
+    user_id: str,
+    keep_token_family: str,
+) -> int:
+    """Revoga outras sessoes do usuario e preserva a familia atual."""
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family != keep_token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.revoked_at = now
+    return len(rows)
+
+
 def _authentication_required(reason: str) -> HTTPException:
     # Never include the token or decoder exception in the response/log.
     logger.warning("authentication_denied code=%s reason=%s", AUTHENTICATION_REQUIRED, reason)
@@ -320,6 +421,15 @@ async def get_current_user(
     user_id = payload.get("sub")
     if not isinstance(user_id, str) or not user_id:
         raise _authentication_required("missing_subject")
+
+    sid = payload.get("sid")
+    if sid is None:
+        if REQUIRE_ACCESS_SESSION_ID:
+            raise _authentication_required("missing_session_id")
+    elif not isinstance(sid, str) or not sid:
+        raise _authentication_required("invalid_session_id")
+    elif await load_active_session_token(db, user_id, sid) is None:
+        raise _authentication_required("revoked_or_expired_session")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
