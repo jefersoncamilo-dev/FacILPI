@@ -16,6 +16,7 @@ from .audit import add_audit
 from .auth import (
     REFRESH_COOKIE_NAME,
     access_session_identity,
+    access_session_identity_for_logout,
     check_rate_limit,
     clear_refresh_cookie,
     create_access_token,
@@ -480,7 +481,7 @@ async def logout_session(
     # silenciosamente quando divergem: se forem do mesmo usuario, ambas as
     # familias sao encerradas; se apontarem para usuarios diferentes, nenhuma
     # sessao e escolhida por heuristica.
-    access_identity = access_session_identity(request, require_sid=False)
+    access_identity = access_session_identity_for_logout(request)
     raw_refresh = request.cookies.get(REFRESH_COOKIE_NAME)
     row = await load_refresh_token(db, raw_refresh or "")
     cookie_identity = (row.user_id, row.token_family) if row is not None else None
@@ -500,12 +501,12 @@ async def logout_session(
                     request=request,
                 )
                 await db.commit()
+        # A resposta continua idempotente e uniforme. O frontend deve sair
+        # localmente independentemente de qual prova estava stale. Se ambas as
+        # provas forem do mesmo usuario, encerramos as duas familias; se forem de
+        # usuarios distintos, nao escolhemos nenhuma por heuristica.
         clear_refresh_cookie(response)
-        raise _http_error(
-            status.HTTP_409_CONFLICT,
-            "SESSION_MISMATCH",
-            "Sessão inconsistente; autentique-se novamente",
-        )
+        return {"mensagem": "Sessão encerrada"}
 
     target_identity = access_identity or cookie_identity
     if target_identity is not None:
