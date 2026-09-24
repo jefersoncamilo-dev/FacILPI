@@ -158,6 +158,7 @@ async def _with_client(database_ref: pathlib.Path | str, monkeypatch: pytest.Mon
     monkeypatch.setattr(bootstrap_script, "SessionLocal", factory)
     monkeypatch.setenv("BOOTSTRAP_TOKEN", BOOTSTRAP_TOKEN)
     auth._rate_store.clear()
+    auth._login_failure_store.clear()
     transport = httpx.ASGITransport(app=main.app)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -183,6 +184,133 @@ async def _login(client: httpx.AsyncClient, password: str, **context) -> httpx.R
     payload = {"email": ADMIN_EMAIL, "password": password}
     payload.update({key: value for key, value in context.items() if value is not None})
     return await client.post("/api/auth/token", json=payload)
+
+
+def test_login_failure_limit_por_conta_normalizada(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+
+        # Isola a política por conta da barreira por IP já existente.
+        monkeypatch.setattr(main, "check_rate_limit", lambda *args, **kwargs: None)
+        clock = [1_000_000.0]
+        monkeypatch.setattr(auth.time, "time", lambda: clock[0])
+
+        # Falhas com grafias diferentes alimentam a MESMA conta normalizada.
+        for email in ("ADMIN@ILPI.COM", "Admin@Ilpi.Com", "admin@ilpi.com"):
+            failed = await client.post(
+                "/api/auth/token",
+                json={"email": email, "password": "senha-incorreta"},
+            )
+            assert failed.status_code == 401, failed.text
+
+        # Sucesso limpa o contador: as dez falhas seguintes ainda devem ser 401.
+        success = await client.post(
+            "/api/auth/token",
+            json={"email": "ADMIN@ILPI.COM", "password": bootstrap.temporary_password},
+        )
+        assert success.status_code == 200, success.text
+        client.cookies.clear()
+
+        for _ in range(10):
+            failed = await client.post(
+                "/api/auth/token",
+                json={"email": ADMIN_EMAIL, "password": "senha-incorreta"},
+            )
+            assert failed.status_code == 401, failed.text
+
+        blocked = await client.post(
+            "/api/auth/token",
+            json={"email": ADMIN_EMAIL, "password": "senha-incorreta"},
+        )
+        assert blocked.status_code == 429, blocked.text
+
+        # Não há bloqueio permanente: expirada a janela, volta a avaliar credencial.
+        clock[0] += auth.LOGIN_FAILURE_WINDOW_SEC + 1
+        recovered = await client.post(
+            "/api/auth/token",
+            json={"email": ADMIN_EMAIL, "password": "senha-incorreta"},
+        )
+        assert recovered.status_code == 401, recovered.text
+
+        # Conta inexistente recebe a mesma política e a mesma classe de resposta.
+        unknown = "naoexiste@example.test"
+        for _ in range(10):
+            failed_unknown = await client.post(
+                "/api/auth/token",
+                json={"email": unknown, "password": "senha-incorreta"},
+            )
+            assert failed_unknown.status_code == 401, failed_unknown.text
+        blocked_unknown = await client.post(
+            "/api/auth/token",
+            json={"email": unknown, "password": "senha-incorreta"},
+        )
+        assert blocked_unknown.status_code == 429, blocked_unknown.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_logout_revoga_so_familia_atual_e_preserva_sessao_independente(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        initial = await _login(client, bootstrap.temporary_password)
+        assert initial.status_code == 200, initial.text
+        first_access = await client.put(
+            "/api/auth/primeiro-acesso",
+            headers=_auth_headers(initial.json()["access_token"]),
+            json={"nova_senha": FIRST_PASSWORD, "confirmar": FIRST_PASSWORD},
+        )
+        assert first_access.status_code == 200, first_access.text
+
+        client.cookies.clear()
+        session_a = await _login(client, FIRST_PASSWORD)
+        assert session_a.status_code == 200, session_a.text
+        access_a = session_a.json()["access_token"]
+        refresh_a = client.cookies.get("refresh_token")
+        assert refresh_a
+
+        client.cookies.clear()
+        session_b = await _login(client, FIRST_PASSWORD)
+        assert session_b.status_code == 200, session_b.text
+        access_b = session_b.json()["access_token"]
+        refresh_b = client.cookies.get("refresh_token")
+        assert refresh_b and refresh_b != refresh_a
+
+        client.cookies.clear()
+        logout_a = await client.post(
+            "/api/auth/logout",
+            headers={
+                **_auth_headers(access_a),
+                "Cookie": f"refresh_token={refresh_a}",
+            },
+        )
+        assert logout_a.status_code == 200, logout_a.text
+
+        access_a_after = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access_a),
+        )
+        assert access_a_after.status_code == 401, access_a_after.text
+
+        refresh_a_after = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh_a}"},
+        )
+        assert refresh_a_after.status_code == 401, refresh_a_after.text
+
+        access_b_after = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access_b),
+        )
+        assert access_b_after.status_code == 200, access_b_after.text
+
+        client.cookies.clear()
+        refresh_b_after = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh_b}"},
+        )
+        assert refresh_b_after.status_code == 200, refresh_b_after.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
 
 
 def test_migration_004_to_005_preserves_legacy_users(fase3a_db, monkeypatch):
@@ -274,6 +402,12 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
             },
         )
         assert normal_password.status_code == 200, normal_password.text
+        # A troca feita pelo próprio usuário preserva a família corrente.
+        same_session_after_password = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access),
+        )
+        assert same_session_after_password.status_code == 200, same_session_after_password.text
 
         login = await _login(client, NORMAL_PASSWORD)
         assert login.status_code == 200, login.text
@@ -290,9 +424,25 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
         login = await _login(client, NORMAL_PASSWORD)
         assert login.status_code == 200, login.text
         access = login.json()["access_token"]
-        logout = await client.post("/api/auth/logout")
+        logout_refresh = client.cookies.get("refresh_token")
+        assert logout_refresh
+        logout = await client.post(
+            "/api/auth/logout",
+            headers=_auth_headers(access),
+        )
         assert logout.status_code == 200
-        after_logout_refresh = await client.post("/api/auth/refresh")
+
+        after_logout_access = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access),
+        )
+        assert after_logout_access.status_code == 401, after_logout_access.text
+
+        client.cookies.clear()
+        after_logout_refresh = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={logout_refresh}"},
+        )
         assert after_logout_refresh.status_code == 401
 
         login = await _login(client, NORMAL_PASSWORD)
@@ -359,6 +509,13 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
         )
         assert local_context.status_code == 200, local_context.text
         local_access = local_context.json()["access_token"]
+
+        old_global_after_context = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(global_access),
+        )
+        assert old_global_after_context.status_code == 401, old_global_after_context.text
+
         local_token_global_route = await client.post(
             "/api/instituicoes/",
             headers=_auth_headers(local_access),
@@ -401,6 +558,12 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
         assert reset.status_code == 200, reset.text
         assert reset.json()["senha_temporaria"]
 
+        # O token global anterior foi revogado pela troca de contexto; voltar ao
+        # escopo global exige nova sessão, sem reutilizar credencial morta.
+        global_login_again = await _login(client, NORMAL_PASSWORD)
+        assert global_login_again.status_code == 200, global_login_again.text
+        global_access = global_login_again.json()["access_token"]
+
         updated = await client.put(
             f"/api/instituicoes/{ilpi['id']}",
             headers=_auth_headers(global_access),
@@ -432,6 +595,7 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
             login_cookie,
             refresh_one,
             refresh_two,
+            logout_refresh,
             created_payload["senha_temporaria"],
             reset.json()["senha_temporaria"],
             "password_hash",
