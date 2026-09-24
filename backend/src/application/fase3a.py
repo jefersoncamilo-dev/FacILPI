@@ -487,24 +487,25 @@ async def logout_session(
     cookie_identity = (row.user_id, row.token_family) if row is not None else None
 
     if access_identity is not None and cookie_identity is not None and access_identity != cookie_identity:
-        if access_identity[0] == cookie_identity[0]:
-            revoked_access = await revoke_token_family(db, access_identity[0], access_identity[1])
-            revoked_cookie = await revoke_token_family(db, cookie_identity[0], cookie_identity[1])
-            if revoked_access or revoked_cookie:
-                add_audit(
-                    db,
-                    acao="auth.logout_session_mismatch",
-                    entidade="refresh_tokens",
-                    registro_id=row.id,
-                    usuario_id=row.user_id,
-                    valores_posteriores={"familias_revogadas": int(bool(revoked_access)) + int(bool(revoked_cookie))},
-                    request=request,
-                )
-                await db.commit()
-        # A resposta continua idempotente e uniforme. O frontend deve sair
-        # localmente independentemente de qual prova estava stale. Se ambas as
-        # provas forem do mesmo usuario, encerramos as duas familias; se forem de
-        # usuarios distintos, nao escolhemos nenhuma por heuristica.
+        # Divergencia e tratada explicitamente: cada prova revoga exatamente a
+        # familia que nomeia. Nao escolhemos uma como "mais verdadeira", e a
+        # resposta continua identica para nao criar um oraculo de sessao.
+        revoked_access = await revoke_token_family(db, access_identity[0], access_identity[1])
+        revoked_cookie = await revoke_token_family(db, cookie_identity[0], cookie_identity[1])
+        if revoked_access or revoked_cookie:
+            add_audit(
+                db,
+                acao="auth.logout_session_mismatch",
+                entidade="refresh_tokens",
+                registro_id=row.id,
+                usuario_id=row.user_id,
+                valores_posteriores={
+                    "familias_revogadas": int(bool(revoked_access)) + int(bool(revoked_cookie)),
+                    "usuarios_divergentes": access_identity[0] != cookie_identity[0],
+                },
+                request=request,
+            )
+            await db.commit()
         clear_refresh_cookie(response)
         return {"mensagem": "Sessão encerrada"}
 
