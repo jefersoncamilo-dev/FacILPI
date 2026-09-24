@@ -333,7 +333,9 @@ def make_crud_router(
     @router.get("/{item_id}", response_model=response_schema)
     async def get_item(item_id: str, db: AsyncSession = Depends(get_db), context = Depends(guard("get"))):
         ensure_resource_scope(context, item_id)
-        result = await db.execute(select(model).where(model.id == item_id))
+        # PH02-02 (#70): tenant na propria consulta. Inexistente e outra ILPI viram
+        # o mesmo ramo; ensure_clinical_tenant fica como defesa em profundidade.
+        result = await db.execute(scoped_query(select(model).where(model.id == item_id), context))
         obj = result.scalar_one_or_none()
         if not obj:
             raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
@@ -344,7 +346,7 @@ def make_crud_router(
     async def update_item(item_id: str, payload: update_schema, db: AsyncSession = Depends(get_db), context = Depends(guard("update"))):
         ensure_resource_scope(context, item_id)
         data = payload.model_dump(exclude_unset=True)
-        query = select(model).where(model.id == item_id)
+        query = scoped_query(select(model).where(model.id == item_id), context)
         situacao_e_documento = model is m.Documento and "situacao" in data
         if situacao_e_documento:
             # Issue #25: lock de linha quando suportado (PostgreSQL) para
@@ -414,7 +416,7 @@ def make_crud_router(
     @router.delete("/{item_id}", status_code=204)
     async def delete_item(item_id: str, db: AsyncSession = Depends(get_db), context = Depends(guard("delete"))):
         ensure_resource_scope(context, item_id)
-        result = await db.execute(select(model).where(model.id == item_id))
+        result = await db.execute(scoped_query(select(model).where(model.id == item_id), context))
         obj = result.scalar_one_or_none()
         if not obj:
             raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})

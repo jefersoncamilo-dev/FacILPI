@@ -63,17 +63,13 @@ async function discoverContexts(token: string): Promise<ContextOption[]> {
     }
     return [{ key: 'global', scope: 'global', label: 'Plataforma', sublabel: 'Superusuário' }]
   }
-  const options: ContextOption[] = [{ key: 'global', scope: 'global', label: 'Plataforma', sublabel: 'Superusuário' }]
-  try {
-    const { data } = await contextApi.listInstitutions()
-    for (const ilpi of data || []) {
-      const nome = ilpi.nome_fantasia?.trim() || ilpi.razao_social
-      options.push({ key: `ilpi:${ilpi.id}`, scope: 'ilpi', ilpi_id: ilpi.id, label: nome, sublabel: 'Trocar para esta ILPI' })
-    }
-  } catch {
-    // Sem leitura de ILPIs, mantém ao menos o contexto global atual.
-  }
-  return options
+  // PH02-04 (#72 / H01): o superusuário opera só na Plataforma. Antes cada ILPI
+  // visível em GET /instituicoes/ virava uma opção "Trocar para esta ILPI" — mas
+  // ILPI visível não é contexto possível. O backend exige vínculo, perfil e
+  // funcionário ativo na ILPI (security.py: _candidate_for), que o superusuário
+  // não tem por desenho: toda opção terminava em 403 AUTH_CONTEXT_REQUIRED e o
+  // usuário ficava parado no login. A listagem administrativa continua na Central.
+  return [{ key: 'global', scope: 'global', label: 'Plataforma', sublabel: 'Superusuário' }]
 }
 
 function persist(token: string, user: User, ctx: ActiveContext) {

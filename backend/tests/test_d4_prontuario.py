@@ -307,6 +307,32 @@ def test_tenant_cross_404(prontuario_db):
         assert r.status_code==404
     asyncio.run(_with_client(prontuario_db, op))
 
+def _observavel(r):
+    # Tudo o que um cliente externo consegue comparar entre duas respostas.
+    return (r.status_code, r.json(), r.headers.get("content-type"), r.headers.get("content-length"))
+
+def test_ph02_02_404_cross_tenant_indistinguivel_de_inexistente(prontuario_db):
+    # PH02-02 (#70 / H14): antes o id inexistente respondia "Recurso nao encontrado"
+    # e o id de outra ILPI "Recurso não encontrado" — o corpo revelava a existencia.
+    # O teste acima checa status e code de cada caso isoladamente e por isso nao via
+    # a diferenca; este compara as duas respostas por inteiro.
+    async def op(client, db):
+        a=_new_inst("A")
+        b=_new_inst("B")
+        ua=await _create_ilpi_user(db, a, permissions=ALL_CLINICAL, profile_key="pa")
+        await _create_ilpi_user(db, b, permissions=ALL_CLINICAL, profile_key="pb")
+        ra=await _create_residente(db, a.id)
+        rb=await _create_residente(db, b.id)
+        await db.commit()
+        h=_headers(ua, ilpi_id=a.id)
+        proprio=await client.get(_pront_url(ra.id), headers=h)
+        assert proprio.status_code==200
+        outro_tenant=await client.get(_pront_url(rb.id), headers=h)
+        inexistente=await client.get(_pront_url(_new_id()), headers=h)
+        assert outro_tenant.status_code==404 and _code(outro_tenant)==RESOURCE_NOT_FOUND
+        assert _observavel(outro_tenant)==_observavel(inexistente)
+    asyncio.run(_with_client(prontuario_db, op))
+
 def test_rbac_por_origem(prontuario_db):
     async def op(client, db):
         ilpi=_new_inst()

@@ -230,10 +230,18 @@ async def get_prontuario(
     if context.scope != "ilpi" or context.ilpi_id is None:
         raise HTTPException(status_code=403, detail={"code": PERMISSION_DENIED, "message": "Permissao nao autorizada"})
 
-    # Tenant residente
-    residente = (await db.execute(select(m.Residente).where(m.Residente.id == residente_id))).scalar_one_or_none()
+    # Tenant residente. PH02-02 (#70): o tenant entra na PROPRIA consulta, de modo
+    # que id inexistente e id de outra ILPI percorrem o mesmo caminho e recebem a
+    # mesma resposta. Antes a busca era global e a comparacao de tenant vinha
+    # depois, com mensagens diferentes em cada ramo: o corpo do 404 revelava que o
+    # residente existia em outra instituicao.
+    residente = (await db.execute(select(m.Residente).where(
+        m.Residente.id == residente_id,
+        m.Residente.instituicao_id == context.ilpi_id,
+    ))).scalar_one_or_none()
     if residente is None:
-        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso nao encontrado"})
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Recurso não encontrado"})
+    # Defesa em profundidade: inalcancavel com o filtro acima.
     ensure_same_tenant(context, residente.instituicao_id)
 
     # Validacao de datas
