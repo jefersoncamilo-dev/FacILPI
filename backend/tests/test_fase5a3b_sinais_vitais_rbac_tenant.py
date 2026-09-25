@@ -1378,3 +1378,60 @@ def test_48_catalogo_sem_novas_permissoes(sinais_db):
         assert set(chaves) == {"sinais_vitais:ler", "sinais_vitais:criar"}
 
     asyncio.run(_with_client(sinais_db, scenario))
+
+
+# ---- PH-02: sinal vital nao finito (NaN / Infinity) ----
+# O corpo JSON e montado a mao: `NaN`, `Infinity` e `-Infinity` nao sao JSON
+# valido, mas o parser do Python os aceita. `ge=0` barra NaN e -Infinity, mas
+# nao +Infinity; temperatura nao tinha restricao nenhuma. Faixa clinica NAO e
+# testada aqui: e regra de negocio ainda nao definida.
+
+def test_49_sinal_nao_finito_422(sinais_db):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi = _new_institution()
+        db.add(ilpi)
+        await db.flush()
+        user = await _create_ilpi_user(db, ilpi, permissions={"sinais_vitais:criar"})
+        residente = await _create_residente(db, ilpi.id)
+        await db.commit()
+        headers = {**_auth_headers(user, scope="ilpi", ilpi_id=ilpi.id), "Content-Type": "application/json"}
+        for campo in ("temperatura", "glicemia", "peso"):
+            for valor in ("NaN", "Infinity", "-Infinity"):
+                corpo = f'{{"residente_id": "{residente.id}", "{campo}": {valor}}}'
+                r = await client.post("/api/sinais-vitais/", content=corpo, headers=headers)
+                assert r.status_code == 422, (campo, valor, r.status_code, r.text)
+        total = (
+            await db.execute(
+                select(func.count()).select_from(m.SinalVital).where(m.SinalVital.residente_id == residente.id)
+            )
+        ).scalar_one()
+        assert total == 0
+    asyncio.run(_with_client(sinais_db, scenario))
+
+
+def test_50_nan_recusado_por_outra_regra_responde_422_nao_500(sinais_db):
+    """`saturacao` (inteiro, 0..100) ja recusava NaN, mas o 422 ecoava o valor e
+    a resposta JSON quebrava em 500. O corpo segue o formato padrao do 422."""
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi = _new_institution()
+        db.add(ilpi)
+        await db.flush()
+        user = await _create_ilpi_user(db, ilpi, permissions={"sinais_vitais:criar"})
+        residente = await _create_residente(db, ilpi.id)
+        await db.commit()
+        headers = {**_auth_headers(user, scope="ilpi", ilpi_id=ilpi.id), "Content-Type": "application/json"}
+        corpo = f'{{"residente_id": "{residente.id}", "saturacao": NaN}}'
+        r = await client.post("/api/sinais-vitais/", content=corpo, headers=headers)
+        assert r.status_code == 422, r.text
+        erro = r.json()["detail"][0]
+        assert erro["loc"] == ["body", "saturacao"]
+        assert erro["input"] == "nan"
+        # Valor finito recusado: corpo inalterado, `input` numerico como antes.
+        r = await client.post(
+            "/api/sinais-vitais/",
+            json={"residente_id": residente.id, "saturacao": 101},
+            headers=headers,
+        )
+        assert r.status_code == 422
+        assert r.json()["detail"][0]["input"] == 101
+    asyncio.run(_with_client(sinais_db, scenario))

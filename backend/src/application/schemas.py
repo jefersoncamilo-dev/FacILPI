@@ -827,14 +827,17 @@ class TarefaResponse(TarefaCreate):
 # sem PUT, sem DELETE. Tenant/autoria vêm da sessão; o payload nunca decide.
 class SinalVitalCreate(BaseModel):
     residente_id: str
-    temperatura: Optional[float] = None
+    # NaN/Infinity recusados na entrada (allow_inf_nan=False): o parser JSON do
+    # Python os aceita; `ge=0` sozinho deixa passar +Infinity. Faixa clinica
+    # nao e regra definida aqui.
+    temperatura: Optional[float] = Field(None, allow_inf_nan=False)
     pressao_sistolica: Optional[int] = Field(None, ge=0)
     pressao_diastolica: Optional[int] = Field(None, ge=0)
     frequencia_cardiaca: Optional[int] = Field(None, ge=0)
     frequencia_respiratoria: Optional[int] = Field(None, ge=0)
     saturacao: Optional[int] = Field(None, ge=0, le=100)
-    glicemia: Optional[float] = Field(None, ge=0)
-    peso: Optional[float] = Field(None, ge=0)
+    glicemia: Optional[float] = Field(None, ge=0, allow_inf_nan=False)
+    peso: Optional[float] = Field(None, ge=0, allow_inf_nan=False)
     data: Optional[datetime] = None
     observacao: Optional[str] = None
 
@@ -855,6 +858,11 @@ class SinalVitalCreate(BaseModel):
         return self
 
 class SinalVitalResponse(SinalVitalCreate):
+    # Leitura sem a restricao nova da entrada: registro gravado antes dela nao
+    # pode derrubar a listagem.
+    temperatura: Optional[float] = None
+    glicemia: Optional[float] = None
+    peso: Optional[float] = None
     id: str
     profissional: Optional[str] = None
     data: Optional[datetime] = None
@@ -1132,7 +1140,10 @@ class AvaliacaoCreate(BaseModel):
     tipo: str = Field(..., min_length=1)
     instrumento: Optional[str] = None
     respostas: Optional[str] = None
-    pontuacao: Optional[float] = None
+    # NaN/Infinity nao sao pontuacao: o parser JSON do Python os aceita e eles
+    # chegavam ao banco. So a entrada e restrita; a faixa valida depende da
+    # escala (tipo e texto livre) e nao e regra definida aqui.
+    pontuacao: Optional[float] = Field(None, allow_inf_nan=False)
     classificacao: Optional[str] = None
     data: Optional[datetime] = None
     validade: Optional[date] = None
@@ -1142,13 +1153,16 @@ class AvaliacaoCreate(BaseModel):
 class AvaliacaoUpdate(BaseModel):
     instrumento: Optional[str] = None
     respostas: Optional[str] = None
-    pontuacao: Optional[float] = None
+    pontuacao: Optional[float] = Field(None, allow_inf_nan=False)
     classificacao: Optional[str] = None
     validade: Optional[date] = None
     observacoes: Optional[str] = None
 
 
 class AvaliacaoResponse(AvaliacaoCreate):
+    # Leitura sem a restricao da entrada: registro gravado antes dela nao pode
+    # derrubar a listagem.
+    pontuacao: Optional[float] = None
     id: str
     profissional: Optional[str] = None
     data: Optional[datetime] = None
