@@ -203,6 +203,88 @@ def test_reserva_do_rate_limit_por_conta_e_atomica(monkeypatch):
     auth.release_login_reservation(login, nova)
 
 
+RATE_STORE_NOW = 2_000_000.0
+
+
+@pytest.fixture
+def rate_store_com_teto(monkeypatch):
+    # raising=False: sem o teto implementado, os asserts de tamanho falham em
+    # vez de o fixture quebrar — prova vermelha legivel.
+    auth._rate_store.clear()
+    monkeypatch.setattr(auth, "RATE_STORE_MAX_KEYS", 5, raising=False)
+    monkeypatch.setattr(auth.time, "time", lambda: RATE_STORE_NOW)
+    yield auth._rate_store
+    auth._rate_store.clear()
+
+
+def _falha_de_login(login: str) -> None:
+    reservation = auth.reserve_login_attempt(login)
+    auth.register_login_failure(login, reservation)
+
+
+def test_rate_store_poda_primeiro_as_chaves_vencidas(rate_store_com_teto):
+    store = rate_store_com_teto
+    store["login-fail:velha@facilpi.com.br"] = [RATE_STORE_NOW - auth.LOGIN_FAILURE_WINDOW_SEC - 10]
+    store["token:10.0.0.1"] = [RATE_STORE_NOW - 61]
+    for i in range(3):
+        _falha_de_login(f"viva{i}@facilpi.com.br")
+    assert len(store) == 5
+
+    _falha_de_login("nova@facilpi.com.br")
+
+    assert "login-fail:velha@facilpi.com.br" not in store
+    assert "token:10.0.0.1" not in store
+    assert all(f"login-fail:viva{i}@facilpi.com.br" in store for i in range(3))
+    assert "login-fail:nova@facilpi.com.br" in store
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_conta_bloqueada_sobrevive_a_inundacao(rate_store_com_teto):
+    store = rate_store_com_teto
+    for _ in range(auth.LOGIN_FAILURE_LIMIT):
+        _falha_de_login("alvo@facilpi.com.br")
+    for i in range(50):
+        _falha_de_login(f"inventado{i}@facilpi.com.br")
+
+    assert "login-fail:alvo@facilpi.com.br" in store
+    with pytest.raises(HTTPException) as exc:
+        auth.reserve_login_attempt("alvo@facilpi.com.br")
+    assert exc.value.status_code == 429
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_chaves_livres_nao_passam_do_teto(rate_store_com_teto):
+    for i in range(200):
+        _falha_de_login(f"qualquer{i}@facilpi.com.br")
+    assert len(rate_store_com_teto) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_reserva_em_andamento_sobrevive_a_inundacao(rate_store_com_teto):
+    store = rate_store_com_teto
+    reservation = auth.reserve_login_attempt("em-andamento@facilpi.com.br")
+    for i in range(50):
+        _falha_de_login(f"inventado{i}@facilpi.com.br")
+
+    assert "login-pending:em-andamento@facilpi.com.br" in store
+    auth.register_login_failure("em-andamento@facilpi.com.br", reservation)
+    assert "login-pending:em-andamento@facilpi.com.br" not in store
+    assert store["login-fail:em-andamento@facilpi.com.br"] == [RATE_STORE_NOW]
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_limite_por_ip_sobrevive_a_inundacao(rate_store_com_teto):
+    store = rate_store_com_teto
+    for _ in range(auth.RATE_LIMIT_AUTH):
+        auth.check_rate_limit("token:10.9.9.9")
+    for i in range(200):
+        auth.check_rate_limit(f"token:10.0.{i // 256}.{i % 256}")
+
+    with pytest.raises(HTTPException) as exc:
+        auth.check_rate_limit("token:10.9.9.9")
+    assert exc.value.status_code == 429
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
 def test_login_failure_limit_por_conta_normalizada(fase3a_db, monkeypatch):
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)

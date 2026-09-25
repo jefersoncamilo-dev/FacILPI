@@ -80,6 +80,10 @@ JWT_EXPIRY = int(os.getenv("JWT_EXPIRY", "3600"))
 RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "10"))
 LOGIN_FAILURE_LIMIT = 10
 LOGIN_FAILURE_WINDOW_SEC = 15 * 60
+# Teto de chaves do armazenamento em memoria. As chaves por conta sao escolhidas
+# por quem tenta logar: sem teto, e-mails inventados fariam a memoria crescer
+# ate o restart.
+RATE_STORE_MAX_KEYS = int(os.getenv("RATE_STORE_MAX_KEYS", "20000"))
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
@@ -104,6 +108,50 @@ security = HTTPBearer(auto_error=False)
 # isso preserva o reset atomico que a suite ja faz com `_rate_store.clear()`.
 _rate_store: Dict[str, list] = {}
 _login_failure_store = _rate_store
+_LOGIN_FAILURE_PREFIX = "login-fail:"
+_LOGIN_PENDING_PREFIX = "login-pending:"
+
+
+def _key_rule(key: str) -> tuple[int, int] | None:
+    """(limite, janela em segundos) de uma chave de timestamps.
+
+    Reservas pendentes guardam identificadores, nao timestamps, e so existem
+    enquanto a requisicao de login esta em andamento: ficam fora da poda.
+    """
+    if key.startswith(_LOGIN_PENDING_PREFIX):
+        return None
+    if key.startswith(_LOGIN_FAILURE_PREFIX):
+        return LOGIN_FAILURE_LIMIT, LOGIN_FAILURE_WINDOW_SEC
+    return RATE_LIMIT_AUTH, 60
+
+
+def _make_room(now: float) -> None:
+    """Mantem o armazenamento abaixo do teto antes de criar uma chave nova.
+
+    Descarta primeiro as chaves vencidas; depois, as chaves livres menos
+    recentes. Chave bloqueada nunca sai antes do fim da janela — inundar o
+    armazenamento com e-mails inventados nao pode zerar o contador de uma conta
+    sob ataque — e reserva pendente nunca sai. Consequencia aceita: se tudo
+    estiver bloqueado ou pendente, o teto e ultrapassado ate as janelas vencerem.
+    """
+    if len(_rate_store) < RATE_STORE_MAX_KEYS:
+        return
+    evictable: list[tuple[float, str]] = []
+    for key in list(_rate_store):
+        rule = _key_rule(key)
+        if rule is None:
+            continue
+        limit, window = rule
+        active = [float(t) for t in _rate_store[key] if now - float(t) < window]
+        if not active:
+            del _rate_store[key]
+            continue
+        _rate_store[key] = active
+        if len(active) < limit:
+            evictable.append((max(active), key))
+    excess = len(_rate_store) - RATE_STORE_MAX_KEYS + 1
+    for _, key in sorted(evictable)[: max(excess, 0)]:
+        del _rate_store[key]
 
 
 def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 60):
@@ -113,6 +161,8 @@ def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 6
     lst = [t for t in lst if now - t < window_sec]
     if len(lst) >= limit:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    if key not in _rate_store:
+        _make_room(now)
     lst.append(now)
     _rate_store[key] = lst
 
@@ -123,7 +173,7 @@ def normalize_login(login: str) -> str:
 
 def _login_limit_keys(login: str) -> tuple[str, str]:
     normalized = normalize_login(login)
-    return f"login-fail:{normalized}", f"login-pending:{normalized}"
+    return f"{_LOGIN_FAILURE_PREFIX}{normalized}", f"{_LOGIN_PENDING_PREFIX}{normalized}"
 
 
 def _active_login_failures(failure_key: str, now: float) -> list[float]:
@@ -162,6 +212,8 @@ def reserve_login_attempt(login: str) -> str:
     if len(failures) + len(pending) >= LOGIN_FAILURE_LIMIT:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
     reservation = secrets.token_urlsafe(12)
+    if pending_key not in _rate_store:
+        _make_room(now)
     pending.append(reservation)
     _rate_store[pending_key] = pending
     return reservation
@@ -182,6 +234,8 @@ def register_login_failure(login: str, reservation: str | None = None) -> None:
     failures = _active_login_failures(failure_key, now)
     if reservation is not None:
         release_login_reservation(login, reservation)
+    if failure_key not in _rate_store:
+        _make_room(now)
     failures.append(now)
     _rate_store[failure_key] = failures
 
