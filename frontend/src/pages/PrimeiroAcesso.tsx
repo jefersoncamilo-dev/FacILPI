@@ -34,7 +34,7 @@ export function PrimeiroAcesso() {
   const [err, setErr] = useState('')
   const [options, setOptions] = useState<ContextOption[] | null>(null)
   const [picking, setPicking] = useState(false)
-  const { completePasswordChange, switchContext, loading } = useAuth()
+  const { completePasswordChange, switchContext, loading, logout } = useAuth()
   const navigate = useNavigate()
 
   async function handle(e: React.FormEvent) {
@@ -112,12 +112,14 @@ export function PrimeiroAcesso() {
             <Label htmlFor="pa-atual">Senha temporária</Label>
             <PasswordInput
               id="pa-atual"
-              placeholder="Senha temporária (a que você acabou de usar)"
+              placeholder="Senha temporária"
               value={atual}
               onChange={e => setAtual(e.target.value)}
               required
               autoComplete="current-password"
+              aria-describedby="pa-atual-dica"
             />
+            <p id="pa-atual-dica" className="text-xs text-muted-foreground">A mesma senha que você acabou de usar para entrar.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="pa-nova">Nova senha</Label>
@@ -166,6 +168,13 @@ export function PrimeiroAcesso() {
             )}
           </Button>
         </form>
+
+        {/* Sem saída, quem entrou com a conta errada ficava preso aqui. */}
+        <div className="border-t border-border pt-5 text-center">
+          <Button variant="link" type="button" onClick={logout}>
+            Sair e entrar com outra conta
+          </Button>
+        </div>
       </div>
     </AuthLayout>
   )
