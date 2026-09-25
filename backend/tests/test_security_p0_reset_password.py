@@ -37,6 +37,7 @@ if str(BACKEND) not in sys.path:
 from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application.auth import create_access_token, hash_password, verify_password  # noqa: E402
+from tests.sessao_teste import abrir_sessao, token_de
 from src.application.security import PERMISSION_DENIED  # noqa: E402
 from src.infrastructure import database  # noqa: E402
 from src.infrastructure import models as m  # noqa: E402
@@ -154,7 +155,7 @@ async def _grant(db, perfil_id, keys) -> None:
 
 
 async def _create_ilpi_user(db, institution, *, permissions, profile_key="p0", nome="Usuario P0",
-                            password=None, link_situacao="ativo") -> m.User:
+                            password=None, link_situacao="ativo", com_sessao=True) -> m.User:
     user = _new_user(nome=nome, password=password)
     profile = m.Perfil(id=_new_id(), ilpi_id=institution.id, nome=f"Perfil {profile_key}",
                        chave=profile_key, escopo="ilpi", situacao="ativo")
@@ -169,6 +170,10 @@ async def _create_ilpi_user(db, institution, *, permissions, profile_key="p0", n
     ])
     await db.flush()
     await _grant(db, profile.id, permissions)
+    # Alvos do reset nao se autenticam: sem sessao real, os refresh tokens
+    # deles sao exatamente os semeados por _seed_refresh_tokens.
+    if com_sessao:
+        await abrir_sessao(db, user)
     return user
 
 
@@ -184,6 +189,7 @@ async def _create_platform_user(db) -> m.User:
     await db.flush()
     db.add(_new_link(user.id, profile.id, None))
     await db.flush()
+    await abrir_sessao(db, user)
     return user
 
 
@@ -202,7 +208,7 @@ async def _seed_refresh_tokens(db, user_id, *, quantity=2) -> list[str]:
 
 
 def _headers(user, *, scope="ilpi", ilpi_id=None):
-    headers = {"Authorization": f"Bearer {create_access_token(user)}", "X-Scope": scope}
+    headers = {"Authorization": f"Bearer {token_de(user)}", "X-Scope": scope}
     if ilpi_id is not None:
         headers["X-ILPI-ID"] = ilpi_id
     return headers
@@ -244,7 +250,7 @@ async def _base_seed(db, *, victim_password=VICTIM_PASSWORD):
                                     profile_key="p0_admin", nome="Admin da ILPI")
     victim = await _create_ilpi_user(db, institution, permissions={"residentes:ler"},
                                      profile_key="p0_clinico", nome="Enfermeira da ILPI",
-                                     password=victim_password)
+                                     password=victim_password, com_sessao=False)
     platform = await _create_platform_user(db)
     await _commit(db)
     return institution, admin, victim, platform
@@ -361,7 +367,7 @@ def test_05_cross_tenant_404(p0_db):
         await db.flush()
         victim_b = await _create_ilpi_user(db, institution_b, permissions={"residentes:ler"},
                                            profile_key="p0_b", nome="Enfermeira da ILPI B",
-                                           password=VICTIM_PASSWORD)
+                                           password=VICTIM_PASSWORD, com_sessao=False)
         await _commit(db)
         before = await _snapshot(db, victim_b.id)
 
@@ -387,7 +393,8 @@ def test_06_inexistente_vs_cross_tenant(p0_db):
         db.add(institution_b)
         await db.flush()
         victim_b = await _create_ilpi_user(db, institution_b, permissions={"residentes:ler"},
-                                           profile_key="p0_b", nome="Enfermeira da ILPI B")
+                                           profile_key="p0_b", nome="Enfermeira da ILPI B",
+                                           com_sessao=False)
         await _commit(db)
         headers = _headers(admin_a, ilpi_id=institution_a.id)
 
@@ -528,6 +535,7 @@ def test_11_vinculo_inativo_nao_autoriza(p0_db):
         inativo = await _create_ilpi_user(
             db, institution, permissions={"residentes:ler"}, profile_key="p0_inativo",
             nome="Vinculo inativo", password=VICTIM_PASSWORD, link_situacao="inativo",
+            com_sessao=False,
         )
         await _commit(db)
         before = await _snapshot(db, inativo.id)

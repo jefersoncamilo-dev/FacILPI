@@ -45,6 +45,7 @@ if str(BACKEND) not in sys.path:
 from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application.auth import create_access_token  # noqa: E402
+from tests.sessao_teste import abrir_sessao, token_de
 from src.application.security import (  # noqa: E402
     AUTHENTICATION_REQUIRED,
     FIRST_PASSWORD_CHANGE_REQUIRED,
@@ -240,6 +241,7 @@ async def _create_ilpi_user(
     db.add_all([employee, _new_link(user.id, profile.id, institution.id)])
     await db.flush()
     await _grant_permissions(db, profile.id, permissions)
+    await abrir_sessao(db, user)
     return user
 
 
@@ -257,12 +259,13 @@ async def _create_platform_user(db: AsyncSession) -> m.User:
     await db.flush()
     db.add(_new_link(user.id, profile.id, None))
     await db.flush()
+    await abrir_sessao(db, user)
     return user
 
 
 def _auth_headers(user: m.User, *, scope: str, ilpi_id: str | None = None) -> dict[str, str]:
     headers = {
-        "Authorization": f"Bearer {create_access_token(user)}",
+        "Authorization": f"Bearer {token_de(user)}",
         "X-Scope": scope,
     }
     if ilpi_id is not None:
