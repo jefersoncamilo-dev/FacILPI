@@ -63,6 +63,8 @@ class ContextSelection(BaseModel):
 class PermissoesSessaoResponse(BaseModel):
     scope: str
     ilpi_id: Optional[str] = None
+    ilpi_nome: Optional[str] = None
+    perfil_nome: Optional[str] = None
     permissoes: list[str]
 
 class PrimeiroAcessoUpdate(BaseModel):

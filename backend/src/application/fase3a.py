@@ -539,11 +539,24 @@ async def permissoes_da_sessao(
 
     O contexto vem do token validado, nunca de parametro do cliente. Serve para
     a navegacao nao oferecer o que o backend recusaria; nao autoriza nada.
+
+    Os nomes sao so os do proprio contexto: quem nao tem `ilpis:ler` tambem
+    precisa saber em qual instituicao esta operando.
     """
+    permissoes = await allowed_permission_keys(db, context)
+    ilpi_nome = None
+    if context.ilpi_id is not None:
+        ilpi = (
+            await db.execute(select(m.Instituicao).where(m.Instituicao.id == context.ilpi_id))
+        ).scalar_one_or_none()
+        if ilpi is not None:
+            ilpi_nome = (ilpi.nome_fantasia or "").strip() or ilpi.razao_social
     return {
         "scope": context.scope,
         "ilpi_id": context.ilpi_id,
-        "permissoes": await allowed_permission_keys(db, context),
+        "ilpi_nome": ilpi_nome,
+        "perfil_nome": context.perfil.nome,
+        "permissoes": permissoes,
     }
 
 

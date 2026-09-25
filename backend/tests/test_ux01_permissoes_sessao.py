@@ -294,6 +294,10 @@ def test_lista_as_permissoes_do_contexto_ativo(ux01_db):
         body = response.json()
         assert body["scope"] == "ilpi"
         assert body["ilpi_id"] == institution.id
+        # O perfil nao tem `ilpis:ler`, e mesmo assim sabe onde esta operando.
+        assert "ilpis:ler" not in PERMISSOES
+        assert body["ilpi_nome"] == "ILPI UX-01"
+        assert body["perfil_nome"] == "Perfil UX-01"
         # `ilpis:criar` e so-global: concedida ao perfil, recusada em escopo ILPI.
         assert body["permissoes"] == sorted(PERMISSOES - {"ilpis:criar"})
 
@@ -337,6 +341,8 @@ def test_cada_ilpi_ve_so_o_proprio_perfil(ux01_db):
 
         assert resposta_a.json()["permissoes"] == ["residentes:ler"]
         assert resposta_b.json()["permissoes"] == ["sinais_vitais:ler"]
+        assert resposta_a.json()["ilpi_nome"] == "ILPI UX-01"
+        assert resposta_b.json()["ilpi_nome"] == "ILPI UX-01 B"
         assert sem_vinculo.status_code == 403, sem_vinculo.text
         assert _code(sem_vinculo) == AUTH_CONTEXT_REQUIRED
 
@@ -365,7 +371,11 @@ def test_paridade_no_contexto_global_sem_modulo_clinico(ux01_db):
 
         response = await client.get("/api/auth/permissoes", headers=_headers(user, scope="global"))
         assert response.status_code == 200, response.text
-        assert response.json() == {"scope": "global", "ilpi_id": None, "permissoes": sorted(listed)}
+        body = response.json()
+        assert body["scope"] == "global"
+        assert body["ilpi_id"] is None and body["ilpi_nome"] is None
+        assert body["perfil_nome"]
+        assert body["permissoes"] == sorted(listed)
 
     asyncio.run(_with_client(ux01_db, scenario))
 
