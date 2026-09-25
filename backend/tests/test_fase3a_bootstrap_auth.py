@@ -453,20 +453,55 @@ def test_logout_com_cookie_e_bearer_divergentes_revoga_as_duas_familias(fase3a_d
     asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
 
 
-def test_pilot_production_recusa_access_token_sem_sid(fase3a_db, monkeypatch):
+def test_access_token_sem_sid_e_recusado_em_qualquer_ambiente(fase3a_db, monkeypatch):
+    # PH-02/PR-2 (decisao do CT): sid obrigatorio sem excecao para
+    # development/test. A suite roda fora de pilot/production, entao a recusa
+    # aqui prova que nao sobrou bypass por ambiente.
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
-        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        assert auth.ENVIRONMENT in {"development", "test"}
+        global_access = await _bootstrap_global_access(client)
         user = (
             await db.execute(select(m.User).where(m.User.email == ADMIN_EMAIL))
         ).scalar_one()
         legacy = auth.create_access_token(user)
-        monkeypatch.setattr(auth, "REQUIRE_ACCESS_SESSION_ID", True)
 
         response = await client.get(
             "/api/instituicoes/",
             headers=_auth_headers(legacy),
         )
         assert response.status_code == 401, response.text
+        assert response.json()["detail"]["code"] == "AUTHENTICATION_REQUIRED"
+
+        # Troca de contexto e troca de senha voluntaria tinham caminho proprio
+        # para token sem sid; agora recusam antes de qualquer escrita.
+        client.cookies.clear()
+        context = await client.post(
+            "/api/auth/contexto",
+            headers=_auth_headers(legacy),
+            json={"scope": "global"},
+        )
+        assert context.status_code == 401, context.text
+        password = await client.put(
+            "/api/auth/password",
+            headers=_auth_headers(legacy),
+            json={
+                "senha_atual": FIRST_PASSWORD,
+                "nova_senha": NORMAL_PASSWORD,
+                "confirmar_senha": NORMAL_PASSWORD,
+            },
+        )
+        assert password.status_code == 401, password.text
+
+        # Nada foi revogado nem alterado pelas tentativas: a sessao real segue
+        # valida e a senha continua a mesma.
+        still_valid = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(global_access),
+        )
+        assert still_valid.status_code == 200, still_valid.text
+        client.cookies.clear()
+        relogin = await _login(client, FIRST_PASSWORD)
+        assert relogin.status_code == 200, relogin.text
 
     asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
 

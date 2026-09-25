@@ -539,7 +539,7 @@ async def selecionar_contexto(
     if current_user.exige_troca_senha:
         raise _http_error(status.HTTP_403_FORBIDDEN, "FIRST_PASSWORD_CHANGE_REQUIRED", "Troca de senha obrigatória")
 
-    access_identity = access_session_identity(request, require_sid=False)
+    access_identity = access_session_identity(request)
     raw_refresh = request.cookies.get(REFRESH_COOKIE_NAME)
     refresh_row = await load_refresh_token(db, raw_refresh or "")
     cookie_identity = (

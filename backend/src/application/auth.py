@@ -93,10 +93,8 @@ REFRESH_COOKIE_PATH = "/api/auth"
 ENVIRONMENT = resolve_environment(os.environ)
 REFRESH_COOKIE_SECURE = cookie_secure_for(ENVIRONMENT)
 # PH-02/PR-2: sessoes reais emitidas pela aplicacao carregam sid=token_family.
-# Pilot/production recusam access tokens legados sem sid imediatamente apos o
-# deploy; development/test mantem compatibilidade com testes unitarios antigos
-# que constroem JWT diretamente, sem afrouxar tokens que ja possuem sid.
-REQUIRE_ACCESS_SESSION_ID = ENVIRONMENT in {"pilot", "production"}
+# Access token sem sid e recusado em qualquer ambiente, sem excecao para
+# development/test: testes que cunham JWT abrem uma sessao real antes.
 
 logger = logging.getLogger("facilpi.security")
 security = HTTPBearer(auto_error=False)
@@ -370,7 +368,7 @@ async def load_active_session_token(
     return row if refresh_token_is_valid(row) else None
 
 
-def access_session_identity(request: Request, *, require_sid: bool = True) -> tuple[str, str] | None:
+def access_session_identity(request: Request) -> tuple[str, str] | None:
     """Extrai (user_id, sid) de Bearer assinado sem escolher sessao por heuristica."""
     header = request.headers.get("authorization")
     if not header:
@@ -383,8 +381,6 @@ def access_session_identity(request: Request, *, require_sid: bool = True) -> tu
     sid = payload.get("sid")
     if not isinstance(user_id, str) or not user_id:
         raise _authentication_required("missing_subject")
-    if sid is None and not require_sid:
-        return None
     if not isinstance(sid, str) or not sid:
         raise _authentication_required("missing_session_id")
     return user_id, sid
@@ -506,11 +502,10 @@ async def get_current_user(
 
     sid = payload.get("sid")
     if sid is None:
-        if REQUIRE_ACCESS_SESSION_ID:
-            raise _authentication_required("missing_session_id")
-    elif not isinstance(sid, str) or not sid:
+        raise _authentication_required("missing_session_id")
+    if not isinstance(sid, str) or not sid:
         raise _authentication_required("invalid_session_id")
-    elif await load_active_session_token(db, user_id, sid) is None:
+    if await load_active_session_token(db, user_id, sid) is None:
         raise _authentication_required("revoked_or_expired_session")
 
     result = await db.execute(select(User).where(User.id == user_id))

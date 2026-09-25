@@ -193,7 +193,7 @@ async def update_password(payload: s.PasswordUpdate, request: Request, db: Async
     else:
         # Troca voluntaria: preserva apenas a familia autenticada e encerra as
         # demais. Reset administrativo continua revogando todas em fase3a.py.
-        current_session = access_session_identity(request, require_sid=False)
+        current_session = access_session_identity(request)
         if current_session is not None and current_session[0] == current_user.id:
             await revoke_user_refresh_tokens_except_family(
                 db,
@@ -201,7 +201,8 @@ async def update_password(payload: s.PasswordUpdate, request: Request, db: Async
                 current_session[1],
             )
         else:
-            # Compatibilidade apenas para tokens antigos de development/test sem sid.
+            # Fail-closed: get_current_user ja exige sid da propria sessao, entao
+            # este ramo nao deveria ocorrer; se ocorrer, nenhuma sessao sobrevive.
             await revoke_user_refresh_tokens(db, current_user.id)
 
     add_audit(
