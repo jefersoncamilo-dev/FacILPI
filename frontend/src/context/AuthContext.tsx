@@ -133,7 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRequiresPasswordChange(mustChange)
     const stored = readStored<ActiveContext>(CONTEXT_KEY)
     let ctx: ActiveContext = fromToken
-    if (stored && sameContext(stored, fromToken)) {
+    // UX-01: o login grava o contexto cru (sem nomes) antes de sincronizar;
+    // reaproveitá-lo sem rótulo deixava o shell mostrando só "ILPI".
+    const storedComRotulo = stored?.scope !== 'ilpi' || !!stored?.ilpiNome
+    if (stored && sameContext(stored, fromToken) && (storedComRotulo || mustChange)) {
       ctx = stored
     } else {
       try {

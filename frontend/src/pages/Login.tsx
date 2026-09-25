@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
@@ -12,8 +12,10 @@ import { Alert } from '../components/ui/feedback'
 import { SESSION_ENDED_KEY } from '../types/context'
 import type { ContextOption } from '../types/context'
 
-// Ler e apagar em passos separados: o inicializador pode rodar duas vezes
-// (StrictMode) e precisa ver a mesma marca; o efeito a consome uma única vez.
+// A marca só é consumida quando a pessoa tenta entrar de novo. Consumir ao
+// montar falhava: após um 401 o React já redireciona pela SPA (montando o
+// Login) antes do recarregamento completo pedido pelo interceptor, e a página
+// recarregada não encontrava mais a marca.
 function sessaoFoiEncerrada(): boolean {
   try {
     return sessionStorage.getItem(SESSION_ENDED_KEY) === '1'
@@ -40,14 +42,11 @@ export function Login() {
   const { login, loading, switchContext } = useAuth()
   const navigate = useNavigate()
 
-  useEffect(() => {
-    consumirMarcaDeSessaoEncerrada()
-  }, [])
-
   async function handle(e: React.FormEvent) {
     e.preventDefault()
     setErr('')
     setSessaoEncerrada(false)
+    consumirMarcaDeSessaoEncerrada()
     try {
       const res = await login(email, password)
       // Troca obrigatória tem prioridade sobre qualquer seleção de contexto.
@@ -64,6 +63,16 @@ export function Login() {
         navigate(res.options[0]?.scope === 'global' ? '/platform' : '/')
       }
     } catch (e: any) {
+      // Conta com mais de um vínculo institucional: o backend exige escolher o
+      // contexto no login, mas não há como listá-los antes da autenticação —
+      // decisão de produto/segurança pendente (UX-01 / #83). Até lá, dizer o
+      // que está acontecendo em vez de pedir uma escolha que a tela não oferece.
+      if (e?.response?.data?.detail?.code === 'PROFILE_SELECTION_REQUIRED') {
+        setErr(
+          'Sua conta está vinculada a mais de uma instituição, e o acesso com vários vínculos ainda não está disponível. Procure o administrador da ILPI.',
+        )
+        return
+      }
       setErr(mensagemDeErro(e, 'Falha no login. Verifique credenciais.'))
     }
   }

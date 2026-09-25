@@ -1,13 +1,34 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
 import { X } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 /**
- * Dialog e Sheet sobre o Radix Dialog: focus trap, Escape, devolução do foco e
- * aria-modal vêm prontos. O Sheet é o mesmo diálogo ancorado numa lateral —
- * é o menu de navegação no mobile/tablet.
+ * Dialog e Sheet sobre o Radix Dialog: focus trap, Escape e aria-modal vêm
+ * prontos. O Sheet é o mesmo diálogo ancorado numa lateral — é o menu de
+ * navegação no mobile/tablet.
+ *
+ * O Radix só devolve o foco a um `Dialog.Trigger`; aqui os diálogos são
+ * abertos por botões comuns (o menu tem dois: cabeçalho e navegação
+ * inferior). `useFocoDeRetorno` guarda quem tinha o foco ao abrir e o
+ * devolve ao fechar — sem isso, quem navega por teclado caía no <body>.
  */
+function useFocoDeRetorno() {
+  const anterior = useRef<HTMLElement | null>(null)
+  return {
+    guardar: () => {
+      anterior.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    },
+    devolver: (event: Event) => {
+      const alvo = anterior.current
+      if (alvo && alvo.isConnected) {
+        event.preventDefault()
+        alvo.focus()
+      }
+    },
+  }
+}
+
 export const Dialog = DialogPrimitive.Root
 export const DialogTrigger = DialogPrimitive.Trigger
 export const DialogClose = DialogPrimitive.Close
@@ -40,10 +61,13 @@ export function DialogContent({
   children: ReactNode
   className?: string
 }) {
+  const foco = useFocoDeRetorno()
   return (
     <DialogPrimitive.Portal>
       <Overlay />
       <DialogPrimitive.Content
+        onOpenAutoFocus={foco.guardar}
+        onCloseAutoFocus={foco.devolver}
         className={cn(
           'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           className,
@@ -75,10 +99,23 @@ export function SheetContent({
   children: ReactNode
   className?: string
 }) {
+  const foco = useFocoDeRetorno()
+  const conteudo = useRef<HTMLDivElement>(null)
   return (
     <DialogPrimitive.Portal>
       <Overlay />
       <DialogPrimitive.Content
+        ref={conteudo}
+        onOpenAutoFocus={event => {
+          foco.guardar()
+          // O menu abre no item da página atual, não no primeiro botão do DOM.
+          const atual = conteudo.current?.querySelector<HTMLElement>('[aria-current="page"]')
+          if (atual) {
+            event.preventDefault()
+            atual.focus()
+          }
+        }}
+        onCloseAutoFocus={foco.devolver}
         className={cn(
           'fixed inset-y-0 left-0 z-50 flex h-full w-[86%] max-w-[320px] flex-col bg-card shadow-xl focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left data-[state=open]:duration-200 data-[state=closed]:duration-150',
           className,

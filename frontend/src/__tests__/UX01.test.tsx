@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../context/AuthContext'
 import { Login } from '../pages/Login'
@@ -62,17 +63,46 @@ beforeEach(() => {
 })
 
 describe('UX-01 — sessão encerrada explicada no login', () => {
-  it('mostra o aviso uma única vez quando o servidor encerrou a sessão', () => {
+  it('mostra o aviso e só consome a marca quando a pessoa tenta entrar', async () => {
+    const user = userEvent.setup()
     sessionStorage.setItem(SESSION_ENDED_KEY, '1')
-    render(<AuthProvider><MemoryRouter><Login /></MemoryRouter></AuthProvider>)
-
+    vi.mocked(api.post).mockRejectedValueOnce({ response: { status: 401, data: { detail: 'Credenciais inválidas' } } })
+    const primeira = render(<AuthProvider><MemoryRouter><Login /></MemoryRouter></AuthProvider>)
     expect(screen.getByText('Sua sessão foi encerrada')).toBeTruthy()
+
+    // Um segundo carregamento (o reload pedido pelo interceptor) ainda vê a marca.
+    primeira.unmount()
+    render(<AuthProvider><MemoryRouter><Login /></MemoryRouter></AuthProvider>)
+    expect(screen.getByText('Sua sessão foi encerrada')).toBeTruthy()
+
+    await user.type(screen.getByPlaceholderText('E-mail'), 'alguem@ilpi.com')
+    await user.type(screen.getByPlaceholderText('Senha'), 'Senha1234')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+    expect(await screen.findByText('Credenciais inválidas')).toBeTruthy()
     expect(sessionStorage.getItem(SESSION_ENDED_KEY)).toBeNull()
+    expect(screen.queryByText('Sua sessão foi encerrada')).toBeNull()
   })
 
   it('não mostra o aviso num acesso comum', () => {
     render(<AuthProvider><MemoryRouter><Login /></MemoryRouter></AuthProvider>)
     expect(screen.queryByText('Sua sessão foi encerrada')).toBeNull()
+  })
+})
+
+describe('UX-01 — conta com vários vínculos recebe explicação honesta', () => {
+  it('não pede uma escolha de contexto que a tela não oferece', async () => {
+    const user = userEvent.setup()
+    vi.mocked(api.post).mockRejectedValueOnce({
+      response: { status: 403, data: { detail: { code: 'PROFILE_SELECTION_REQUIRED', message: 'Selecione um perfil e contexto' } } },
+    })
+    render(<AuthProvider><MemoryRouter><Login /></MemoryRouter></AuthProvider>)
+
+    await user.type(screen.getByPlaceholderText('E-mail'), 'multi@ilpi.com')
+    await user.type(screen.getByPlaceholderText('Senha'), 'Senha1234')
+    await user.click(screen.getByRole('button', { name: 'Entrar' }))
+
+    expect(await screen.findByText(/vinculada a mais de uma instituição/)).toBeTruthy()
+    expect(screen.queryByText('Selecione um perfil e contexto')).toBeNull()
   })
 })
 

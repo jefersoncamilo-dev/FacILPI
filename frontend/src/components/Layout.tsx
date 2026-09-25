@@ -142,12 +142,12 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
                         }
                       >
                         <item.icon className="size-[18px] shrink-0" aria-hidden="true" />
-                        <span className="flex-1 truncate">{item.label}</span>
-                        {item.emBreve && (
-                          <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                            Em breve
-                          </span>
-                        )}
+                        <span className="min-w-0 flex-1 py-1.5">
+                          <span className="block truncate">{item.label}</span>
+                          {item.emBreve && (
+                            <span className="block text-[11px] font-normal leading-tight text-muted-foreground">Em breve</span>
+                          )}
+                        </span>
                       </NavLink>
                     </li>
                   ))}
@@ -295,7 +295,8 @@ function AlterarSenhaDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           </div>
           <div className="space-y-2">
             <Label htmlFor="as-nova">Nova senha</Label>
-            <PasswordInput id="as-nova" placeholder="Mín. 8, com maiúscula, minúscula e número" value={nova} onChange={e => setNova(e.target.value)} autoComplete="new-password" required />
+            <PasswordInput id="as-nova" placeholder="Nova senha" value={nova} onChange={e => setNova(e.target.value)} autoComplete="new-password" aria-describedby="as-nova-dica" required />
+            <p id="as-nova-dica" className="text-xs text-muted-foreground">Mínimo de 8 caracteres, com maiúscula, minúscula e número.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="as-confirmar">Confirmar nova senha</Label>
