@@ -25,6 +25,7 @@ if str(BACKEND) not in sys.path:
 from src import main
 from src.application import auth
 from src.application.auth import create_access_token
+from tests.sessao_teste import abrir_sessao, token_de
 from src.application.security import PERMISSION_DENIED, RESOURCE_NOT_FOUND
 from src.infrastructure import database
 from src.infrastructure import models as m
@@ -146,6 +147,7 @@ async def _create_ilpi_user(db, inst, *, permissions, profile_key="d4"):
     db.add_all([m.Funcionario(id=_new_id(), ilpi_id=inst.id, usuario_id=user.id, nome=user.nome, email=user.email, situacao="ativo"), _new_link(user.id, perfil.id, inst.id)])
     await db.flush()
     await _grant(db, perfil.id, permissions)
+    await abrir_sessao(db, user)
     return user
 async def _create_platform_user(db):
     user=_new_user()
@@ -154,9 +156,10 @@ async def _create_platform_user(db):
     await db.flush()
     db.add(_new_link(user.id, perfil.id, None))
     await db.flush()
+    await abrir_sessao(db, user)
     return user
 def _headers(user, *, scope="ilpi", ilpi_id=None):
-    h={"Authorization": f"Bearer {create_access_token(user)}", "X-Scope": scope}
+    h={"Authorization": f"Bearer {token_de(user)}", "X-Scope": scope}
     if ilpi_id is not None:
         h["X-ILPI-ID"]=ilpi_id
     return h

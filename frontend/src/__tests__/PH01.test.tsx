@@ -228,9 +228,10 @@ describe('PH-01/4 — sair avisa o servidor e limpa sempre', () => {
     expect(href).toBe('/login')
   })
 
-  it('o serviço envia credenciais, que é como a rota se autentica', async () => {
-    // Contrato: POST /auth/logout não usa Bearer — lê o cookie httpOnly
-    // `refresh_token`. Sem withCredentials a chamada chegaria anônima.
+  it('o serviço mantém withCredentials como prova adicional do cookie', async () => {
+    // PH-02/PR-2: em runtime o interceptor de api.ts também anexa o Bearer,
+    // que é a prova principal no split-origin. Este teste unitário confirma
+    // apenas que o cookie continua habilitado quando o navegador puder enviá-lo.
     const real = await vi.importActual<typeof import('../services/context')>('../services/context')
     await real.logoutServidor()
     const [url, corpo, config] = vi.mocked(api.post).mock.calls[0]

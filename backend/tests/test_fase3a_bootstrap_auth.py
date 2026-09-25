@@ -158,6 +158,7 @@ async def _with_client(database_ref: pathlib.Path | str, monkeypatch: pytest.Mon
     monkeypatch.setattr(bootstrap_script, "SessionLocal", factory)
     monkeypatch.setenv("BOOTSTRAP_TOKEN", BOOTSTRAP_TOKEN)
     auth._rate_store.clear()
+    auth._login_failure_store.clear()
     transport = httpx.ASGITransport(app=main.app)
     try:
         async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -183,6 +184,408 @@ async def _login(client: httpx.AsyncClient, password: str, **context) -> httpx.R
     payload = {"email": ADMIN_EMAIL, "password": password}
     payload.update({key: value for key, value in context.items() if value is not None})
     return await client.post("/api/auth/token", json=payload)
+
+
+def test_reserva_do_rate_limit_por_conta_e_atomica(monkeypatch):
+    auth._rate_store.clear()
+    monkeypatch.setattr(auth.time, "time", lambda: 2_000_000.0)
+    login = "concorrencia@facilpi.com.br"
+
+    reservas = [auth.reserve_login_attempt(login) for _ in range(auth.LOGIN_FAILURE_LIMIT)]
+    with pytest.raises(HTTPException) as exc:
+        auth.reserve_login_attempt(login)
+    assert exc.value.status_code == 429
+
+    # Reservas pendentes nao sao falhas: ao libera-las, a conta volta a ter vagas.
+    for reserva in reservas:
+        auth.release_login_reservation(login, reserva)
+    nova = auth.reserve_login_attempt(login)
+    auth.release_login_reservation(login, nova)
+
+
+RATE_STORE_NOW = 2_000_000.0
+
+
+@pytest.fixture
+def rate_store_com_teto(monkeypatch):
+    # raising=False: sem o teto implementado, os asserts de tamanho falham em
+    # vez de o fixture quebrar — prova vermelha legivel.
+    auth._rate_store.clear()
+    monkeypatch.setattr(auth, "RATE_STORE_MAX_KEYS", 5, raising=False)
+    monkeypatch.setattr(auth.time, "time", lambda: RATE_STORE_NOW)
+    yield auth._rate_store
+    auth._rate_store.clear()
+
+
+def _falha_de_login(login: str) -> None:
+    reservation = auth.reserve_login_attempt(login)
+    auth.register_login_failure(login, reservation)
+
+
+def test_rate_store_poda_primeiro_as_chaves_vencidas(rate_store_com_teto):
+    store = rate_store_com_teto
+    store["login-fail:velha@facilpi.com.br"] = [RATE_STORE_NOW - auth.LOGIN_FAILURE_WINDOW_SEC - 10]
+    store["token:10.0.0.1"] = [RATE_STORE_NOW - 61]
+    for i in range(3):
+        _falha_de_login(f"viva{i}@facilpi.com.br")
+    assert len(store) == 5
+
+    _falha_de_login("nova@facilpi.com.br")
+
+    assert "login-fail:velha@facilpi.com.br" not in store
+    assert "token:10.0.0.1" not in store
+    assert all(f"login-fail:viva{i}@facilpi.com.br" in store for i in range(3))
+    assert "login-fail:nova@facilpi.com.br" in store
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_conta_bloqueada_sobrevive_a_inundacao(rate_store_com_teto):
+    store = rate_store_com_teto
+    for _ in range(auth.LOGIN_FAILURE_LIMIT):
+        _falha_de_login("alvo@facilpi.com.br")
+    for i in range(50):
+        _falha_de_login(f"inventado{i}@facilpi.com.br")
+
+    assert "login-fail:alvo@facilpi.com.br" in store
+    with pytest.raises(HTTPException) as exc:
+        auth.reserve_login_attempt("alvo@facilpi.com.br")
+    assert exc.value.status_code == 429
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_chaves_livres_nao_passam_do_teto(rate_store_com_teto):
+    for i in range(200):
+        _falha_de_login(f"qualquer{i}@facilpi.com.br")
+    assert len(rate_store_com_teto) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_reserva_em_andamento_sobrevive_a_inundacao(rate_store_com_teto):
+    store = rate_store_com_teto
+    reservation = auth.reserve_login_attempt("em-andamento@facilpi.com.br")
+    for i in range(50):
+        _falha_de_login(f"inventado{i}@facilpi.com.br")
+
+    assert "login-pending:em-andamento@facilpi.com.br" in store
+    auth.register_login_failure("em-andamento@facilpi.com.br", reservation)
+    assert "login-pending:em-andamento@facilpi.com.br" not in store
+    assert store["login-fail:em-andamento@facilpi.com.br"] == [RATE_STORE_NOW]
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_rate_store_limite_por_ip_sobrevive_a_inundacao(rate_store_com_teto):
+    store = rate_store_com_teto
+    for _ in range(auth.RATE_LIMIT_AUTH):
+        auth.check_rate_limit("token:10.9.9.9")
+    for i in range(200):
+        auth.check_rate_limit(f"token:10.0.{i // 256}.{i % 256}")
+
+    with pytest.raises(HTTPException) as exc:
+        auth.check_rate_limit("token:10.9.9.9")
+    assert exc.value.status_code == 429
+    assert len(store) <= auth.RATE_STORE_MAX_KEYS
+
+
+def test_login_failure_limit_por_conta_normalizada(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+
+        # Isola a política por conta da barreira por IP já existente.
+        monkeypatch.setattr(main, "check_rate_limit", lambda *args, **kwargs: None)
+        clock = [1_000_000.0]
+        monkeypatch.setattr(auth.time, "time", lambda: clock[0])
+
+        # Falhas com grafias diferentes alimentam a MESMA conta normalizada.
+        for email in ("ADMIN@ILPI.COM", "Admin@Ilpi.Com", "admin@ilpi.com"):
+            failed = await client.post(
+                "/api/auth/token",
+                json={"email": email, "password": "senha-incorreta"},
+            )
+            assert failed.status_code == 401, failed.text
+
+        # Sucesso limpa o contador: as dez falhas seguintes ainda devem ser 401.
+        success = await client.post(
+            "/api/auth/token",
+            json={"email": "ADMIN@ILPI.COM", "password": bootstrap.temporary_password},
+        )
+        assert success.status_code == 200, success.text
+        client.cookies.clear()
+
+        for _ in range(10):
+            failed = await client.post(
+                "/api/auth/token",
+                json={"email": ADMIN_EMAIL, "password": "senha-incorreta"},
+            )
+            assert failed.status_code == 401, failed.text
+
+        blocked = await client.post(
+            "/api/auth/token",
+            json={"email": ADMIN_EMAIL, "password": "senha-incorreta"},
+        )
+        assert blocked.status_code == 429, blocked.text
+
+        # Não há bloqueio permanente: expirada a janela, volta a avaliar credencial.
+        clock[0] += auth.LOGIN_FAILURE_WINDOW_SEC + 1
+        recovered = await client.post(
+            "/api/auth/token",
+            json={"email": ADMIN_EMAIL, "password": "senha-incorreta"},
+        )
+        assert recovered.status_code == 401, recovered.text
+
+        # Conta inexistente recebe a mesma política e a mesma classe de resposta.
+        unknown = "naoexiste@facilpi.com.br"
+        for _ in range(10):
+            failed_unknown = await client.post(
+                "/api/auth/token",
+                json={"email": unknown, "password": "senha-incorreta"},
+            )
+            assert failed_unknown.status_code == 401, failed_unknown.text
+        blocked_unknown = await client.post(
+            "/api/auth/token",
+            json={"email": unknown, "password": "senha-incorreta"},
+        )
+        assert blocked_unknown.status_code == 429, blocked_unknown.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_logout_revoga_so_familia_atual_e_preserva_sessao_independente(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        initial = await _login(client, bootstrap.temporary_password)
+        assert initial.status_code == 200, initial.text
+        first_access = await client.put(
+            "/api/auth/primeiro-acesso",
+            headers=_auth_headers(initial.json()["access_token"]),
+            json={"nova_senha": FIRST_PASSWORD, "confirmar": FIRST_PASSWORD},
+        )
+        assert first_access.status_code == 200, first_access.text
+
+        client.cookies.clear()
+        session_a = await _login(client, FIRST_PASSWORD)
+        assert session_a.status_code == 200, session_a.text
+        access_a = session_a.json()["access_token"]
+        refresh_a = client.cookies.get("refresh_token")
+        assert refresh_a
+
+        client.cookies.clear()
+        session_b = await _login(client, FIRST_PASSWORD)
+        assert session_b.status_code == 200, session_b.text
+        access_b = session_b.json()["access_token"]
+        refresh_b = client.cookies.get("refresh_token")
+        assert refresh_b and refresh_b != refresh_a
+
+        client.cookies.clear()
+        logout_a = await client.post(
+            "/api/auth/logout",
+            headers={
+                **_auth_headers(access_a),
+                "Cookie": f"refresh_token={refresh_a}",
+            },
+        )
+        assert logout_a.status_code == 200, logout_a.text
+
+        access_a_after = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access_a),
+        )
+        assert access_a_after.status_code == 401, access_a_after.text
+
+        refresh_a_after = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh_a}"},
+        )
+        assert refresh_a_after.status_code == 401, refresh_a_after.text
+
+        access_b_after = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access_b),
+        )
+        assert access_b_after.status_code == 200, access_b_after.text
+
+        client.cookies.clear()
+        refresh_b_after = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh_b}"},
+        )
+        assert refresh_b_after.status_code == 200, refresh_b_after.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_logout_aceita_bearer_expirado_assinado_e_revoga_familia(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        login = await _login(client, bootstrap.temporary_password)
+        assert login.status_code == 200, login.text
+        access = login.json()["access_token"]
+        refresh = client.cookies.get("refresh_token")
+        assert refresh
+
+        payload = auth.decode_access_token(access)
+        payload["exp"] = 1
+        expired_but_signed = auth.jwt.encode(
+            payload,
+            auth.JWT_SECRET,
+            algorithm=auth.JWT_ALGORITHM,
+        )
+
+        client.cookies.clear()
+        logout = await client.post(
+            "/api/auth/logout",
+            headers=_auth_headers(expired_but_signed),
+        )
+        assert logout.status_code == 200, logout.text
+        assert logout.json() == {"mensagem": "Sessão encerrada"}
+
+        # O access original ainda estaria dentro do exp, mas a familia foi
+        # revogada pelo bearer expirado: precisa falhar pela sessao, nao pelo TTL.
+        old_access = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access),
+        )
+        assert old_access.status_code == 401, old_access.text
+
+        old_refresh = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh}"},
+        )
+        assert old_refresh.status_code == 401, old_refresh.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_logout_com_assinatura_invalida_e_uniforme_sem_revogar(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        login = await _login(client, bootstrap.temporary_password)
+        assert login.status_code == 200, login.text
+        refresh = client.cookies.get("refresh_token")
+        assert refresh
+
+        client.cookies.clear()
+        invalid = auth.jwt.encode(
+            {"sub": "forjado", "sid": "familia-forjada", "exp": 4_102_444_800},
+            "segredo-incorreto-com-tamanho-suficiente-123456789",
+            algorithm=auth.JWT_ALGORITHM,
+        )
+        logout = await client.post(
+            "/api/auth/logout",
+            headers=_auth_headers(invalid),
+        )
+        assert logout.status_code == 200, logout.text
+        assert logout.json() == {"mensagem": "Sessão encerrada"}
+
+        # A prova inválida é ignorada para revogação; a sessão real segue ativa.
+        still_active = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh}"},
+        )
+        assert still_active.status_code == 200, still_active.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_logout_com_cookie_e_bearer_divergentes_revoga_as_duas_familias(fase3a_db, monkeypatch):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        bootstrap = await bootstrap_script.run_bootstrap(BOOTSTRAP_TOKEN)
+        initial = await _login(client, bootstrap.temporary_password)
+        assert initial.status_code == 200, initial.text
+        first_access = await client.put(
+            "/api/auth/primeiro-acesso",
+            headers=_auth_headers(initial.json()["access_token"]),
+            json={"nova_senha": FIRST_PASSWORD, "confirmar": FIRST_PASSWORD},
+        )
+        assert first_access.status_code == 200, first_access.text
+
+        client.cookies.clear()
+        session_a = await _login(client, FIRST_PASSWORD)
+        access_a = session_a.json()["access_token"]
+        refresh_a = client.cookies.get("refresh_token")
+        assert refresh_a
+
+        client.cookies.clear()
+        session_b = await _login(client, FIRST_PASSWORD)
+        access_b = session_b.json()["access_token"]
+        refresh_b = client.cookies.get("refresh_token")
+        assert refresh_b and refresh_b != refresh_a
+
+        client.cookies.clear()
+        mismatch = await client.post(
+            "/api/auth/logout",
+            headers={
+                **_auth_headers(access_a),
+                "Cookie": f"refresh_token={refresh_b}",
+            },
+        )
+        assert mismatch.status_code == 200, mismatch.text
+        assert mismatch.json() == {"mensagem": "Sessão encerrada"}
+
+        for access in (access_a, access_b):
+            after = await client.get("/api/instituicoes/", headers=_auth_headers(access))
+            assert after.status_code == 401, after.text
+
+        for refresh in (refresh_a, refresh_b):
+            client.cookies.clear()
+            after = await client.post(
+                "/api/auth/refresh",
+                headers={"Cookie": f"refresh_token={refresh}"},
+            )
+            assert after.status_code == 401, after.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
+
+
+def test_access_token_sem_sid_e_recusado_em_qualquer_ambiente(fase3a_db, monkeypatch):
+    # PH-02/PR-2 (decisao do CT): sid obrigatorio sem excecao para
+    # development/test. A suite roda fora de pilot/production, entao a recusa
+    # aqui prova que nao sobrou bypass por ambiente.
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        assert auth.ENVIRONMENT in {"development", "test"}
+        global_access = await _bootstrap_global_access(client)
+        user = (
+            await db.execute(select(m.User).where(m.User.email == ADMIN_EMAIL))
+        ).scalar_one()
+        legacy = auth.create_access_token(user)
+
+        response = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(legacy),
+        )
+        assert response.status_code == 401, response.text
+        assert response.json()["detail"]["code"] == "AUTHENTICATION_REQUIRED"
+
+        # Troca de contexto e troca de senha voluntaria tinham caminho proprio
+        # para token sem sid; agora recusam antes de qualquer escrita.
+        client.cookies.clear()
+        context = await client.post(
+            "/api/auth/contexto",
+            headers=_auth_headers(legacy),
+            json={"scope": "global"},
+        )
+        assert context.status_code == 401, context.text
+        password = await client.put(
+            "/api/auth/password",
+            headers=_auth_headers(legacy),
+            json={
+                "senha_atual": FIRST_PASSWORD,
+                "nova_senha": NORMAL_PASSWORD,
+                "confirmar_senha": NORMAL_PASSWORD,
+            },
+        )
+        assert password.status_code == 401, password.text
+
+        # Nada foi revogado nem alterado pelas tentativas: a sessao real segue
+        # valida e a senha continua a mesma.
+        still_valid = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(global_access),
+        )
+        assert still_valid.status_code == 200, still_valid.text
+        client.cookies.clear()
+        relogin = await _login(client, FIRST_PASSWORD)
+        assert relogin.status_code == 200, relogin.text
+
+    asyncio.run(_with_client(fase3a_db, monkeypatch, scenario))
 
 
 def test_migration_004_to_005_preserves_legacy_users(fase3a_db, monkeypatch):
@@ -274,6 +677,12 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
             },
         )
         assert normal_password.status_code == 200, normal_password.text
+        # A troca feita pelo próprio usuário preserva a família corrente.
+        same_session_after_password = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access),
+        )
+        assert same_session_after_password.status_code == 200, same_session_after_password.text
 
         login = await _login(client, NORMAL_PASSWORD)
         assert login.status_code == 200, login.text
@@ -290,9 +699,25 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
         login = await _login(client, NORMAL_PASSWORD)
         assert login.status_code == 200, login.text
         access = login.json()["access_token"]
-        logout = await client.post("/api/auth/logout")
+        logout_refresh = client.cookies.get("refresh_token")
+        assert logout_refresh
+        logout = await client.post(
+            "/api/auth/logout",
+            headers=_auth_headers(access),
+        )
         assert logout.status_code == 200
-        after_logout_refresh = await client.post("/api/auth/refresh")
+
+        after_logout_access = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(access),
+        )
+        assert after_logout_access.status_code == 401, after_logout_access.text
+
+        client.cookies.clear()
+        after_logout_refresh = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={logout_refresh}"},
+        )
         assert after_logout_refresh.status_code == 401
 
         login = await _login(client, NORMAL_PASSWORD)
@@ -359,6 +784,13 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
         )
         assert local_context.status_code == 200, local_context.text
         local_access = local_context.json()["access_token"]
+
+        old_global_after_context = await client.get(
+            "/api/instituicoes/",
+            headers=_auth_headers(global_access),
+        )
+        assert old_global_after_context.status_code == 401, old_global_after_context.text
+
         local_token_global_route = await client.post(
             "/api/instituicoes/",
             headers=_auth_headers(local_access),
@@ -401,6 +833,12 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
         assert reset.status_code == 200, reset.text
         assert reset.json()["senha_temporaria"]
 
+        # O token global anterior foi revogado pela troca de contexto; voltar ao
+        # escopo global exige nova sessão, sem reutilizar credencial morta.
+        global_login_again = await _login(client, NORMAL_PASSWORD)
+        assert global_login_again.status_code == 200, global_login_again.text
+        global_access = global_login_again.json()["access_token"]
+
         updated = await client.put(
             f"/api/instituicoes/{ilpi['id']}",
             headers=_auth_headers(global_access),
@@ -432,6 +870,7 @@ def test_fase3a_full_auth_onboarding_and_admin_flow(fase3a_db, monkeypatch):
             login_cookie,
             refresh_one,
             refresh_two,
+            logout_refresh,
             created_payload["senha_temporaria"],
             reset.json()["senha_temporaria"],
             "password_hash",

@@ -32,6 +32,7 @@ from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application import fase3a  # noqa: E402
 from src.application.auth import create_access_token  # noqa: E402
+from tests.sessao_teste import abrir_sessao, token_de
 from src.application.security import PERMISSION_DENIED  # noqa: E402
 from src.infrastructure import database  # noqa: E402
 from src.infrastructure import models as m  # noqa: E402
@@ -178,6 +179,7 @@ async def _create_admin(db, institution) -> m.User:
                               nome=user.nome, email=user.email, situacao="ativo"),
                 _new_link(user.id, clone.id, institution.id)])
     await db.flush()
+    await abrir_sessao(db, user)
     return user
 
 
@@ -194,11 +196,12 @@ async def _create_plain_user(db, institution, *, profile_keys=("x",), nome="Alvo
                               nome=user.nome, email=user.email, situacao="ativo"),
                 _new_link(user.id, profile.id, institution.id)])
     await db.flush()
+    await abrir_sessao(db, user)
     return user
 
 
 def _headers(user, *, scope="ilpi", ilpi_id=None, perfil_id=None):
-    headers = {"Authorization": f"Bearer {create_access_token(user)}", "X-Scope": scope}
+    headers = {"Authorization": f"Bearer {token_de(user)}", "X-Scope": scope}
     if ilpi_id is not None:
         headers["X-ILPI-ID"] = ilpi_id
     if perfil_id is not None:

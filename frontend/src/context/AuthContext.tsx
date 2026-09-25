@@ -99,14 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * A limpeza local e o redirect acontecem no `finally`: rede fora, 500 ou
    * timeout não podem prender o usuário numa sessão que ele já mandou encerrar.
    *
-   * LOGOUT_SERVER_REVOCATION = NOT_PROVEN (dependência registrada, fora deste
-   * escopo): o cookie de refresh é `SameSite=Strict` e o frontend publicado vive
-   * em origem diferente da API (facilpi-web × facilpi-api no Render). Nessa
-   * topologia o navegador não guarda nem envia esse cookie, então a requisição
-   * chega sem ele, `load_refresh_token` devolve None e o handler responde 200
-   * sem revogar nada. O 200 aqui significa "o servidor recebeu o pedido", não
-   * "a sessão foi revogada". Provar revogação real exige mudar SameSite/CORS ou
-   * a topologia de origem — decisão de backend/infra, não desta rodada.
+   * PH-02/PR-2: a chamada usa a instância `api`, cujo interceptor anexa o
+   * Bearer antes de enviar. O backend deriva dele o `sid` (família da sessão) e
+   * revoga essa família imediatamente; o cookie httpOnly, quando disponível,
+   * funciona como prova adicional. Assim a revogação não depende de SameSite
+   * atravessar as duas origens do Render.
    */
   const logout = useCallback(async () => {
     try {

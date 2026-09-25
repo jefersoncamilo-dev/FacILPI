@@ -31,18 +31,17 @@ export interface TokenPayload {
 /**
  * PH-01: encerramento de sessão no servidor.
  *
- * Contrato (backend/src/application/fase3a.py:462): POST, SEM Bearer — a rota
- * se autentica EXCLUSIVAMENTE pelo cookie `refresh_token`, que é httpOnly,
- * `SameSite=Strict` e escopado em `path=/api/auth`. Daí o `withCredentials`:
- * sem ele o axios não envia cookie algum e a chamada chega anônima.
+ * PH-02/PR-2: o interceptor de api.ts anexa o Bearer armazenado e ele é a
+ * identidade suficiente para o backend revogar a família da sessão. Isso fecha
+ * o logout também na topologia cross-origin do Render, onde o cookie
+ * SameSite=Strict pode não atravessar facilpi-web → facilpi-api.
+ *
+ * `withCredentials` permanece como segunda prova quando o cookie está
+ * disponível (mesma origem/topologia futura). Cookie e Bearer divergentes são
+ * tratados pelo servidor como sessão inconsistente; nunca há escolha silenciosa.
  *
  * `timeout` existe porque sair não pode depender da rede: se o servidor não
  * responder, quem chama ainda precisa limpar a sessão local e seguir.
- *
- * ATENÇÃO — o retorno 200 desta rota NÃO prova revogação. O handler responde
- * `{"mensagem": "Sessão encerrada"}` mesmo quando não encontra o token (cookie
- * ausente → `row is None` → nada é revogado). Ver LOGOUT_SERVER_REVOCATION em
- * AuthContext.logout.
  */
 export function logoutServidor() {
   return api.post('/auth/logout', null, { withCredentials: true, timeout: 5000 })

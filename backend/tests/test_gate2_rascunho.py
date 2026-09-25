@@ -533,11 +533,9 @@ def test_17_modulo_desconhecido_nasce_negado_em_rascunho(gate2_db):
 
         rascunho_id, _ = await _provisionar(client, ativar=False)
         email_rascunho = await _usuario_com_permissoes(session, rascunho_id, (FUTURO_KEY,))
-        token_rascunho = await _token_amplo(client, email_rascunho)
 
         ativa_id, _ = await _provisionar(client, ativar=True)
         email_ativa = await _usuario_com_permissoes(session, ativa_id, (FUTURO_KEY,))
-        token_ativa = await _token_amplo(client, email_ativa)
 
         from src.application.security import _permission_key_is_usable
 
@@ -546,12 +544,17 @@ def test_17_modulo_desconhecido_nasce_negado_em_rascunho(gate2_db):
 
         # A chave desaparece do contexto em rascunho e permanece em ativa. Como
         # nao ha rota para o modulo hipotetico, o contexto e a evidencia.
+        # PR-2: cada usuario autentica logo antes da propria selecao. O cookie de
+        # refresh deste cliente e o da ultima sessao aberta, e /auth/contexto
+        # recusa Bearer e cookie de sessoes diferentes.
+        token_rascunho = await _token_amplo(client, email_rascunho)
         contexto_rascunho = await client.post(
             "/api/auth/contexto",
             headers=_headers(token_rascunho),
             json={"scope": "ilpi", "ilpi_id": rascunho_id},
         )
         assert contexto_rascunho.status_code == 200, contexto_rascunho.text
+        token_ativa = await _token_amplo(client, email_ativa)
         contexto_ativa = await client.post(
             "/api/auth/contexto",
             headers=_headers(token_ativa),

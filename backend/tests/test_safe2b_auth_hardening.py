@@ -282,6 +282,8 @@ def test_h01_primeiro_acesso_comum_usa_a_senha_temporaria(safe2b_db):
         login = await _login(client, email, SENHA_TEMPORARIA)
         assert login.status_code == 200, login.text
         token = login.json()["access_token"]
+        refresh_temporario = client.cookies.get("refresh_token")
+        assert refresh_temporario
 
         troca = await _trocar_senha(client, token, atual=SENHA_TEMPORARIA, nova=SENHA_NOVA)
         assert troca.status_code == 200, troca.text
@@ -291,6 +293,21 @@ def test_h01_primeiro_acesso_comum_usa_a_senha_temporaria(safe2b_db):
         ).scalar_one()
         await session.refresh(usuario)
         assert usuario.exige_troca_senha is False
+
+        # Primeiro acesso obrigatorio derruba toda sessao aberta com a
+        # credencial temporaria. O frontend autentica novamente com a definitiva.
+        acesso_temporario = await client.get(
+            "/api/instituicoes/",
+            headers=_headers(token),
+        )
+        assert acesso_temporario.status_code == 401, acesso_temporario.text
+
+        client.cookies.clear()
+        refresh_temporario_resposta = await client.post(
+            "/api/auth/refresh",
+            headers={"Cookie": f"refresh_token={refresh_temporario}"},
+        )
+        assert refresh_temporario_resposta.status_code == 401, refresh_temporario_resposta.text
 
     _executa(safe2b_db, cenario)
 

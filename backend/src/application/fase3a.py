@@ -15,6 +15,8 @@ from . import schemas as s
 from .audit import add_audit
 from .auth import (
     REFRESH_COOKIE_NAME,
+    access_session_identity,
+    access_session_identity_for_logout,
     check_rate_limit,
     clear_refresh_cookie,
     create_access_token,
@@ -332,8 +334,17 @@ async def issue_session_response(
         ilpi_id=ilpi_id,
         perfil_id=perfil_id,
     )
-    refresh = await issue_refresh_token(db, user, request=request, **context)
-    access = create_access_token(user, **context)
+    # Uma familia por login/contexto. O mesmo identificador ancora refresh e
+    # access token, permitindo revogacao imediata sem nova tabela/migration.
+    session_family = _new_id()
+    refresh = await issue_refresh_token(
+        db,
+        user,
+        request=request,
+        token_family=session_family,
+        **context,
+    )
+    access = create_access_token(user, sid=session_family, **context)
     set_refresh_cookie(response, refresh)
     return {
         "access_token": access,
@@ -449,6 +460,7 @@ async def refresh_session(
         scope=row.ilpi_id and ILPI_SCOPE or (GLOBAL_SCOPE if row.perfil_id and row.ilpi_id is None else None),
         ilpi_id=row.ilpi_id,
         perfil_id=row.perfil_id,
+        sid=row.token_family,
     )
     await db.commit()
     set_refresh_cookie(response, refresh)
@@ -465,19 +477,53 @@ async def logout_session(
     response: Response,
     db: AsyncSession = Depends(get_db),
 ):
+    # Cookie e Bearer podem identificar familias diferentes. Nunca escolhemos
+    # uma prova silenciosamente: na divergencia, cada prova revoga exatamente a
+    # familia que nomeia e o evento fica registrado em auditoria.
+    access_identity = access_session_identity_for_logout(request)
     raw_refresh = request.cookies.get(REFRESH_COOKIE_NAME)
     row = await load_refresh_token(db, raw_refresh or "")
-    if row is not None and row.revoked_at is None:
-        row.revoked_at = _now()
-        add_audit(
-            db,
-            acao="auth.logout",
-            entidade="refresh_tokens",
-            registro_id=row.id,
-            usuario_id=row.user_id,
-            request=request,
-        )
-        await db.commit()
+    cookie_identity = (row.user_id, row.token_family) if row is not None else None
+
+    if access_identity is not None and cookie_identity is not None and access_identity != cookie_identity:
+        # Divergencia e tratada explicitamente: cada prova revoga exatamente a
+        # familia que nomeia. Nao escolhemos uma como "mais verdadeira", e a
+        # resposta continua identica para nao criar um oraculo de sessao.
+        revoked_access = await revoke_token_family(db, access_identity[0], access_identity[1])
+        revoked_cookie = await revoke_token_family(db, cookie_identity[0], cookie_identity[1])
+        if revoked_access or revoked_cookie:
+            add_audit(
+                db,
+                acao="auth.logout_session_mismatch",
+                entidade="refresh_tokens",
+                registro_id=row.id,
+                usuario_id=row.user_id,
+                valores_posteriores={
+                    "familias_revogadas": int(bool(revoked_access)) + int(bool(revoked_cookie)),
+                    "usuarios_divergentes": access_identity[0] != cookie_identity[0],
+                },
+                request=request,
+            )
+            await db.commit()
+        clear_refresh_cookie(response)
+        return {"mensagem": "Sessão encerrada"}
+
+    target_identity = access_identity or cookie_identity
+    if target_identity is not None:
+        user_id, token_family = target_identity
+        revoked = await revoke_token_family(db, user_id, token_family)
+        if revoked:
+            add_audit(
+                db,
+                acao="auth.logout",
+                entidade="refresh_tokens",
+                registro_id=row.id if row is not None and cookie_identity == target_identity else None,
+                usuario_id=user_id,
+                valores_posteriores={"familia_revogada": True},
+                request=request,
+            )
+            await db.commit()
+
     clear_refresh_cookie(response)
     return {"mensagem": "Sessão encerrada"}
 
@@ -492,6 +538,37 @@ async def selecionar_contexto(
 ):
     if current_user.exige_troca_senha:
         raise _http_error(status.HTTP_403_FORBIDDEN, "FIRST_PASSWORD_CHANGE_REQUIRED", "Troca de senha obrigatória")
+
+    access_identity = access_session_identity(request)
+    raw_refresh = request.cookies.get(REFRESH_COOKIE_NAME)
+    refresh_row = await load_refresh_token(db, raw_refresh or "")
+    cookie_identity = (
+        (refresh_row.user_id, refresh_row.token_family)
+        if refresh_row is not None
+        else None
+    )
+    if (
+        access_identity is not None
+        and cookie_identity is not None
+        and access_identity != cookie_identity
+    ):
+        raise _http_error(
+            status.HTTP_409_CONFLICT,
+            "SESSION_MISMATCH",
+            "Sessão inconsistente; autentique-se novamente",
+        )
+
+    # Troca de contexto e troca de sessao: a familia anterior cai na mesma
+    # transacao em que a nova e criada. Falha posterior faz rollback de ambas.
+    if access_identity is not None:
+        if access_identity[0] != current_user.id:
+            raise _http_error(
+                status.HTTP_401_UNAUTHORIZED,
+                "AUTHENTICATION_REQUIRED",
+                "Autenticação obrigatória",
+            )
+        await revoke_token_family(db, current_user.id, access_identity[1])
+
     session_payload = await issue_session_response(
         db,
         current_user,

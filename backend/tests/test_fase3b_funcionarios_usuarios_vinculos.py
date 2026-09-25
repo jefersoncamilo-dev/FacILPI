@@ -195,7 +195,16 @@ async def _create_ilpi_admin_context(client: httpx.AsyncClient, db: AsyncSession
         json={"scope": "ilpi", "ilpi_id": ilpi_id, "perfil_id": profile.id},
     )
     assert context.status_code == 200, context.text
-    return {"global_access": global_access, "local_access": context.json()["access_token"], "ilpi_id": ilpi_id, "perfil_id": profile.id}
+    # PR-2: a troca de contexto revoga a sessao global usada ate aqui. Quem
+    # ainda testa o contexto global autentica de novo e recebe sessao valida.
+    global_login = await _login(client, ADMIN_EMAIL, ADMIN_PASSWORD)
+    assert global_login.status_code == 200, global_login.text
+    return {
+        "global_access": global_login.json()["access_token"],
+        "local_access": context.json()["access_token"],
+        "ilpi_id": ilpi_id,
+        "perfil_id": profile.id,
+    }
 
 
 async def _create_other_tenant(db: AsyncSession) -> dict[str, str]:
@@ -413,6 +422,20 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
             json={"usuario_id": user_payload["id"]},
         )
         assert relink.status_code == 200, relink.text
+        # PR-2: o desvinculo acima revogou as sessoes do usuario nesta ILPI e a
+        # revogacao agora vale na hora. Revinculado, ele autentica de novo; a
+        # inativacao seguinte nao revoga sessao, entao o 403 abaixo e a regra
+        # do funcionario inativo, avaliada com sessao valida.
+        relogin_context = await _login(
+            client,
+            user_payload["email"],
+            LOCAL_PASSWORD,
+            scope="ilpi",
+            ilpi_id=context["ilpi_id"],
+            perfil_id=context["perfil_id"],
+        )
+        assert relogin_context.status_code == 200, relogin_context.text
+        local_user_headers = _auth_headers(relogin_context.json()["access_token"])
 
         inactivate = await client.delete(f"/api/funcionarios/{sem_login_id}", headers=local_headers)
         assert inactivate.status_code == 204

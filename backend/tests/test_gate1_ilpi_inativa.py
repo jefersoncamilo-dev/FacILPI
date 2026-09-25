@@ -288,8 +288,13 @@ def test_3_token_emitido_antes_da_inativacao_para_de_valer(gate1_db):
 def test_4_selecao_de_contexto_institucional_e_negada(gate1_db):
     async def cenario(client, session):
         ilpi_id, email = await _provisionar(client, ativar=True)
-        token = await _token_gestor(client, email)
         await _inativar(client, ilpi_id)
+        # PR-2: o gestor autentica depois da inativacao (login so de identidade,
+        # como no test_5) e entao pede o contexto. Autenticado antes, o cookie de
+        # refresh deste cliente passaria a ser o do operador que inativou, e
+        # /auth/contexto recusa Bearer e cookie de sessoes diferentes. O token
+        # emitido antes da inativacao segue coberto pelo test_3.
+        token = await _token_gestor(client, email)
 
         resposta = await client.post(
             "/api/auth/contexto",

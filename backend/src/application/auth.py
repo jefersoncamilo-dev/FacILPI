@@ -78,6 +78,12 @@ JWT_SECRET = resolve_jwt_secret(os.environ)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRY = int(os.getenv("JWT_EXPIRY", "3600"))
 RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "10"))
+LOGIN_FAILURE_LIMIT = 10
+LOGIN_FAILURE_WINDOW_SEC = 15 * 60
+# Teto de chaves do armazenamento em memoria. As chaves por conta sao escolhidas
+# por quem tenta logar: sem teto, e-mails inventados fariam a memoria crescer
+# ate o restart.
+RATE_STORE_MAX_KEYS = int(os.getenv("RATE_STORE_MAX_KEYS", "20000"))
 REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
 REFRESH_COOKIE_NAME = "refresh_token"
 REFRESH_COOKIE_PATH = "/api/auth"
@@ -90,12 +96,63 @@ REFRESH_COOKIE_PATH = "/api/auth"
 # nao aceita override: em pilot/production, `Secure` nao se negocia.
 ENVIRONMENT = resolve_environment(os.environ)
 REFRESH_COOKIE_SECURE = cookie_secure_for(ENVIRONMENT)
+# PH-02/PR-2: sessoes reais emitidas pela aplicacao carregam sid=token_family.
+# Access token sem sid e recusado em qualquer ambiente, sem excecao para
+# development/test: testes que cunham JWT abrem uma sessao real antes.
 
 logger = logging.getLogger("facilpi.security")
 security = HTTPBearer(auto_error=False)
 
-# Simple in-memory rate limit per IP (for demo; production should use redis)
+# Limite por IP existente. Continua como primeira barreira. O mesmo
+# armazenamento process-local recebe chaves namespaced do limite por conta;
+# isso preserva o reset atomico que a suite ja faz com `_rate_store.clear()`.
 _rate_store: Dict[str, list] = {}
+_login_failure_store = _rate_store
+_LOGIN_FAILURE_PREFIX = "login-fail:"
+_LOGIN_PENDING_PREFIX = "login-pending:"
+
+
+def _key_rule(key: str) -> tuple[int, int] | None:
+    """(limite, janela em segundos) de uma chave de timestamps.
+
+    Reservas pendentes guardam identificadores, nao timestamps, e so existem
+    enquanto a requisicao de login esta em andamento: ficam fora da poda.
+    """
+    if key.startswith(_LOGIN_PENDING_PREFIX):
+        return None
+    if key.startswith(_LOGIN_FAILURE_PREFIX):
+        return LOGIN_FAILURE_LIMIT, LOGIN_FAILURE_WINDOW_SEC
+    return RATE_LIMIT_AUTH, 60
+
+
+def _make_room(now: float) -> None:
+    """Mantem o armazenamento abaixo do teto antes de criar uma chave nova.
+
+    Descarta primeiro as chaves vencidas; depois, as chaves livres menos
+    recentes. Chave bloqueada nunca sai antes do fim da janela — inundar o
+    armazenamento com e-mails inventados nao pode zerar o contador de uma conta
+    sob ataque — e reserva pendente nunca sai. Consequencia aceita: se tudo
+    estiver bloqueado ou pendente, o teto e ultrapassado ate as janelas vencerem.
+    """
+    if len(_rate_store) < RATE_STORE_MAX_KEYS:
+        return
+    evictable: list[tuple[float, str]] = []
+    for key in list(_rate_store):
+        rule = _key_rule(key)
+        if rule is None:
+            continue
+        limit, window = rule
+        active = [float(t) for t in _rate_store[key] if now - float(t) < window]
+        if not active:
+            del _rate_store[key]
+            continue
+        _rate_store[key] = active
+        if len(active) < limit:
+            evictable.append((max(active), key))
+    excess = len(_rate_store) - RATE_STORE_MAX_KEYS + 1
+    for _, key in sorted(evictable)[: max(excess, 0)]:
+        del _rate_store[key]
+
 
 def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 60):
     now = time.time()
@@ -104,8 +161,90 @@ def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 6
     lst = [t for t in lst if now - t < window_sec]
     if len(lst) >= limit:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    if key not in _rate_store:
+        _make_room(now)
     lst.append(now)
     _rate_store[key] = lst
+
+
+def normalize_login(login: str) -> str:
+    return login.strip().lower()
+
+
+def _login_limit_keys(login: str) -> tuple[str, str]:
+    normalized = normalize_login(login)
+    return f"{_LOGIN_FAILURE_PREFIX}{normalized}", f"{_LOGIN_PENDING_PREFIX}{normalized}"
+
+
+def _active_login_failures(failure_key: str, now: float) -> list[float]:
+    failures = [
+        float(t)
+        for t in _rate_store.get(failure_key, [])
+        if now - float(t) < LOGIN_FAILURE_WINDOW_SEC
+    ]
+    if failures:
+        _rate_store[failure_key] = failures
+    else:
+        _rate_store.pop(failure_key, None)
+    return failures
+
+
+def check_login_failure_limit(login: str) -> None:
+    """Consulta sem reservar; mantida para diagnostico/testes."""
+    failure_key, pending_key = _login_limit_keys(login)
+    now = time.time()
+    failures = _active_login_failures(failure_key, now)
+    pending = _rate_store.get(pending_key, [])
+    if len(failures) + len(pending) >= LOGIN_FAILURE_LIMIT:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+
+
+def reserve_login_attempt(login: str) -> str:
+    """Reserva uma das 10 vagas antes do primeiro await da autenticação.
+
+    A reserva impede que varias requisicoes concorrentes vejam o mesmo contador
+    e todas ultrapassem o teto. Ela so vira falha depois de credencial invalida.
+    """
+    failure_key, pending_key = _login_limit_keys(login)
+    now = time.time()
+    failures = _active_login_failures(failure_key, now)
+    pending = list(_rate_store.get(pending_key, []))
+    if len(failures) + len(pending) >= LOGIN_FAILURE_LIMIT:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    reservation = secrets.token_urlsafe(12)
+    if pending_key not in _rate_store:
+        _make_room(now)
+    pending.append(reservation)
+    _rate_store[pending_key] = pending
+    return reservation
+
+
+def release_login_reservation(login: str, reservation: str) -> None:
+    _, pending_key = _login_limit_keys(login)
+    pending = [item for item in _rate_store.get(pending_key, []) if item != reservation]
+    if pending:
+        _rate_store[pending_key] = pending
+    else:
+        _rate_store.pop(pending_key, None)
+
+
+def register_login_failure(login: str, reservation: str | None = None) -> None:
+    failure_key, _ = _login_limit_keys(login)
+    now = time.time()
+    failures = _active_login_failures(failure_key, now)
+    if reservation is not None:
+        release_login_reservation(login, reservation)
+    if failure_key not in _rate_store:
+        _make_room(now)
+    failures.append(now)
+    _rate_store[failure_key] = failures
+
+
+def clear_login_failures(login: str, reservation: str | None = None) -> None:
+    failure_key, _ = _login_limit_keys(login)
+    _rate_store.pop(failure_key, None)
+    if reservation is not None:
+        release_login_reservation(login, reservation)
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -122,6 +261,7 @@ def create_access_token(
     scope: str | None = None,
     ilpi_id: str | None = None,
     perfil_id: str | None = None,
+    sid: str | None = None,
 ) -> str:
     now = datetime.now(timezone.utc)
     exp = now + timedelta(seconds=JWT_EXPIRY)
@@ -134,6 +274,8 @@ def create_access_token(
         "is_superuser": bool(getattr(user, "is_superuser", False)),
         "exige_troca_senha": bool(getattr(user, "exige_troca_senha", False)),
     }
+    if sid is not None:
+        payload["sid"] = sid
     if scope is not None:
         payload["scope"] = scope
         payload["ilpi_id"] = ilpi_id
@@ -148,6 +290,38 @@ def decode_access_token(token: str) -> dict[str, Any]:
         raise _authentication_required("expired_token")
     except (jwt.InvalidTokenError, TypeError, ValueError):
         raise _authentication_required("invalid_token")
+
+
+def access_session_identity_for_logout(request: Request) -> tuple[str, str] | None:
+    """Identifica sessao para revogacao sem transformar logout em autenticacao.
+
+    Logout e reducao de privilegio: um token expirado, mas ainda validamente
+    assinado, continua sendo prova suficiente para encerrar a familia que ele
+    nomeia. Bearer ausente, malformado, com assinatura invalida ou sem sid nao
+    deve impedir o cliente de limpar a sessao local nem revelar detalhes.
+    """
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM],
+            options={"verify_exp": False},
+        )
+    except (jwt.InvalidTokenError, TypeError, ValueError):
+        return None
+    user_id = payload.get("sub")
+    sid = payload.get("sid")
+    if not isinstance(user_id, str) or not user_id:
+        return None
+    if not isinstance(sid, str) or not sid:
+        return None
+    return user_id, sid
 
 
 def token_hash(token: str) -> str:
@@ -228,6 +402,44 @@ async def load_refresh_token(db: AsyncSession, raw_token: str) -> RefreshToken |
     ).scalar_one_or_none()
 
 
+async def load_active_session_token(
+    db: AsyncSession,
+    user_id: str,
+    token_family: str,
+) -> RefreshToken | None:
+    """Retorna o unico refresh ativo que ancora uma familia de sessao."""
+    row = (
+        await db.execute(
+            select(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family == token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+            .order_by(RefreshToken.created_at.desc())
+        )
+    ).scalars().first()
+    return row if refresh_token_is_valid(row) else None
+
+
+def access_session_identity(request: Request) -> tuple[str, str] | None:
+    """Extrai (user_id, sid) de Bearer assinado sem escolher sessao por heuristica."""
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise _authentication_required("missing_or_invalid_scheme")
+    payload = decode_access_token(token)
+    user_id = payload.get("sub")
+    sid = payload.get("sid")
+    if not isinstance(user_id, str) or not user_id:
+        raise _authentication_required("missing_subject")
+    if not isinstance(sid, str) or not sid:
+        raise _authentication_required("missing_session_id")
+    return user_id, sid
+
+
 def refresh_token_is_valid(row: RefreshToken | None) -> bool:
     if row is None or row.revoked_at is not None:
         return False
@@ -276,6 +488,27 @@ async def revoke_user_refresh_tokens(db: AsyncSession, user_id: str) -> None:
         row.revoked_at = now
 
 
+async def revoke_user_refresh_tokens_except_family(
+    db: AsyncSession,
+    user_id: str,
+    keep_token_family: str,
+) -> int:
+    """Revoga outras sessoes do usuario e preserva a familia atual."""
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family != keep_token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.revoked_at = now
+    return len(rows)
+
+
 def _authentication_required(reason: str) -> HTTPException:
     # Never include the token or decoder exception in the response/log.
     logger.warning("authentication_denied code=%s reason=%s", AUTHENTICATION_REQUIRED, reason)
@@ -320,6 +553,14 @@ async def get_current_user(
     user_id = payload.get("sub")
     if not isinstance(user_id, str) or not user_id:
         raise _authentication_required("missing_subject")
+
+    sid = payload.get("sid")
+    if sid is None:
+        raise _authentication_required("missing_session_id")
+    if not isinstance(sid, str) or not sid:
+        raise _authentication_required("invalid_session_id")
+    if await load_active_session_token(db, user_id, sid) is None:
+        raise _authentication_required("revoked_or_expired_session")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()

@@ -13,7 +13,19 @@ import pathlib
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
-from .application.auth import hash_password, verify_password, get_current_user, check_rate_limit, revoke_user_refresh_tokens
+from .application.auth import (
+    access_session_identity,
+    check_rate_limit,
+    clear_login_failures,
+    get_current_user,
+    hash_password,
+    register_login_failure,
+    release_login_reservation,
+    reserve_login_attempt,
+    revoke_user_refresh_tokens,
+    revoke_user_refresh_tokens_except_family,
+    verify_password,
+)
 from .application.runtime import docs_urls_for, resolve_cors_origins, resolve_environment
 from .application.audit import add_audit
 from .application.medicacao import (
@@ -116,23 +128,42 @@ async def register(request: Request):
 async def token(payload: s.UserLogin, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
     check_rate_limit(f"token:{client_ip}")
-    result = await db.execute(select(m.User).where(m.User.email == payload.email.lower().strip()))
-    user = result.scalar_one_or_none()
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Credenciais inválidas")
-    if not user.ativo:
-        raise HTTPException(status_code=401, detail="Usuário inativo")
-    session_payload = await issue_session_response(
-        db,
-        user,
-        response,
-        request,
-        scope=payload.scope,
-        ilpi_id=payload.ilpi_id,
-        perfil_id=payload.perfil_id,
-    )
-    await db.commit()
-    return session_payload
+
+    login = payload.email.lower().strip()
+    # Reserva antes do primeiro await: duas requisicoes concorrentes nao podem
+    # observar o mesmo contador e exceder o teto de 10. A reserva so vira falha
+    # quando a credencial e de fato invalida.
+    reservation = reserve_login_attempt(login)
+    try:
+        result = await db.execute(select(m.User).where(m.User.email == login))
+        user = result.scalar_one_or_none()
+        if not user or not verify_password(payload.password, user.password_hash):
+            register_login_failure(login, reservation)
+            reservation = ""
+            raise HTTPException(status_code=401, detail="Credenciais inválidas")
+        if not user.ativo:
+            release_login_reservation(login, reservation)
+            reservation = ""
+            raise HTTPException(status_code=401, detail="Usuário inativo")
+
+        # Credencial correta encerra a janela de falhas da conta. Erros posteriores
+        # de contexto/autorizacao nao sao tentativa de senha e nao alimentam lockout.
+        clear_login_failures(login, reservation)
+        reservation = ""
+        session_payload = await issue_session_response(
+            db,
+            user,
+            response,
+            request,
+            scope=payload.scope,
+            ilpi_id=payload.ilpi_id,
+            perfil_id=payload.perfil_id,
+        )
+        await db.commit()
+        return session_payload
+    finally:
+        if reservation:
+            release_login_reservation(login, reservation)
 
 @auth_router.put("/password")
 async def update_password(payload: s.PasswordUpdate, request: Request, db: AsyncSession = Depends(get_db), current_user: m.User = Depends(get_current_user)):
@@ -151,9 +182,29 @@ async def update_password(payload: s.PasswordUpdate, request: Request, db: Async
         # Trocar a senha temporária por ela mesma zerava exige_troca_senha e
         # encerrava o primeiro acesso sem que senha alguma mudasse.
         raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da senha atual")
+    mandatory_change = bool(current_user.exige_troca_senha)
     current_user.password_hash = hash_password(payload.nova_senha)
     current_user.exige_troca_senha = False
-    await revoke_user_refresh_tokens(db, current_user.id)
+
+    if mandatory_change:
+        # Credencial temporaria/primeiro acesso: nenhuma sessao aberta com a
+        # senha temporaria sobrevive. O frontend autentica novamente depois.
+        await revoke_user_refresh_tokens(db, current_user.id)
+    else:
+        # Troca voluntaria: preserva apenas a familia autenticada e encerra as
+        # demais. Reset administrativo continua revogando todas em fase3a.py.
+        current_session = access_session_identity(request)
+        if current_session is not None and current_session[0] == current_user.id:
+            await revoke_user_refresh_tokens_except_family(
+                db,
+                current_user.id,
+                current_session[1],
+            )
+        else:
+            # Fail-closed: get_current_user ja exige sid da propria sessao, entao
+            # este ramo nao deveria ocorrer; se ocorrer, nenhuma sessao sobrevive.
+            await revoke_user_refresh_tokens(db, current_user.id)
+
     add_audit(
         db,
         acao="auth.senha_alterada",
