@@ -47,6 +47,8 @@ from .security import (
     ILPI_INATIVA,
     ILPI_SCOPE,
     SecurityContext,
+    allowed_permission_keys,
+    get_security_context,
     load_security_context,
     require_permission,
 )
@@ -526,6 +528,23 @@ async def logout_session(
 
     clear_refresh_cookie(response)
     return {"mensagem": "Sessão encerrada"}
+
+
+@auth_session_router.get("/permissoes", response_model=s.PermissoesSessaoResponse)
+async def permissoes_da_sessao(
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(get_security_context),
+):
+    """Permissoes efetivas do contexto da sessao (UX-01 / #83), so leitura.
+
+    O contexto vem do token validado, nunca de parametro do cliente. Serve para
+    a navegacao nao oferecer o que o backend recusaria; nao autoriza nada.
+    """
+    return {
+        "scope": context.scope,
+        "ilpi_id": context.ilpi_id,
+        "permissoes": await allowed_permission_keys(db, context),
+    }
 
 
 @auth_session_router.post("/contexto", response_model=s.TokenResponse)
