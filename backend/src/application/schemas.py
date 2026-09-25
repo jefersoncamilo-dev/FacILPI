@@ -67,6 +67,38 @@ class PermissoesSessaoResponse(BaseModel):
     perfil_nome: Optional[str] = None
     permissoes: list[str]
 
+# UX-02 (#85): resumo do Dashboard. Bloco `None` = sem permissao de leitura do
+# modulo (nao exibir); zero e resultado real da contagem.
+class DashboardOcupacao(BaseModel):
+    leitos_ativos: int
+    ocupados: int
+    livres: int
+    indisponiveis: int
+
+class DashboardAusencias(BaseModel):
+    total: int
+    hospitalizacoes: int
+
+class DashboardPlanos(BaseModel):
+    vigentes: int
+    em_revisao: int
+    em_elaboracao: int
+    aprovados_aguardando_vigencia: int
+
+class DashboardEquipe(BaseModel):
+    ativos: int
+    afastados: int
+
+class DashboardResumoResponse(BaseModel):
+    gerado_em: datetime
+    residentes_total: Optional[int] = None
+    ocupacao: Optional[DashboardOcupacao] = None
+    ausencias_ativas: Optional[DashboardAusencias] = None
+    intercorrencias_abertas: Optional[int] = None
+    admissoes_em_andamento: Optional[int] = None
+    planos: Optional[DashboardPlanos] = None
+    equipe: Optional[DashboardEquipe] = None
+
 class PrimeiroAcessoUpdate(BaseModel):
     nova_senha: str = Field(..., min_length=8)
     confirmar: str = Field(..., min_length=8)
