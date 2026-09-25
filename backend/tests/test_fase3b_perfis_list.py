@@ -193,7 +193,16 @@ async def _create_ilpi_admin_context(client: httpx.AsyncClient, db: AsyncSession
         json={"scope": "ilpi", "ilpi_id": ilpi_id, "perfil_id": profile.id},
     )
     assert context.status_code == 200, context.text
-    return {"global_access": global_access, "local_access": context.json()["access_token"], "ilpi_id": ilpi_id, "perfil_id": profile.id}
+    # PR-2: a troca de contexto revoga a sessao global usada ate aqui. Quem
+    # ainda testa o contexto global autentica de novo e recebe sessao valida.
+    global_login = await _login(client, ADMIN_EMAIL, ADMIN_PASSWORD)
+    assert global_login.status_code == 200, global_login.text
+    return {
+        "global_access": global_login.json()["access_token"],
+        "local_access": context.json()["access_token"],
+        "ilpi_id": ilpi_id,
+        "perfil_id": profile.id,
+    }
 
 
 async def _create_other_tenant(db: AsyncSession) -> dict[str, str]:
