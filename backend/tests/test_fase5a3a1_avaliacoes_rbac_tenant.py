@@ -852,3 +852,60 @@ def test_29_migration_catalog_avaliacoes(avaliacoes_db):
         permissions = result.scalars().all()
         assert {permission.chave for permission in permissions} == set(keys)
     asyncio.run(_with_client(avaliacoes_db, scenario))
+
+
+# ---- PH-02: pontuacao nao finita (NaN / Infinity) ----
+# O corpo JSON e montado a mao: `NaN`, `Infinity` e `-Infinity` nao sao JSON
+# valido, mas o parser do Python os aceita e, sem validacao, o valor chegava ao
+# banco e a resposta (Postgres guarda NaN; a serializacao da resposta quebra).
+
+_NAO_FINITOS = ("NaN", "Infinity", "-Infinity")
+
+
+def test_30_pontuacao_nao_finita_recusada_no_post(avaliacoes_db):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi = _new_institution()
+        db.add(ilpi)
+        await db.flush()
+        user = await _create_ilpi_user(db, ilpi, permissions={"avaliacoes:criar"})
+        residente = await _create_residente(db, ilpi.id)
+        await db.commit()
+        headers = {**_auth_headers(user, scope="ilpi", ilpi_id=ilpi.id), "Content-Type": "application/json"}
+        for valor in _NAO_FINITOS:
+            corpo = f'{{"residente_id": "{residente.id}", "tipo": "Katz", "pontuacao": {valor}}}'
+            r = await client.post("/api/avaliacoes/", content=corpo, headers=headers)
+            assert r.status_code == 422, (valor, r.status_code, r.text)
+        total = (
+            await db.execute(
+                select(func.count()).select_from(m.Avaliacao).where(m.Avaliacao.residente_id == residente.id)
+            )
+        ).scalar_one()
+        assert total == 0
+        # Valores finitos, inclusive zero, seguem aceitos.
+        r = await client.post(
+            "/api/avaliacoes/",
+            json={"residente_id": residente.id, "tipo": "Katz", "pontuacao": 0},
+            headers=headers,
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["pontuacao"] == 0
+    asyncio.run(_with_client(avaliacoes_db, scenario))
+
+
+def test_31_pontuacao_nao_finita_recusada_no_put(avaliacoes_db):
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi = _new_institution()
+        db.add(ilpi)
+        await db.flush()
+        user = await _create_ilpi_user(db, ilpi, permissions={"avaliacoes:atualizar", "avaliacoes:ler"})
+        residente = await _create_residente(db, ilpi.id)
+        av = await _create_avaliacao_in_db(db, residente.id, ilpi.id, pontuacao=25.0)
+        await db.commit()
+        headers = {**_auth_headers(user, scope="ilpi", ilpi_id=ilpi.id), "Content-Type": "application/json"}
+        for valor in _NAO_FINITOS:
+            r = await client.put(f"/api/avaliacoes/{av.id}", content=f'{{"pontuacao": {valor}}}', headers=headers)
+            assert r.status_code == 422, (valor, r.status_code, r.text)
+        r = await client.get(f"/api/avaliacoes/{av.id}", headers=headers)
+        assert r.status_code == 200
+        assert r.json()["pontuacao"] == 25.0
+    asyncio.run(_with_client(avaliacoes_db, scenario))

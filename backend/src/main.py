@@ -1,8 +1,11 @@
 import hashlib
+import math
 import os
 import uuid
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends, HTTPException, Request, Response, APIRouter, UploadFile, File
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,6 +92,26 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _json_seguro(valor):
+    """Troca float nao finito por texto; todo o resto passa igual."""
+    if isinstance(valor, float) and not math.isfinite(valor):
+        return str(valor)
+    if isinstance(valor, dict):
+        return {chave: _json_seguro(item) for chave, item in valor.items()}
+    if isinstance(valor, list):
+        return [_json_seguro(item) for item in valor]
+    return valor
+
+
+@app.exception_handler(RequestValidationError)
+async def _validacao_invalida(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # Mesmo corpo do handler padrao do FastAPI. A diferenca: o 422 ecoa o valor
+    # recusado (`input`), e o parser JSON do Python aceita NaN/Infinity, que a
+    # resposta JSON nao pode conter — o padrao virava 500 justamente ao recusar
+    # esses valores.
+    return JSONResponse(status_code=422, content={"detail": _json_seguro(jsonable_encoder(exc.errors()))})
 
 # ===== Health (no auth) =====
 health_router = APIRouter()
