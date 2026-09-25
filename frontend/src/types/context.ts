@@ -36,6 +36,13 @@ export const CONTEXT_KEY = 'facilpi_context'
 
 export const CONTEXT_CHANGED_EVENT = 'facilpi:context-changed'
 
+/**
+ * UX-01 (#83): marca, na aba atual, que a sessão foi encerrada pelo servidor
+ * (401: expirada, revogada ou emitida antes do `sid` obrigatório). O login lê
+ * uma vez e explica o motivo, em vez de só reaparecer sem aviso.
+ */
+export const SESSION_ENDED_KEY = 'facilpi_sessao_encerrada'
+
 function base64UrlDecode(segment: string): string {
   const padded = segment.replace(/-/g, '+').replace(/_/g, '/')
   const pad = padded.length % 4 === 0 ? '' : '='.repeat(4 - (padded.length % 4))

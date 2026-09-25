@@ -1,5 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
+import { Building2, LogOut, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { cn } from '../lib/utils'
+import { Logo } from './brand/Logo'
+import { Button } from './ui/button'
+import { ErrorBoundary } from './ui/states'
 
 /**
  * Casca da Central FACILPI. Deliberadamente distinta do Layout institucional:
@@ -8,49 +13,45 @@ import { useAuth } from '../context/AuthContext'
  */
 export function PlatformLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
-  const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-bg">
-      <header className="bg-white border-b border-slate-100 sticky top-0 z-30">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center gap-3">
-          <button
-            onClick={() => navigate('/platform/instituicoes')}
-            className="flex items-center gap-3 min-w-0"
-            aria-label="Ir para a Central FacILPI"
-          >
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primaryDeep flex items-center justify-center text-white font-bold shrink-0">
-              FL
-            </div>
-            <div className="text-left min-w-0">
-              <div className="font-bold text-primaryDeep leading-none">Central FacILPI</div>
-              <div className="text-xs text-textMuted truncate">Administração da plataforma</div>
-            </div>
-          </button>
+    <div className="min-h-screen bg-background">
+      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+        <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
+          <Link to="/platform/instituicoes" aria-label="Ir para a Central FacILPI" className="rounded-lg">
+            <Logo />
+          </Link>
+          <span className="hidden items-center gap-1.5 rounded-full border border-border bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground sm:inline-flex">
+            <ShieldCheck className="size-3.5" aria-hidden="true" /> Central da plataforma
+          </span>
 
-          <div className="ml-auto flex items-center gap-2 min-w-0">
-            <div className="hidden sm:block text-right min-w-0">
-              <div className="text-sm font-medium truncate">{user?.nome || 'Operador'}</div>
-              <div className="text-xs text-textMuted truncate">{user?.email}</div>
+          <div className="ml-auto flex min-w-0 items-center gap-3">
+            <div className="hidden min-w-0 text-right md:block">
+              <div className="truncate text-sm font-medium text-foreground">{user?.nome || 'Operador'}</div>
+              <div className="truncate text-xs text-muted-foreground">{user?.email}</div>
             </div>
-            <button
-              onClick={logout}
-              className="bg-slate-900 text-white rounded-xl px-4 py-2 text-xs font-medium hover:bg-black min-h-[44px]"
-            >
-              Sair
-            </button>
+            <Button variant="outline" onClick={logout} className="px-3 text-xs">
+              <LogOut aria-hidden="true" /> Sair
+            </Button>
           </div>
         </div>
-        <nav className="max-w-6xl mx-auto px-4 pb-3">
-          <Link
+        <nav aria-label="Central da plataforma" className="mx-auto flex max-w-6xl gap-1 px-4 sm:px-6">
+          <NavLink
             to="/platform/instituicoes"
-            className="text-sm font-medium text-primary hover:underline"
+            className={({ isActive }) =>
+              cn(
+                'inline-flex min-h-[44px] items-center gap-2 border-b-2 px-2 text-sm font-medium transition-colors',
+                isActive ? 'border-brand text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+              )
+            }
           >
-            Instituições
-          </Link>
+            <Building2 className="size-4" aria-hidden="true" /> Instituições
+          </NavLink>
         </nav>
       </header>
-      <main className="max-w-6xl mx-auto px-4 py-6">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </main>
     </div>
   )
 }

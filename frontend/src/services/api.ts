@@ -20,10 +20,17 @@ api.interceptors.response.use(
   (r) => r,
   (error) => {
     if (error.response?.status === 401) {
+      const haviaSessao = localStorage.getItem('facilpi_token') !== null
       localStorage.removeItem('facilpi_token')
       localStorage.removeItem('facilpi_user')
+      localStorage.removeItem('facilpi_context')
       // evita loop se já em /login. `/register` saiu com a rota (PH-01).
       if (window.location.pathname !== '/login') {
+        // UX-01: o login explica que a sessão foi encerrada (expirada,
+        // revogada ou anterior ao `sid` obrigatório), em vez de só reaparecer.
+        if (haviaSessao) {
+          try { sessionStorage.setItem('facilpi_sessao_encerrada', '1') } catch { /* sem aviso, segue */ }
+        }
         window.location.href = '/login'
       }
     }

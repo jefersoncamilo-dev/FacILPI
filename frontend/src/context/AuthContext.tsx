@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback, ReactNode 
 import { api } from '../services/api'
 import { contextApi, logoutServidor, resolveContextLabels } from '../services/context'
 import {
-  TOKEN_KEY, USER_KEY, CONTEXT_KEY, CONTEXT_CHANGED_EVENT,
+  TOKEN_KEY, USER_KEY, CONTEXT_KEY, CONTEXT_CHANGED_EVENT, SESSION_ENDED_KEY,
   decodeJwt, isTokenExpired, contextFromToken, sameContext,
 } from '../types/context'
 import type { ActiveContext, ContextOption } from '../types/context'
@@ -239,7 +239,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem(TOKEN_KEY)
     if (!token || isTokenExpired(token)) {
-      if (token) logout()
+      if (token) {
+        // UX-01: sessão vencida enquanto a aba estava fechada; o login explica.
+        try { sessionStorage.setItem(SESSION_ENDED_KEY, '1') } catch { /* segue sem aviso */ }
+        logout()
+      }
       return
     }
     if (!user) setUser(buildUser(token))

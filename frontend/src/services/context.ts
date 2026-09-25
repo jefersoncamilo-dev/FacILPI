@@ -60,6 +60,19 @@ export const contextApi = {
   listPerfis() {
     return api.get<PerfilRef[]>('/perfis/')
   },
+  /**
+   * UX-01 (#83): permissões efetivas do contexto da sessão. Só orienta a
+   * navegação; cada rota do backend continua decidindo por si.
+   */
+  permissoesDaSessao() {
+    return api.get<PermissoesSessao>('/auth/permissoes')
+  },
+}
+
+export interface PermissoesSessao {
+  scope: 'global' | 'ilpi'
+  ilpi_id?: string | null
+  permissoes: string[]
 }
 
 export function displayIlpiName(ilpi: Pick<InstituicaoRef, 'razao_social' | 'nome_fantasia'>): string {
