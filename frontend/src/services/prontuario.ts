@@ -16,17 +16,18 @@ export type ProntuarioCategoria = 'clinico' | 'assistencia' | 'medicacao' | 'adm
 
 // Espelha ORIGEM_PERMISSION/ORIGEM_CATEGORIA de backend/src/application/prontuario.py.
 // Não adicionar origem/categoria aqui sem confirmar antes no backend.
-export const PRONTUARIO_ORIGENS: { value: ProntuarioOrigem; label: string; categoria: ProntuarioCategoria }[] = [
-  { value: 'avaliacao', label: 'Avaliação', categoria: 'clinico' },
-  { value: 'sinal_vital', label: 'Sinais vitais', categoria: 'clinico' },
-  { value: 'intercorrencia', label: 'Intercorrência', categoria: 'clinico' },
-  { value: 'grau_dependencia', label: 'Grau de dependência', categoria: 'assistencia' },
-  { value: 'pais', label: 'Plano de cuidados (PAIS)', categoria: 'assistencia' },
-  { value: 'execucao_cuidado', label: 'Execução de cuidado', categoria: 'assistencia' },
-  { value: 'prescricao', label: 'Prescrição', categoria: 'medicacao' },
-  { value: 'administracao', label: 'Administração', categoria: 'medicacao' },
-  { value: 'ocupacao', label: 'Ocupação', categoria: 'administrativo' },
-  { value: 'ausencia', label: 'Ausência', categoria: 'administrativo' },
+// `permissao` espelha ORIGEM_PERMISSION (UX-04): a origem só aparece para quem a lê.
+export const PRONTUARIO_ORIGENS: { value: ProntuarioOrigem; label: string; categoria: ProntuarioCategoria; permissao: string }[] = [
+  { value: 'avaliacao', label: 'Avaliação', categoria: 'clinico', permissao: 'avaliacoes:ler' },
+  { value: 'sinal_vital', label: 'Sinais vitais', categoria: 'clinico', permissao: 'sinais_vitais:ler' },
+  { value: 'intercorrencia', label: 'Intercorrência', categoria: 'clinico', permissao: 'intercorrencias:ler' },
+  { value: 'grau_dependencia', label: 'Grau de dependência', categoria: 'assistencia', permissao: 'grau_dependencia:ler' },
+  { value: 'pais', label: 'Plano de cuidados (PAIS)', categoria: 'assistencia', permissao: 'planos_cuidados:ler' },
+  { value: 'execucao_cuidado', label: 'Execução de cuidado', categoria: 'assistencia', permissao: 'execucoes:ler' },
+  { value: 'prescricao', label: 'Prescrição', categoria: 'medicacao', permissao: 'prescricoes:ler' },
+  { value: 'administracao', label: 'Administração', categoria: 'medicacao', permissao: 'administracoes:ler' },
+  { value: 'ocupacao', label: 'Ocupação', categoria: 'administrativo', permissao: 'quartos_leitos:ler' },
+  { value: 'ausencia', label: 'Ausência', categoria: 'administrativo', permissao: 'ausencias:ler' },
 ]
 
 export const PRONTUARIO_CATEGORIAS: { value: ProntuarioCategoria; label: string }[] = [

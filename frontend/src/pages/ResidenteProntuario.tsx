@@ -14,6 +14,20 @@ import { ProntuarioLinhaDoTempo } from '../components/prontuario/ProntuarioLinha
 import { ProntuarioCarregando, ProntuarioErro, ProntuarioVazio } from '../components/prontuario/ProntuarioEstados'
 import { RegistrarSinalVitalModal } from '../components/sinaisVitais/RegistrarSinalVitalModal'
 import { RegistrarIntercorrenciaModal } from '../components/intercorrencias/RegistrarIntercorrenciaModal'
+import { usePermissoesOuPadrao } from '../context/PermissoesContext'
+import { useContextoResidente } from '../hooks/useContextoResidente'
+import { PRONTUARIO_ORIGENS, type ProntuarioOrigem } from '../services/prontuario'
+import { cn } from '../lib/utils'
+
+// UX-04 (#89): atalhos da visão longitudinal por origem, sobre os mesmos filtros
+// do endpoint (sem consulta nova). Só aparecem origens que a sessão pode ler.
+const VISOES: { origem: ProntuarioOrigem; rotulo: string }[] = [
+  { origem: 'sinal_vital', rotulo: 'Sinais vitais' },
+  { origem: 'intercorrencia', rotulo: 'Intercorrências' },
+  { origem: 'avaliacao', rotulo: 'Avaliações' },
+  { origem: 'pais', rotulo: 'PAIS' },
+  { origem: 'grau_dependencia', rotulo: 'Grau de dependência' },
+]
 
 function paramsDeFiltros(f: FiltrosValue, cursor?: string): ProntuarioConsultaParams {
   return {
@@ -39,6 +53,8 @@ function mensagemErro(status?: number): string {
 
 export function ResidenteProntuario() {
   const { id } = useParams<{ id: string }>()
+  const { pode } = usePermissoesOuPadrao()
+  const contexto = useContextoResidente(id)
 
   const [residente, setResidente] = useState<ResidenteResumo | null>(null)
   const [residenteErro, setResidenteErro] = useState<string | null>(null)
@@ -171,15 +187,17 @@ export function ResidenteProntuario() {
         <ProntuarioErro mensagem={residenteErro} onRetry={() => window.location.reload()} />
       ) : (
         <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-6 lg:items-start space-y-4 lg:space-y-0">
-          <ResidenteCabecalho residente={residente} />
+          <ResidenteCabecalho residente={residente} contexto={contexto} />
 
           <div className="space-y-4 min-w-0">
             {/* Duas acoes de registro convivem aqui. Empilham em 360 e ficam lado a
                 lado a partir de sm; a hierarquia vem das classes ja existentes —
                 sinais vitais e o ato rotineiro (primaria), intercorrencia e o
                 excepcional (secundaria). Sem redesenho do Prontuario. */}
+            {/* UX-04: a ação só aparece para quem pode registrar; o 403 do backend
+                continua como defesa (semPermissao*) caso a permissão mude na sessão. */}
             <div className="flex flex-col sm:flex-row gap-2">
-              {!semPermissaoSinais && (
+              {pode('sinais_vitais:criar') && !semPermissaoSinais && (
                 <button
                   type="button"
                   onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}
@@ -188,7 +206,7 @@ export function ResidenteProntuario() {
                   + Registrar sinais vitais
                 </button>
               )}
-              {!semPermissaoIntercorrencia && (
+              {pode('intercorrencias:criar') && !semPermissaoIntercorrencia && (
                 <button
                   type="button"
                   onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}
@@ -201,7 +219,7 @@ export function ResidenteProntuario() {
                   aqui e navegacao com o residente ja no contexto — e nao uma
                   segunda listagem embutida no Prontuario. O parametro `residente`
                   e estado de UI; a consulta sai como `residente_id`. */}
-              {id && (
+              {id && pode('documentos:ler') && (
                 <Link
                   to={`/documentos?residente=${id}`}
                   className="btn-secondary w-full sm:w-auto text-center inline-flex items-center justify-center"
@@ -234,6 +252,8 @@ export function ResidenteProntuario() {
                 <span className="text-sm font-medium text-success">{sucessoIntercorrencia}</span>
               </div>
             )}
+
+            <VisoesRapidas filtros={filtros} pode={pode} aoEscolher={aplicarFiltros} />
 
             <ProntuarioFiltros value={filtros} onChange={aplicarFiltros} />
 
@@ -300,6 +320,42 @@ export function ResidenteProntuario() {
           onPermissaoNegada={() => setSemPermissaoIntercorrencia(true)}
         />
       )}
+    </div>
+  )
+}
+
+function VisoesRapidas({
+  filtros,
+  pode,
+  aoEscolher,
+}: {
+  filtros: FiltrosValue
+  pode: (chave?: string) => boolean
+  aoEscolher: (f: FiltrosValue) => void
+}) {
+  const permitidas = VISOES.filter(v => pode(PRONTUARIO_ORIGENS.find(o => o.value === v.origem)?.permissao))
+  if (permitidas.length < 2) return null
+  const semRecorte = !filtros.categoria && !filtros.desde && !filtros.ate
+  const opcoes = [{ origem: undefined as ProntuarioOrigem | undefined, rotulo: 'Tudo' }, ...permitidas]
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Ver no prontuário">
+      {opcoes.map(v => {
+        const ativa = semRecorte && filtros.origem === v.origem
+        return (
+          <button
+            key={v.rotulo}
+            type="button"
+            aria-pressed={ativa}
+            onClick={() => aoEscolher({ ...FILTROS_INICIAIS, origem: v.origem })}
+            className={cn(
+              'min-h-[36px] rounded-full border px-3 text-sm font-medium transition-colors',
+              ativa ? 'border-brand bg-accent text-accent-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {v.rotulo}
+          </button>
+        )
+      })}
     </div>
   )
 }
