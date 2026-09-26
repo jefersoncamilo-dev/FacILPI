@@ -191,7 +191,9 @@ describe('Admissões — detalhe e etapas', () => {
     expect(screen.getByRole('button', { name: /Avançar para Avaliações/ })).toBeDisabled()
     const etapaAtual = screen.getByRole('region', { name: 'Etapa atual' })
     expect(within(etapaAtual).getByText('Documento obrigatório ainda não validado')).toBeTruthy()
-    expect(within(etapaAtual).getByRole('link', { name: 'Resolver em Documentos' })).toBeTruthy()
+    // Leva a Documentos já filtrado pelo residente, onde o obrigatório é validado.
+    expect(within(etapaAtual).getByRole('link', { name: 'Resolver em Documentos' }).getAttribute('href'))
+      .toBe('/documentos?residente=res-1')
   })
 
   it('avançar envia a próxima etapa e a versão atual, e recarrega', async () => {

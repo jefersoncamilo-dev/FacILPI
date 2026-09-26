@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Documentos } from '../pages/Documentos'
 import { ResidenteProntuario } from '../pages/ResidenteProntuario'
+import { PermissoesProvider } from '../context/PermissoesContext'
 import { api } from '../services/api'
+import { contextApi } from '../services/context'
 
 // Preserva os helpers reais (mensagemDeErro, formatDate); só o cliente HTTP é mockado.
 vi.mock('../services/api', async () => {
@@ -12,10 +14,17 @@ vi.mock('../services/api', async () => {
   return { ...actual, api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() } }
 })
 
+// Só a leitura das permissões da sessão é substituída; o resto do módulo é real.
+vi.mock('../services/context', async () => {
+  const actual = await vi.importActual<typeof import('../services/context')>('../services/context')
+  return { ...actual, contextApi: { ...actual.contextApi, permissoesDaSessao: vi.fn() } }
+})
+
 const mockGet = vi.mocked(api.get)
 const mockPost = vi.mocked(api.post)
 const mockPut = vi.mocked(api.put)
 const mockDelete = vi.mocked(api.delete)
+const mockPermissoes = vi.mocked(contextApi.permissoesDaSessao)
 
 const RESIDENTES = [
   { id: 'res-1', nome: 'Maria Silva' },
@@ -525,6 +534,146 @@ describe('Documentos — download autenticado', () => {
     expect(within(cartao).getByText('Sem arquivo anexado')).toBeTruthy()
     expect(within(cartao).queryByRole('button', { name: 'Baixar arquivo' })).toBeNull()
     expect(within(cartao).getByRole('button', { name: 'Anexar arquivo' })).toBeTruthy()
+  })
+})
+
+describe('Documentos — validação', () => {
+  const ID_VALIDADOR = '3f2a9c1e-7b4d-4e8a-9c21-5d6e7f8a9b0c'
+  const VALIDADO = {
+    ...SEM_ARQUIVO,
+    id: 'doc-3',
+    tipo: 'Certidão de nascimento',
+    situacao: 'validado',
+    validado_por: ID_VALIDADOR,
+    validado_em: '2026-09-25T13:30:00Z',
+  }
+
+  /** Tela dentro do shell de permissões, com as chaves que o backend devolveria. */
+  function renderComPermissoes(permissoes: string[]) {
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes } } as any)
+    return render(
+      <MemoryRouter initialEntries={['/documentos']}>
+        <PermissoesProvider><Documentos /></PermissoesProvider>
+      </MemoryRouter>,
+    )
+  }
+
+  async function abrirValidacao(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole('button', { name: 'Validar documento' }))
+    return screen.getByRole('dialog', { name: 'Validar documento' })
+  }
+
+  it('34. com documentos:validar, confirma e chama POST /documentos/{id}/validar', async () => {
+    const user = userEvent.setup()
+    respondeCom({ documentos: [COM_ARQUIVO] })
+    mockPost.mockResolvedValueOnce({ data: { ...COM_ARQUIVO, situacao: 'validado' } } as any)
+    renderComPermissoes(['documentos:ler', 'documentos:validar'])
+    const antes = chamadasDaLista().length
+
+    const dialog = await abrirValidacao(user)
+    expect(within(dialog).getByText('RG')).toBeTruthy()
+    expect(within(dialog).getByText('Maria Silva')).toBeTruthy()
+    await user.click(within(dialog).getByRole('button', { name: 'Validar' }))
+
+    // Corpo vazio: autoria e horário vêm da sessão, nunca do cliente.
+    expect(mockPost).toHaveBeenCalledWith('/documentos/doc-1/validar', {})
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    expect(await screen.findByText('Documento validado.')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    await waitFor(() => expect(chamadasDaLista().length).toBeGreaterThan(antes))
+  })
+
+  it('35. sem documentos:validar, a ação não aparece', async () => {
+    respondeCom({ documentos: [COM_ARQUIVO, SEM_ARQUIVO] })
+    renderComPermissoes(['documentos:ler', 'documentos:criar', 'documentos:atualizar'])
+
+    expect((await screen.findAllByRole('article')).length).toBe(2)
+    // Garante que a resposta das permissões já foi aplicada: antes dela a ação
+    // também fica oculta, e a asserção passaria por acaso.
+    await waitFor(() => expect(mockPermissoes).toHaveBeenCalled())
+    await act(async () => {})
+
+    expect(screen.queryByRole('button', { name: 'Validar documento' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Anexar arquivo' })).toBeTruthy()
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('36. 409 exibe a mensagem do backend e recarrega a lista', async () => {
+    const user = userEvent.setup()
+    respondeCom({ documentos: [COM_ARQUIVO] })
+    mockPost.mockRejectedValueOnce(
+      erroHttp(409, { code: 'DOCUMENTO_JA_VALIDADO', message: 'Documento já validado' }),
+    )
+    renderComPermissoes(['documentos:ler', 'documentos:validar'])
+    const antes = chamadasDaLista().length
+
+    const dialog = await abrirValidacao(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Validar' }))
+
+    expect(await within(dialog).findByRole('alert')).toBeTruthy()
+    expect(within(dialog).getByText('Documento já validado')).toBeTruthy()
+    // Repetir o envio só devolveria o mesmo 409.
+    expect(within(dialog).queryByRole('button', { name: 'Validar' })).toBeNull()
+    expect(within(dialog).getByRole('button', { name: 'Voltar' })).toBeTruthy()
+    await waitFor(() => expect(chamadasDaLista().length).toBeGreaterThan(antes))
+    expect(screen.queryByText('Documento validado.')).toBeNull()
+  })
+
+  it('37. documento já validado não oferece a ação e mostra quem validou e quando', async () => {
+    respondeCom({ documentos: [VALIDADO] })
+    renderComPermissoes(['documentos:ler', 'documentos:validar', 'documentos:criar'])
+
+    const cartao = await screen.findByRole('article')
+    await waitFor(() => expect(mockPermissoes).toHaveBeenCalled())
+    await act(async () => {})
+
+    expect(within(cartao).getByText('Validado')).toBeTruthy()
+    expect(within(cartao).queryByRole('button', { name: 'Validar documento' })).toBeNull()
+    // 25/09 13:30 UTC = 10:30 em Brasília.
+    expect(within(cartao).getByText(/Validado em 25\/09\/2026,? 10:30/)).toBeTruthy()
+    const autor = within(cartao).getByText('3f2a9c1e…')
+    expect(autor.getAttribute('title')).toBe(ID_VALIDADOR)
+    // Validado não recebe arquivo (409 no backend): a tela não oferece o anexo.
+    expect(within(cartao).getByText('Sem arquivo anexado')).toBeTruthy()
+    expect(within(cartao).queryByRole('button', { name: 'Anexar arquivo' })).toBeNull()
+  })
+
+  it('38. cancelar a confirmação não chama a API', async () => {
+    const user = userEvent.setup()
+    respondeCom({ documentos: [COM_ARQUIVO] })
+    renderComPermissoes(['documentos:ler', 'documentos:validar'])
+
+    const dialog = await abrirValidacao(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }))
+
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(mockPost).not.toHaveBeenCalled()
+  })
+
+  it('39. sem arquivo anexado, a confirmação avisa que depois não será possível anexar', async () => {
+    const user = userEvent.setup()
+    respondeCom({ documentos: [SEM_ARQUIVO] })
+    renderComPermissoes(['documentos:ler', 'documentos:validar'])
+
+    const dialog = await abrirValidacao(user)
+    expect(within(dialog).getByText(/sem arquivo anexado\. Depois de validado, não será possível anexar/)).toBeTruthy()
+  })
+
+  it('40. 403 retira a ação e explica, mantendo a consulta', async () => {
+    const user = userEvent.setup()
+    respondeCom({ documentos: [COM_ARQUIVO] })
+    mockPost.mockRejectedValueOnce(
+      erroHttp(403, { code: 'PERMISSION_DENIED', message: 'Permissão não autorizada' }),
+    )
+    // Fora do shell as permissões não são conhecidas: só o backend recusa.
+    renderPagina()
+
+    const dialog = await abrirValidacao(user)
+    await user.click(within(dialog).getByRole('button', { name: 'Validar' }))
+
+    expect(await screen.findByText(/não permite validar documentos/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Validar documento' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Baixar arquivo' })).toBeTruthy()
   })
 })
 
