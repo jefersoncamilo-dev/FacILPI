@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { TriangleAlert } from 'lucide-react'
+import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 // `GET /residentes/` já tem um consumidor tipado; duplicar a função criaria uma
 // segunda declaração da mesma chamada.
@@ -27,6 +29,7 @@ const ROTULO_GRAVIDADE: Record<Gravidade, string> = {
 }
 
 export function Intercorrencias() {
+  const { pode } = usePermissoesOuPadrao()
   const [registros, setRegistros] = useState<Intercorrencia[]>([])
   const [carregando, setCarregando] = useState(true)
   // `erro` separado de lista vazia: sem essa distinção um 403 viraria
@@ -86,10 +89,11 @@ export function Intercorrencias() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primaryDeep">Intercorrências</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Intercorrências</h1>
           <p className="text-textMuted text-sm">Eventos relevantes com gravidade, SBAR e providências</p>
         </div>
-        {!semPermissaoCriar && (
+        {/* UX-05: só para quem pode registrar; o 403 segue como defesa. */}
+        {pode('intercorrencias:criar') && !semPermissaoCriar && (
           <button onClick={() => { setSucesso(''); setModalAberto(true) }} className="btn-primary">
             + Registrar intercorrência
           </button>
@@ -141,7 +145,7 @@ export function Intercorrencias() {
       {abertas > 0 && !erro && !carregando && (
         <div className="card border-l-4 border-l-warning py-3">
           <span className="text-sm font-medium text-warning">
-            ⚠️ {abertas} {abertas === 1 ? 'intercorrência aberta' : 'intercorrências abertas'} — o encerramento é feito no Meu Plantão
+            <TriangleAlert className="mr-1 inline size-4 align-text-bottom" aria-hidden="true" />{abertas} {abertas === 1 ? 'intercorrência aberta' : 'intercorrências abertas'} — o encerramento é feito no Meu Plantão
           </span>
         </div>
       )}
@@ -160,7 +164,7 @@ export function Intercorrencias() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <div className="text-4xl mb-2" aria-hidden="true">⚠️</div>
+          <TriangleAlert className="mx-auto mb-3 size-7 text-amber-700" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
