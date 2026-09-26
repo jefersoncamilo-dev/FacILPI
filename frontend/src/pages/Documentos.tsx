@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Paperclip, TriangleAlert } from 'lucide-react'
+import { CheckCircle2, Paperclip, TriangleAlert } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { formatDate, mensagemDeErro } from '../services/api'
+import { formatDate, formatDateTime, mensagemDeErro } from '../services/api'
+import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 // `GET /residentes/` já tem um consumidor tipado; duplicar a função criaria uma
 // segunda declaração da mesma chamada.
 import { getResidentesResumo, type ResidenteResumo } from '../services/plantao'
@@ -17,6 +18,7 @@ import {
 } from '../services/documentos'
 import { CadastrarDocumentoModal } from '../components/documentos/CadastrarDocumentoModal'
 import { AnexarArquivoModal } from '../components/documentos/AnexarArquivoModal'
+import { ValidarDocumentoModal } from '../components/documentos/ValidarDocumentoModal'
 
 const TODOS = ''
 
@@ -25,8 +27,25 @@ const TODOS = ''
 // oficial do backend.
 const PARAM_RESIDENTE = 'residente'
 
+const estaValidado = (documento: Documento) => documento.situacao === 'validado'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * O contrato devolve só o id de quem validou; resolver o nome exigiria outra
+ * fonte. Mesmo tratamento da autoria no prontuário: forma curta, id completo
+ * no `title`.
+ */
+function ValidadoPor({ usuarioId }: { usuarioId: string }) {
+  if (UUID_RE.test(usuarioId)) {
+    return <span className="font-mono text-xs" title={usuarioId}>{usuarioId.slice(0, 8)}…</span>
+  }
+  return <>{usuarioId}</>
+}
+
 export function Documentos() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { pode } = usePermissoesOuPadrao()
 
   const [documentos, setDocumentos] = useState<Documento[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -40,6 +59,7 @@ export function Documentos() {
 
   const [cadastrando, setCadastrando] = useAberturaPorParametro('novo')
   const [documentoParaAnexo, setDocumentoParaAnexo] = useState<Documento | null>(null)
+  const [documentoParaValidar, setDocumentoParaValidar] = useState<Documento | null>(null)
   const [sucesso, setSucesso] = useState('')
   const [baixando, setBaixando] = useState('')
   // O token não carrega permissões e nenhum endpoint expõe as chaves efetivas,
@@ -47,6 +67,11 @@ export function Documentos() {
   // primeiro 403 a ação deixa de ser oferecida.
   const [semPermissaoCriar, setSemPermissaoCriar] = useState(false)
   const [semPermissaoAnexar, setSemPermissaoAnexar] = useState(false)
+  // A validação já tem chave própria na sessão (`documentos:validar`, só do
+  // Administrador da ILPI): sem ela a ação nem aparece. O 403 continua
+  // tratado para quando as permissões não puderam ser lidas.
+  const [semPermissaoValidar, setSemPermissaoValidar] = useState(false)
+  const podeValidar = pode('documentos:validar') && !semPermissaoValidar
 
   const carregar = useCallback(async (alvo: string) => {
     setCarregando(true)
@@ -98,6 +123,12 @@ export function Documentos() {
     carregar(residenteId)
   }
 
+  function aoValidar() {
+    setDocumentoParaValidar(null)
+    setSucesso('Documento validado.')
+    carregar(residenteId)
+  }
+
   async function baixar(documento: Documento) {
     setBaixando(documento.id)
     setErro('')
@@ -133,6 +164,14 @@ export function Documentos() {
         <div className="card border-l-4 border-l-warning py-3">
           <span className="text-sm text-textMuted">
             Seu perfil não permite cadastrar documentos. A consulta continua disponível.
+          </span>
+        </div>
+      )}
+
+      {semPermissaoValidar && (
+        <div className="card border-l-4 border-l-warning py-3">
+          <span className="text-sm text-textMuted">
+            Seu perfil não permite validar documentos. A consulta continua disponível.
           </span>
         </div>
       )}
@@ -218,8 +257,8 @@ export function Documentos() {
                   </div>
                 </div>
                 {/* Situação em texto, não só por cor. */}
-                <span className={documento.situacao === 'validado' ? 'badge-success' : 'badge-warning'}>
-                  {documento.situacao === 'validado' ? 'Validado' : 'Pendente'}
+                <span className={estaValidado(documento) ? 'badge-success' : 'badge-warning'}>
+                  {estaValidado(documento) ? 'Validado' : 'Pendente'}
                 </span>
               </div>
 
@@ -250,6 +289,15 @@ export function Documentos() {
                 <p className="mt-2 text-xs font-medium text-warning">Documento obrigatório</p>
               )}
 
+              {estaValidado(documento) && (documento.validado_em || documento.validado_por) && (
+                <p className="mt-2 text-xs text-textMuted">
+                  <CheckCircle2 className="mr-1 inline size-3.5 align-[-2px] text-success" aria-hidden="true" />
+                  Validado
+                  {documento.validado_em && <> em {formatDateTime(documento.validado_em)}</>}
+                  {documento.validado_por && <> por <ValidadoPor usuarioId={documento.validado_por} /></>}
+                </p>
+              )}
+
               {documento.arquivo_presente ? (
                 <div className="mt-3 space-y-2">
                   <p className="text-sm text-textMuted break-words">
@@ -268,7 +316,8 @@ export function Documentos() {
               ) : (
                 <div className="mt-3 space-y-2">
                   <p className="text-sm text-textMuted">Sem arquivo anexado</p>
-                  {!semPermissaoAnexar && (
+                  {/* Documento validado não recebe arquivo: o backend responde 409. */}
+                  {!semPermissaoAnexar && !estaValidado(documento) && (
                     <button
                       type="button"
                       onClick={() => { setSucesso(''); setDocumentoParaAnexo(documento) }}
@@ -278,6 +327,16 @@ export function Documentos() {
                     </button>
                   )}
                 </div>
+              )}
+
+              {!estaValidado(documento) && podeValidar && (
+                <button
+                  type="button"
+                  onClick={() => { setSucesso(''); setDocumentoParaValidar(documento) }}
+                  className="btn-primary mt-2 w-full"
+                >
+                  Validar documento
+                </button>
               )}
             </article>
           ))}
@@ -299,6 +358,16 @@ export function Documentos() {
         onAnexado={aoAnexar}
         documento={documentoParaAnexo}
         onPermissaoNegada={() => { setDocumentoParaAnexo(null); setSemPermissaoAnexar(true) }}
+      />
+
+      <ValidarDocumentoModal
+        open={documentoParaValidar !== null}
+        onClose={() => setDocumentoParaValidar(null)}
+        onValidado={aoValidar}
+        documento={documentoParaValidar}
+        residenteNome={nomes[documentoParaValidar?.residente_id ?? '']}
+        onPermissaoNegada={() => { setDocumentoParaValidar(null); setSemPermissaoValidar(true) }}
+        onJaValidado={() => carregar(residenteId)}
       />
     </div>
   )
