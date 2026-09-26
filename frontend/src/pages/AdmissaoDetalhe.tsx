@@ -22,7 +22,7 @@ import { cn } from '../lib/utils'
 const ONDE_RESOLVER: Partial<Record<Etapa, { rotulo: string; to?: string; emBreve?: boolean }>> = {
   pre_cadastro: { rotulo: 'Cadastro do residente', to: '/residentes' },
   documentacao: { rotulo: 'Documentos', to: '/documentos' },
-  avaliacoes: { rotulo: 'Avaliações', emBreve: true },
+  avaliacoes: { rotulo: 'Avaliações', to: '/avaliacoes' },
   quarto_leito: { rotulo: 'Quartos e leitos', to: '/quartos' },
   pais: { rotulo: 'Plano de cuidados (PAIS)', to: '/plano' },
 }
@@ -173,7 +173,7 @@ export function AdmissaoDetalhe() {
             )}
 
             {pendenciasDaEtapa.length > 0 ? (
-              <ListaPendencias pendencias={pendenciasDaEtapa} />
+              <ListaPendencias pendencias={pendenciasDaEtapa} residenteId={a.residente_id} />
             ) : (
               <p className="flex items-center gap-2 text-sm text-emerald-800">
                 <Check className="size-4" aria-hidden="true" /> Nenhuma pendência nesta etapa.
@@ -298,7 +298,15 @@ function Stepper({ admissao: a, verificacao }: { admissao: Admissao; verificacao
   )
 }
 
-function ListaPendencias({ pendencias, compacta = false }: { pendencias: Pendencia[]; compacta?: boolean }) {
+/** Avaliação requerida casa por tipo/instrumento exatos: o link já leva o formulário preenchido. */
+function destino(p: Pendencia, to: string, residenteId?: string) {
+  if (p.codigo !== 'avaliacao_requerida_pendente' || !residenteId) return to
+  const q = new URLSearchParams({ residente: residenteId, novo: '1', tipo: p.tipo || '' })
+  if (p.instrumento) q.set('instrumento', p.instrumento)
+  return `${to}?${q}`
+}
+
+function ListaPendencias({ pendencias, compacta = false, residenteId }: { pendencias: Pendencia[]; compacta?: boolean; residenteId?: string }) {
   return (
     <ul className={cn('space-y-2', compacta && 'mt-2')}>
       {pendencias.map((p, i) => {
@@ -313,7 +321,7 @@ function ListaPendencias({ pendencias, compacta = false }: { pendencias: Pendenc
                 <p className="text-xs text-muted-foreground">Etapa: {ROTULO_SITUACAO[etapa]}</p>
               ) : onde ? (
                 onde.to ? (
-                  <Link to={onde.to} className="inline-flex min-h-[28px] items-center text-xs font-semibold text-primary hover:underline">Resolver em {onde.rotulo}</Link>
+                  <Link to={destino(p, onde.to, residenteId)} className="inline-flex min-h-[28px] items-center text-xs font-semibold text-primary hover:underline">Resolver em {onde.rotulo}</Link>
                 ) : (
                   <p className="text-xs text-muted-foreground">Resolvido em {onde.rotulo} — tela em construção.</p>
                 )
