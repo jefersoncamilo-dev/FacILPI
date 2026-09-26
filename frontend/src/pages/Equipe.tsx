@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useState } from 'react'
+import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { ShieldCheck, UsersRound } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { Alert } from '../components/ui/feedback'
@@ -82,6 +83,9 @@ export function Equipe() {
   useEffect(() => { loadData() }, [loadData])
 
   const formModal = useModalState<Funcionario | null>(null)
+  // UX-11: `?novo=1` (ação rápida do Início) abre o cadastro de funcionário.
+  const [novoPorLink, setNovoPorLink] = useAberturaPorParametro('novo', pode('funcionarios:criar'))
+  useEffect(() => { if (novoPorLink) formModal.open(null) }, [novoPorLink]) // eslint-disable-line react-hooks/exhaustive-deps
   const concederAcessoModal = useModalState<Funcionario | null>(null)
   const vincularModal = useModalState<Funcionario | null>(null)
   const revogarModal = useModalState<{ funcionario: Funcionario; usuario: User } | null>(null)
@@ -279,7 +283,7 @@ export function Equipe() {
 
       <FuncionarioFormModal
         open={formModal.isOpen}
-        onClose={formModal.close}
+        onClose={() => { formModal.close(); setNovoPorLink(false) }}
         funcionario={formModal.data}
         perfis={perfis}
         onSubmit={async (data) => {

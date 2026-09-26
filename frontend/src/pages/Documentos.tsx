@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { Paperclip, TriangleAlert } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { formatDate, mensagemDeErro } from '../services/api'
@@ -37,7 +38,7 @@ export function Documentos() {
   const [erroResidentes, setErroResidentes] = useState(false)
   const residenteId = searchParams.get(PARAM_RESIDENTE) ?? TODOS
 
-  const [cadastrando, setCadastrando] = useState(false)
+  const [cadastrando, setCadastrando] = useAberturaPorParametro('novo')
   const [documentoParaAnexo, setDocumentoParaAnexo] = useState<Documento | null>(null)
   const [sucesso, setSucesso] = useState('')
   const [baixando, setBaixando] = useState('')

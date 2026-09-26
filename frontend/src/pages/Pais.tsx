@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, Loader2, NotebookPen, Plus } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
@@ -42,7 +43,7 @@ export function Pais() {
   const [erro, setErro] = useState<string | null>(null)
   const [residentes, setResidentes] = useState<ResidenteRef[]>([])
   const [filtro, setFiltro] = useState<Filtro>('todos')
-  const [novo, setNovo] = useState(false)
+  const [novo, setNovo] = useAberturaPorParametro('novo', pode('planos_cuidados:criar'))
 
   const carregar = useCallback(async () => {
     try {

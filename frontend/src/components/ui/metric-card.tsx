@@ -27,6 +27,7 @@ export function MetricCard({
   valor,
   detalhe,
   acao,
+  visual,
   tom = 'normal',
   carregando = false,
 }: {
@@ -35,12 +36,14 @@ export function MetricCard({
   valor: ReactNode
   detalhe?: ReactNode
   acao?: ReactNode
+  /** Micro-visualização do próprio dado (barra, mini-barras); nunca decorativa. */
+  visual?: ReactNode
   tom?: TomIndicador
   carregando?: boolean
 }) {
   const cores = TONS[tom]
   return (
-    <div data-tom={tom} className="flex flex-col rounded-card border border-border bg-card p-4 shadow-card sm:p-5">
+    <div data-tom={tom} className="flex flex-col rounded-card border border-border bg-card p-4 shadow-card transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-muted-foreground">{titulo}</p>
         <span className={cn('inline-flex size-9 shrink-0 items-center justify-center rounded-lg', cores.icone)}>
@@ -55,7 +58,8 @@ export function MetricCard({
       ) : (
         <>
           <p className={cn('mt-1 font-display text-3xl font-bold tracking-tight', cores.valor)}>{valor}</p>
-          {detalhe && <div className="mt-1 text-xs text-muted-foreground">{detalhe}</div>}
+          {visual && <div className="mt-3">{visual}</div>}
+          {detalhe && <div className="mt-1.5 text-xs text-muted-foreground">{detalhe}</div>}
           {acao && <div className="mt-auto pt-3 text-xs font-semibold">{acao}</div>}
         </>
       )}

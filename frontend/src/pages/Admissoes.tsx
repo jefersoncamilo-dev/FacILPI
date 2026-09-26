@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronRight, ClipboardList, Loader2, Plus, Search, UserPlus } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
@@ -32,7 +33,8 @@ export function Admissoes() {
   const [residentes, setResidentes] = useState<ResidenteRef[]>([])
   const [aba, setAba] = useState<Aba>('andamento')
   const [busca, setBusca] = useState('')
-  const [novaAberta, setNovaAberta] = useState(false)
+  // UX-11: `?novo=1` (ação rápida do Início) abre a nova admissão.
+  const [novaAberta, setNovaAberta] = useAberturaPorParametro('novo', pode('admissoes:criar'))
 
   const carregar = useCallback(async () => {
     setCarga({ status: 'carregando' })

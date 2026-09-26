@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { AuthProvider } from '../context/AuthContext'
 import { PermissoesProvider } from '../context/PermissoesContext'
@@ -319,5 +320,38 @@ describe('Dashboard — design system (UX-11 / #101)', () => {
     const kpi = (await screen.findByText('Intercorrências abertas')).closest('[data-tom]')!
     await waitFor(() => expect(kpi.getAttribute('data-tom')).toBe('alerta'))
     expect(kpi.className).not.toMatch(/bg-(orange|amber)/)
+  })
+})
+
+describe('Dashboard — Início visual (UX-11 / #101)', () => {
+  it('faixa do "agora": fonte indisponível sai da frase, nunca vira zero', async () => {
+    responde({ resumo: resumo({ intercorrencias_abertas: 2, ausencias_ativas: { total: 1, hospitalizacoes: 1 } }) })
+    const ok = renderDashboard(CUIDADO)
+    const faixa = within(await screen.findByRole('region', { name: 'Resumo do momento' }))
+    expect(await faixa.findByText('2 intercorrências abertas')).toBeTruthy()
+    expect(await faixa.findByText('2 pendências no plantão')).toBeTruthy()
+    expect(faixa.getByText('1 residente ausente')).toBeTruthy()
+    // Operação: as duas ações do dia a dia também na faixa.
+    expect(faixa.getByRole('link', { name: /Registrar sinal vital/ }).getAttribute('href')).toBe('/sinais?registrar=1')
+    ok.unmount()
+
+    responde({ resumo: new Error('rede') })
+    renderDashboard(GESTAO)
+    const semResumo = within(await screen.findByRole('region', { name: 'Resumo do momento' }))
+    expect(await semResumo.findByText('2 pendências no plantão')).toBeTruthy()
+    expect(semResumo.queryByText(/intercorrência/)).toBeNull()
+    expect(semResumo.queryByRole('link')).toBeNull()
+  })
+
+  it('ações rápidas: catálogo do perfil, 6 visíveis e o resto em "Mais ações"', async () => {
+    const user = userEvent.setup()
+    responde()
+    renderDashboard([...GESTAO, 'admissoes:criar', 'planos_cuidados:criar', 'avaliacoes:criar', 'documentos:criar', 'ausencias:criar', 'funcionarios:criar', 'sinais_vitais:criar'])
+    const acoes = within(await screen.findByRole('region', { name: 'Ações rápidas' }))
+    await waitFor(() => expect(acoes.getAllByRole('link')).toHaveLength(6))
+    expect(acoes.getAllByRole('link')[0].textContent).toContain('Nova admissão')
+    await user.click(acoes.getByRole('button', { name: /Mais ações \(4\)/ }))
+    expect(acoes.getAllByRole('link')).toHaveLength(10)
+    expect(acoes.getByRole('link', { name: /Novo funcionário/ }).getAttribute('href')).toBe('/equipe?novo=1')
   })
 })

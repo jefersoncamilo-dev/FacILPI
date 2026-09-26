@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { Link } from 'react-router-dom'
 import { BedDouble, Loader2, Lock, Plus, Search, TriangleAlert } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
@@ -19,7 +20,7 @@ export function Residentes() {
   const { pode } = usePermissoesOuPadrao()
   const leitos = useLeitosPorResidente()
   const [items, setItems] = useState<any[]>([])
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useAberturaPorParametro('novo', pode('residentes:criar'))
   const [form, setForm] = useState<any>(FORM_VAZIO)
   const [msg, setMsg] = useState('')
   const [salvando, setSalvando] = useState(false)

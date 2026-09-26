@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { Link } from 'react-router-dom'
 import { ArrowRightLeft, BedDouble, DoorOpen, History, Loader2, LogOut, Plus, UserPlus } from 'lucide-react'
 import { api, formatDate, formatDateTime, mensagemDeErro } from '../services/api'
@@ -34,7 +35,7 @@ export function QuartosLeitos() {
   const [filtro, setFiltro] = useState<FiltroLeito>('todos')
   const [aberto, setAberto] = useState<Leito | null>(null)
   const [novoLeito, setNovoLeito] = useState(false)
-  const [novaAusencia, setNovaAusencia] = useState(false)
+  const [novaAusencia, setNovaAusencia] = useAberturaPorParametro('ausencia', pode('ausencias:criar'))
   const [aviso, setAviso] = useState<{ tipo: 'success' | 'error'; texto: string } | null>(null)
 
   const carregar = useCallback(async () => {
