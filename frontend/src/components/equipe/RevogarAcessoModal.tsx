@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
 import { Modal } from '../Modal'
 import type { Funcionario, User } from '../../types/equipe'
 
@@ -39,7 +40,7 @@ export function RevogarAcessoModal({ open, onClose, funcionario, usuario, onConf
       <div className="space-y-4">
         <div className="p-4 rounded-xl bg-red-50 border border-red-200">
           <div className="flex items-start gap-3">
-            <span className="text-xl mt-0.5">⚠️</span>
+            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-orange-700" aria-hidden="true" />
             <div>
               <p className="text-sm font-medium text-danger">Atenção: esta ação é irreversível imediata</p>
               <p className="text-sm text-textMuted mt-1">

@@ -93,7 +93,7 @@ export function PrimeiroGestorForm({
       </p>
 
       {erro && (
-        <div role="alert" className="text-sm p-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+        <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
           {erro}
         </div>
       )}

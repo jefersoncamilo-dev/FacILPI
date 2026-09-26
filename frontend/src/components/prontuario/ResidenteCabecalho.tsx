@@ -2,6 +2,7 @@ import { TriangleAlert } from 'lucide-react'
 import { formatDate } from '../../services/api'
 import { idade, type ContextoResidente } from '../../hooks/useContextoResidente'
 import { Badge } from '../ui/feedback'
+import { rotuloSituacaoResidente } from '../../lib/rotulos'
 
 // GET /api/residentes/{id} não traz leito, ausência nem grau oficial: esses vêm
 // de useContextoResidente (cada um da sua fonte, só com permissão). O campo
@@ -58,7 +59,7 @@ export function ResidenteCabecalho({
           <h1 className="text-lg font-bold text-foreground lg:truncate lg:text-xl" title={residente.nome}>{residente.nome}</h1>
           {residente.nome_social && <p className="text-sm text-muted-foreground">Nome social: {residente.nome_social}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <Badge variant={residente.situacao === 'Ativo' ? 'success' : 'brand'}>{residente.situacao || 'Sem situação'}</Badge>
+            <Badge variant={residente.situacao === 'Ativo' ? 'success' : 'brand'}>{residente.situacao ? rotuloSituacaoResidente(residente.situacao) : 'Sem situação'}</Badge>
             {contexto.ausencia && (
               <Badge variant="warning">
                 {contexto.ausencia.tipo === 'hospitalizacao' ? 'Hospitalizado(a)' : 'Saída temporária'} desde {formatDate(contexto.ausencia.desde)}

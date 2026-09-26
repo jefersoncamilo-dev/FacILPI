@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { Link } from 'react-router-dom'
 import { BedDouble, Loader2, Lock, Plus, Search, TriangleAlert } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
@@ -10,6 +11,7 @@ import { Alert } from '../components/ui/feedback'
 import { Dialog, DialogContent } from '../components/ui/dialog'
 import { LoadingState } from '../components/ui/states'
 import { cn } from '../lib/utils'
+import { rotuloSituacaoResidente } from '../lib/rotulos'
 
 const FORM_VAZIO = { nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M', situacao: 'Em admissao' }
 
@@ -18,7 +20,7 @@ export function Residentes() {
   const { pode } = usePermissoesOuPadrao()
   const leitos = useLeitosPorResidente()
   const [items, setItems] = useState<any[]>([])
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useAberturaPorParametro('novo', pode('residentes:criar'))
   const [form, setForm] = useState<any>(FORM_VAZIO)
   const [msg, setMsg] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -139,7 +141,7 @@ export function Residentes() {
                     ativo ? 'border-brand bg-accent text-accent-foreground' : 'border-border bg-card text-muted-foreground hover:text-foreground',
                   )}
                 >
-                  {nome} <span className="text-xs">({total})</span>
+                  {nome === 'Todas' ? nome : rotuloSituacaoResidente(nome)} <span className="text-xs">({total})</span>
                 </button>
               )
             })}
@@ -162,7 +164,7 @@ export function Residentes() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-amber-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
           <p className="text-sm font-medium text-red-700">{erro}</p>
           <p className="mt-1 text-xs text-muted-foreground">Isso não significa que não há residentes cadastrados.</p>
           <Button onClick={load} className="mt-4">Tentar novamente</Button>
@@ -192,7 +194,7 @@ export function Residentes() {
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold text-foreground">{r.nome}</div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {r.situacao} • {formatDate(r.data_nascimento)}{anos !== null ? ` (${anos} anos)` : ''}
+                  {rotuloSituacaoResidente(r.situacao)} • {formatDate(r.data_nascimento)}{anos !== null ? ` (${anos} anos)` : ''}
                   {/* Sexo não identifica o residente e fica fora do nome acessível. */}
                   <span aria-hidden="true"> • {r.sexo || '—'}</span>
                 </div>
@@ -209,11 +211,11 @@ export function Residentes() {
                   exibida no prontuário). Mantido aqui por compatibilidade (Issue #34). */}
               <span className="badge-success">{r.grau_dependencia || 'Sem grau'}</span>
               {leito && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-slate-600">
                   <BedDouble className="size-3.5" aria-hidden="true" /> {leito}
                 </span>
               )}
-              {r.cpf && <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">CPF {r.cpf}</span>}
+              {r.cpf && <span className="rounded-full bg-muted px-2 py-1 text-slate-600">CPF {r.cpf}</span>}
             </div>
           </div>
           )

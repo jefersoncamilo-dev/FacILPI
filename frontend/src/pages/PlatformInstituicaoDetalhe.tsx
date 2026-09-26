@@ -125,7 +125,7 @@ export function PlatformInstituicaoDetalhe() {
     return (
       <div className="space-y-4">
         {erro ? (
-          <div role="alert" className="text-sm p-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+          <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
             {erro}
           </div>
         ) : (
@@ -145,7 +145,7 @@ export function PlatformInstituicaoDetalhe() {
     <div className="space-y-6 max-w-3xl">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
-          <h1 className="text-xl font-bold text-primaryDeep truncate">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">
             {instituicao.nome_fantasia?.trim() || instituicao.razao_social}
           </h1>
           <p className="text-sm text-textMuted">Situação: {rotuloSituacao(instituicao.situacao)}</p>
@@ -156,7 +156,7 @@ export function PlatformInstituicaoDetalhe() {
       </div>
 
       {erro && (
-        <div role="alert" className="text-sm p-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+        <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
           {erro}
         </div>
       )}
@@ -261,6 +261,9 @@ export function PlatformInstituicaoDetalhe() {
             com sessão aberta. Os cadastros e vínculos são preservados: reativar devolve o
             acesso.
           </p>
+          {/* UX-11: o erro aparece onde a pessoa está — dentro do diálogo. Com o
+              diálogo aberto, a página atrás fica coberta e oculta a leitores de tela. */}
+          {erro && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro}</div>}
           <div className="flex gap-2">
             <button onClick={() => setConfirmarInativacao(false)} className="btn-secondary flex-1 min-h-[44px]">
               Cancelar
@@ -285,6 +288,9 @@ export function PlatformInstituicaoDetalhe() {
             A senha anterior <strong>deixará de funcionar</strong> e as sessões abertas com ela
             serão encerradas. A nova senha aparece uma única vez, agora.
           </p>
+          {/* UX-11: o erro aparece onde a pessoa está — dentro do diálogo. Com o
+              diálogo aberto, a página atrás fica coberta e oculta a leitores de tela. */}
+          {erro && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro}</div>}
           <div className="flex gap-2">
             <button
               onClick={() => setConfirmarRegeneracao(false)}

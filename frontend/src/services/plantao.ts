@@ -28,6 +28,20 @@ export interface PlantaoConsultaParams {
 // quando a projeção pode ter sido truncada e avise, em vez de omitir em silêncio.
 export const PLANTAO_LIMIT_PADRAO = 200
 
+/**
+ * Texto do item na tela (UX-11 / #101). A projeção devolve descrições técnicas
+ * sem acento ("Dose prevista de medicacao", "Intercorrencia aberta: Queda");
+ * o contrato não muda — só o que aparece para a equipe.
+ */
+export function rotuloDoItem(item: Pick<PlantaoItem, 'origem' | 'descricao'>): string {
+  if (item.origem === 'medicacao') return 'Dose prevista de medicação'
+  if (item.origem === 'intercorrencia') {
+    const tipo = (item.descricao || '').replace(/^Intercorr[eê]ncia aberta:\s*/i, '').trim()
+    return tipo ? `Intercorrência aberta: ${tipo}` : 'Intercorrência aberta'
+  }
+  return item.descricao || 'Cuidado programado'
+}
+
 export const PLANTAO_ORIGENS: { value: PlantaoOrigem; label: string }[] = [
   { value: 'cuidado', label: 'Cuidados' },
   { value: 'medicacao', label: 'Medicação' },

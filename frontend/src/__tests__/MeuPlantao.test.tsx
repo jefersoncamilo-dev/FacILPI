@@ -88,8 +88,8 @@ describe('MeuPlantao — leitura da projeção oficial', () => {
     renderPlantao()
 
     expect(await screen.findByText('Banho assistido')).toBeTruthy()
-    expect(screen.getByText('Dose prevista de medicacao')).toBeTruthy()
-    expect(screen.getByText('Intercorrencia aberta: queda')).toBeTruthy()
+    expect(screen.getByText('Dose prevista de medicação')).toBeTruthy()
+    expect(screen.getByText('Intercorrência aberta: queda')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Registrar execução' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Registrar administração' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Encerrar' })).toBeTruthy()

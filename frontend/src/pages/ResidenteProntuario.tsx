@@ -191,9 +191,9 @@ export function ResidenteProntuario() {
 
           <div className="space-y-4 min-w-0">
             {/* Duas acoes de registro convivem aqui. Empilham em 360 e ficam lado a
-                lado a partir de sm; a hierarquia vem das classes ja existentes —
-                sinais vitais e o ato rotineiro (primaria), intercorrencia e o
-                excepcional (secundaria). Sem redesenho do Prontuario. */}
+                lado a partir de sm. UX-11 (#101): as duas sao acoes frequentes do
+                cuidador e ficam preenchidas — sinais vitais em verde (rotina),
+                intercorrencia em laranja (atencao). Estrutura do card (#34) mantida. */}
             {/* UX-04: a ação só aparece para quem pode registrar; o 403 do backend
                 continua como defesa (semPermissao*) caso a permissão mude na sessão. */}
             <div className="flex flex-col sm:flex-row gap-2">
@@ -210,7 +210,7 @@ export function ResidenteProntuario() {
                 <button
                   type="button"
                   onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}
-                  className="btn-secondary w-full sm:w-auto"
+                  className="btn-alerta w-full sm:w-auto"
                 >
                   + Registrar intercorrência
                 </button>

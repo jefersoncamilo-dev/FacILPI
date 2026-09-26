@@ -485,3 +485,16 @@ describe('Prontuário — entrada preferencial no contexto do residente', () => 
     expect(screen.queryByRole('button', { name: '+ Registrar sinais vitais' })).toBeNull()
   })
 })
+
+describe('SinaisVitais — atalho do Início (UX-11 / #101)', () => {
+  it('?registrar=1 abre o registro direto; fechar não reabre', async () => {
+    const user = userEvent.setup()
+    respondeCom()
+    render(<MemoryRouter initialEntries={['/sinais?registrar=1']}><SinaisVitais /></MemoryRouter>)
+    expect(await screen.findByRole('dialog', { name: 'Registrar sinais vitais' })).toBeTruthy()
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    await new Promise(r => setTimeout(r, 50))
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+})

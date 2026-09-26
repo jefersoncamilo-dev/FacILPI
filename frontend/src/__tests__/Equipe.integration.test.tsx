@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import { Equipe } from '../pages/Equipe'
 import { equipeApi } from '../services/equipe'
 
@@ -80,7 +81,7 @@ describe('Equipe page — loading / empty / error', () => {
   it('mostra skeleton durante o carregamento e depois os dados', async () => {
     let resolveList!: (v: any) => void
     api.listFuncionarios.mockReturnValueOnce(new Promise((r) => { resolveList = r }))
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     expect(document.querySelector('.animate-pulse')).not.toBeNull()
     resolveList({ data: [funcSemAcesso] })
     expect(await screen.findByText('Ana Souza')).toBeInTheDocument()
@@ -88,13 +89,13 @@ describe('Equipe page — loading / empty / error', () => {
 
   it('mostra estado vazio quando não há funcionários', async () => {
     api.listFuncionarios.mockResolvedValueOnce({ data: [] } as any)
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     expect(await screen.findByText('Nenhum funcionário encontrado')).toBeInTheDocument()
   })
 
   it('mostra mensagem de erro quando a API falha', async () => {
     api.listFuncionarios.mockRejectedValueOnce({ response: { data: { detail: 'Falha de rede' } } })
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     expect(await screen.findByText('Falha de rede')).toBeInTheDocument()
   })
 })
@@ -103,11 +104,11 @@ describe('Equipe page — CRUD funcionário', () => {
   it('cria funcionário sem login e envia payload sem ilpi_id', async () => {
     const user = userEvent.setup()
     api.createFuncionario.mockResolvedValueOnce({ data: { ...funcSemAcesso, id: 'f9' } } as any)
-    const { container } = render(<Equipe />)
+    const { container } = render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: '+ Novo funcionário' }))
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     await user.type(inputs[0], 'Carlos Novaes')
     await user.click(within(form).getByRole('button', { name: 'Cadastrar' }))
@@ -123,11 +124,11 @@ describe('Equipe page — CRUD funcionário', () => {
   it('edita funcionário enviando apenas campos do schema de update', async () => {
     const user = userEvent.setup()
     api.updateFuncionario.mockResolvedValueOnce({ data: { ...funcSemAcesso, cargo: 'Técnica' } } as any)
-    const { container } = render(<Equipe />)
+    const { container } = render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await openCardMenu(0, 'Editar')
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     const cargoInput = inputs.find((i) => (i as HTMLInputElement).value === 'Cuidadora')!
     await user.clear(cargoInput)
@@ -143,7 +144,7 @@ describe('Equipe page — CRUD funcionário', () => {
 
   it('inativa funcionário e atualiza situação na UI', async () => {
     api.inativarFuncionario.mockResolvedValueOnce({} as any)
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await openCardMenu(0, 'Inativar funcionário')
@@ -159,7 +160,7 @@ describe('Equipe page — acesso e vínculo (P1-01 / P1-02)', () => {
   it('edita usuário enviando o nome NOVO digitado (regressão P1-01)', async () => {
     const user = userEvent.setup()
     api.updateUsuario.mockResolvedValueOnce({ data: { ...usuarios[0], nome: 'Bruno Novo' } } as any)
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: /Usuários/ }))
@@ -179,11 +180,11 @@ describe('Equipe page — acesso e vínculo (P1-01 / P1-02)', () => {
     const user = userEvent.setup()
     api.createUsuario.mockResolvedValueOnce({ data: { id: 'u9', nome: 'Ana Souza', email: 'ana@test.com', senha_temporaria: 'Tmp123!x' } } as any)
     api.vincularUsuario.mockResolvedValueOnce({ data: { ...funcSemAcesso, usuario_id: 'u9' } } as any)
-    const { container } = render(<Equipe />)
+    const { container } = render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await openCardMenu(0, 'Conceder acesso')
-    const select = container.querySelector('select') as HTMLSelectElement
+    const select = screen.getByRole('dialog').querySelector('select') as HTMLSelectElement
     // somente perfis ativos aparecem como opção
     const options = within(select).getAllByRole('option').map((o) => o.textContent)
     expect(options).toContain('Administrador')
@@ -202,7 +203,7 @@ describe('Equipe page — acesso e vínculo (P1-01 / P1-02)', () => {
   it('vincula usuário existente ao funcionário', async () => {
     const user = userEvent.setup()
     api.vincularUsuario.mockResolvedValueOnce({ data: { ...funcSemAcesso, usuario_id: 'u1' } } as any)
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await openCardMenu(0, 'Vincular usuário existente')
@@ -223,7 +224,7 @@ describe('Equipe page — acesso e vínculo (P1-01 / P1-02)', () => {
     api.listUsuarios
       .mockResolvedValueOnce({ data: usuarios } as any)
       .mockResolvedValue({ data: [] } as any)
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Bruno Lima')
 
     await openCardMenu(1, 'Revogar acesso')
@@ -244,7 +245,7 @@ describe('Equipe page — acesso e vínculo (P1-01 / P1-02)', () => {
   it('reseta senha e exibe a temporária', async () => {
     const user = userEvent.setup()
     api.resetPassword.mockResolvedValueOnce({ data: { senha_temporaria: 'Reset999!' } } as any)
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: /Usuários/ }))
@@ -261,11 +262,11 @@ describe('Equipe page — profissão regulamentada e perfis', () => {
   it('exige conselho para profissão regulamentada e envia no payload', async () => {
     const user = userEvent.setup()
     api.createFuncionario.mockResolvedValueOnce({ data: { ...funcSemAcesso, id: 'f9' } } as any)
-    const { container } = render(<Equipe />)
+    const { container } = render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: '+ Novo funcionário' }))
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     await user.type(inputs[0], 'Enfermeira Nova')
     // profissão é o 5º textbox (nome, cpf, telefone, email, cargo, profissao)
@@ -290,11 +291,11 @@ describe('Equipe page — profissão regulamentada e perfis', () => {
 
   it('não mostra campos de conselho para profissão não regulamentada', async () => {
     const user = userEvent.setup()
-    const { container } = render(<Equipe />)
+    const { container } = render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: '+ Novo funcionário' }))
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     await user.type(inputs[5], 'Cuidador')
     expect(within(form).queryByPlaceholderText('Ex: COREN')).toBeNull()
@@ -302,7 +303,7 @@ describe('Equipe page — profissão regulamentada e perfis', () => {
 
   it('aba Perfis lista ativos e inativos, sem platform_superuser', async () => {
     const user = userEvent.setup()
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: 'Perfis' }))
@@ -318,7 +319,7 @@ describe('Equipe page — profissão regulamentada e perfis', () => {
 describe('Equipe page — filtro dispara uma única requisição (P2-02)', () => {
   it('trocar situacaoFilter chama listFuncionarios exatamente 1 vez', async () => {
     const user = userEvent.setup()
-    render(<Equipe />)
+    render(<MemoryRouter><Equipe /></MemoryRouter>)
     await screen.findByText('Ana Souza')
     expect(api.listFuncionarios).toHaveBeenCalledTimes(1)
 

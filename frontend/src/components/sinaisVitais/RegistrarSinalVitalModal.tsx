@@ -131,7 +131,7 @@ export function RegistrarSinalVitalModal({
         <p className="text-xs text-textMuted">Preencha ao menos um sinal. Os demais podem ficar em branco.</p>
 
         {aviso && (
-          <div role="status" className="text-sm text-warning bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <div role="status" className="text-sm text-warning bg-orange-50 border border-orange-200 rounded-xl p-3">
             {aviso}
           </div>
         )}

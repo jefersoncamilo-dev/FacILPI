@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { TriangleAlert } from 'lucide-react'
 import { Modal } from '../Modal'
 import type { Funcionario } from '../../types/equipe'
 
@@ -36,11 +37,11 @@ export function InativarFuncionarioModal({ open, onClose, funcionario, onConfirm
   return (
     <Modal open={open} onClose={handleClose} title="Inativar funcionário">
       <div className="space-y-4">
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
+        <div className="p-4 rounded-xl bg-orange-50 border border-orange-200">
           <div className="flex items-start gap-3">
-            <span className="text-xl mt-0.5">⚠️</span>
+            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-orange-700" aria-hidden="true" />
             <div>
-              <p className="text-sm font-medium text-amber-700">Confirmar inativação</p>
+              <p className="text-sm font-medium text-orange-700">Confirmar inativação</p>
               <p className="text-sm text-textMuted mt-1">
                 Deseja inativar o funcionário <strong>{funcionario?.nome}</strong>?
               </p>
@@ -67,7 +68,7 @@ export function InativarFuncionarioModal({ open, onClose, funcionario, onConfirm
           <button type="button" onClick={handleClose} className="btn-secondary flex-1">Cancelar</button>
           <button
             onClick={handleConfirm}
-            className="flex-1 px-5 py-3 rounded-xl font-semibold text-white bg-amber-500 hover:bg-amber-600 transition min-h-[44px] flex items-center justify-center gap-2"
+            className="flex-1 px-5 py-3 rounded-xl font-semibold text-white bg-orange-500 hover:bg-orange-600 transition min-h-[44px] flex items-center justify-center gap-2"
             disabled={saving}
           >
             {saving ? 'Inativando...' : 'Inativar funcionário'}

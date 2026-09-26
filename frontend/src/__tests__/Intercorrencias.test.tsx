@@ -482,7 +482,9 @@ describe('Prontuário — registro no contexto do residente', () => {
     const sinais = await screen.findByRole('button', { name: '+ Registrar sinais vitais' })
     const intercorrencia = screen.getByRole('button', { name: '+ Registrar intercorrência' })
     expect(sinais.className).toContain('btn-primary')
-    expect(intercorrencia.className).toContain('btn-secondary')
+    // UX-11 (#101): as duas são ações frequentes e ficam preenchidas; a
+    // hierarquia agora é de cor — rotina em verde, atenção em laranja.
+    expect(intercorrencia.className).toContain('btn-alerta')
     expect(sinais.parentElement?.className).toContain('flex-col')
     expect(sinais.parentElement?.className).toContain('sm:flex-row')
   })

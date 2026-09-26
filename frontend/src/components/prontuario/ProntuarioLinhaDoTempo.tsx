@@ -1,4 +1,5 @@
 import { formatDateTime } from '../../services/api'
+import { rotuloSituacaoEvento } from '../../lib/rotulos'
 import { ProntuarioCategoria, ProntuarioEvento } from '../../services/prontuario'
 
 const CATEGORIA_LABEL: Record<ProntuarioCategoria, string> = {
@@ -72,7 +73,7 @@ function SituacaoEvento({ evento }: { evento: ProntuarioEvento }) {
   if (evento.situacao) {
     return (
       <span className="px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 bg-slate-50 text-textMuted border border-slate-200">
-        {evento.situacao}
+        {rotuloSituacaoEvento(evento.situacao)}
       </span>
     )
   }
@@ -91,7 +92,7 @@ export function ProntuarioLinhaDoTempo({ eventos }: { eventos: ProntuarioEvento[
               <div key={`${evento.origem}-${evento.registro_id}-${evento.tipo}`} className="p-4 flex gap-3">
                 <span
                   aria-hidden="true"
-                  className="w-7 h-7 shrink-0 rounded-lg bg-slate-100 text-textMuted text-[11px] font-semibold flex items-center justify-center"
+                  className="w-7 h-7 shrink-0 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-semibold flex items-center justify-center"
                 >
                   {CATEGORIA_SIGLA[evento.categoria]}
                 </span>

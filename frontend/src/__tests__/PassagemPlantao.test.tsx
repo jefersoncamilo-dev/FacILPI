@@ -126,7 +126,7 @@ describe('Passagem de plantão — leitura do período', () => {
     expect(await screen.findByText('Visão parcial')).toBeTruthy()
     expect(numero('Intercorrências no período')).toBe('—')
     // A aberta continua aparecendo pelo resumo do plantão.
-    expect(screen.getByText('Intercorrencia aberta: Queda')).toBeTruthy()
+    expect(screen.getByText('Intercorrência aberta: Queda')).toBeTruthy()
     parcial.unmount()
 
     responde({ plantao: { response: { status: 403, data: { detail: 'x' } } } })
