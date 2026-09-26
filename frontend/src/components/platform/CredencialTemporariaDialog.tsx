@@ -59,7 +59,7 @@ export function CredencialTemporariaDialog({
 
         <div
           role="alert"
-          className="text-sm p-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200"
+          className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200"
         >
           <strong>Esta senha será exibida somente agora.</strong> Ela não fica guardada e não pode
           ser consultada novamente por esta tela. Se for perdida, não há reenvio disponível neste

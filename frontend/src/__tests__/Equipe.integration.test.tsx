@@ -107,7 +107,7 @@ describe('Equipe page — CRUD funcionário', () => {
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: '+ Novo funcionário' }))
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     await user.type(inputs[0], 'Carlos Novaes')
     await user.click(within(form).getByRole('button', { name: 'Cadastrar' }))
@@ -127,7 +127,7 @@ describe('Equipe page — CRUD funcionário', () => {
     await screen.findByText('Ana Souza')
 
     await openCardMenu(0, 'Editar')
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     const cargoInput = inputs.find((i) => (i as HTMLInputElement).value === 'Cuidadora')!
     await user.clear(cargoInput)
@@ -183,7 +183,7 @@ describe('Equipe page — acesso e vínculo (P1-01 / P1-02)', () => {
     await screen.findByText('Ana Souza')
 
     await openCardMenu(0, 'Conceder acesso')
-    const select = container.querySelector('select') as HTMLSelectElement
+    const select = screen.getByRole('dialog').querySelector('select') as HTMLSelectElement
     // somente perfis ativos aparecem como opção
     const options = within(select).getAllByRole('option').map((o) => o.textContent)
     expect(options).toContain('Administrador')
@@ -265,7 +265,7 @@ describe('Equipe page — profissão regulamentada e perfis', () => {
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: '+ Novo funcionário' }))
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     await user.type(inputs[0], 'Enfermeira Nova')
     // profissão é o 5º textbox (nome, cpf, telefone, email, cargo, profissao)
@@ -294,7 +294,7 @@ describe('Equipe page — profissão regulamentada e perfis', () => {
     await screen.findByText('Ana Souza')
 
     await user.click(screen.getByRole('button', { name: '+ Novo funcionário' }))
-    const form = container.querySelector('form')!
+    const form = screen.getByRole('dialog').querySelector('form')!
     const inputs = within(form).getAllByRole('textbox')
     await user.type(inputs[5], 'Cuidador')
     expect(within(form).queryByPlaceholderText('Ex: COREN')).toBeNull()

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CheckCircle2 } from 'lucide-react'
 import { Modal } from '../Modal'
 import type { Funcionario, Perfil } from '../../types/equipe'
 import { equipeApi } from '../../services/equipe'
@@ -57,7 +58,7 @@ export function ConcederAcessoModal({ open, onClose, funcionario, perfis, onSucc
         <div className="space-y-4">
           <div className="text-center">
             <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-              <span className="text-2xl">✅</span>
+              <CheckCircle2 className="size-7 text-emerald-700" aria-hidden="true" />
             </div>
             <h4 className="font-semibold text-textMain">Acesso concedido</h4>
             <p className="text-sm text-textMuted mt-1">Senha temporária para {funcionario?.nome}:</p>

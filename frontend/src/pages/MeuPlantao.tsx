@@ -14,6 +14,7 @@ import {
   getResidentesResumo,
   registrarAdministracao,
   registrarExecucaoCuidado,
+  rotuloDoItem,
   type PlantaoItem,
   type PlantaoOrigem,
   type ResultadoCuidado,
@@ -246,7 +247,7 @@ export function MeuPlantao() {
             onClick={() => setFiltro(opcao.value as Filtro)}
             className={cn(
               'min-h-[40px] shrink-0 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors',
-              filtro === opcao.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              filtro === opcao.value ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
             )}
           >
             {opcao.label} ({contagens[opcao.value as Filtro]})
@@ -257,14 +258,14 @@ export function MeuPlantao() {
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
 
       {atrasados > 0 && !erro && (
-        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-          <AlarmClock className="size-4 text-amber-800" aria-hidden="true" />
-          <span className="text-sm font-medium text-amber-900">{atrasados} {atrasados === 1 ? 'pendência atrasada' : 'pendências atrasadas'}</span>
+        <div className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
+          <AlarmClock className="size-4 text-orange-800" aria-hidden="true" />
+          <span className="text-sm font-medium text-orange-900">{atrasados} {atrasados === 1 ? 'pendência atrasada' : 'pendências atrasadas'}</span>
         </div>
       )}
 
       {itens.length >= PLANTAO_LIMIT_PADRAO && !erro && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
           <span className="text-sm text-muted-foreground">Exibindo as primeiras {PLANTAO_LIMIT_PADRAO} pendências. Pode haver mais no período.</span>
         </div>
       )}
@@ -273,7 +274,7 @@ export function MeuPlantao() {
         <div className="card py-16 text-center text-muted-foreground">Carregando plantão…</div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-amber-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
           <p className="text-sm font-medium text-red-700">{erro}</p>
           <button onClick={carregar} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
@@ -287,7 +288,7 @@ export function MeuPlantao() {
           {[
             { titulo: 'Atrasadas', itens: lista.filter(i => atrasado(i, agora)) },
             { titulo: 'Próximas', itens: lista.filter(i => i.previsto_em && !atrasado(i, agora)) },
-            { titulo: 'Sem horário', itens: lista.filter(i => !i.previsto_em) },
+            { titulo: 'Intercorrências abertas', itens: lista.filter(i => !i.previsto_em) },
           ].filter(g => g.itens.length > 0).map(grupo => (
             <section key={grupo.titulo} aria-label={grupo.titulo} className="space-y-3">
               <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -301,14 +302,14 @@ export function MeuPlantao() {
                     key={`${item.origem}:${item.registro_id}`}
                     className={cn(
                       'card flex flex-wrap items-start gap-4 border-l-4 sm:flex-nowrap',
-                      item.prioridade === 'alta' ? 'border-l-red-600' : item.prioridade === 'media' ? 'border-l-amber-500' : 'border-l-brand',
+                      item.prioridade === 'alta' ? 'border-l-red-600' : item.prioridade === 'media' ? 'border-l-orange-500' : 'border-l-brand',
                     )}
                   >
                     <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-primary" aria-hidden="true">
                       <Icone className="size-5" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{item.descricao}</div>
+                      <div className="truncate font-medium">{rotuloDoItem(item)}</div>
                       <div className="mt-1 text-xs text-muted-foreground">
                         {ROTULO_ORIGEM[item.origem]} • {nomes[item.residente_id] || item.residente_id}
                         {item.previsto_em ? ` • ${formatDateTime(item.previsto_em)}` : ''}
@@ -334,7 +335,7 @@ export function MeuPlantao() {
       <Modal open={itemAberto !== null} onClose={fechar} title={itemAberto ? ACAO_ORIGEM[itemAberto.origem] : ''}>
         {itemAberto && (
           <div className="space-y-3">
-            <div className="text-sm text-textMuted">{itemAberto.descricao}</div>
+            <div className="text-sm text-textMuted">{rotuloDoItem(itemAberto)}</div>
 
             {itemAberto.origem === 'cuidado' && (
               <>

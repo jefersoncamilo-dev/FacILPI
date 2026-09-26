@@ -131,7 +131,7 @@ describe('UX-04 — lista de residentes', () => {
     expect(screen.queryByRole('button', { name: /Novo residente/ })).toBeNull()
     expect(await screen.findByText('Quarto 101 · Leito A')).toBeTruthy()
 
-    await user.click(screen.getByRole('button', { name: /Em admissao/ }))
+    await user.click(screen.getByRole('button', { name: /Em admissão/ }))
     expect(screen.queryByRole('link', { name: /^Antônia Ribeiro/ })).toBeNull()
     expect(screen.getByRole('link', { name: /^Benedito Carvalho/ })).toBeTruthy()
   })

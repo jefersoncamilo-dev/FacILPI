@@ -80,7 +80,7 @@ describe('UX-10 — permissões de perfil partem do que o perfil tem', () => {
     respondePerfil(atual([['funcionarios', 'ler', true], ['residentes', 'ler', false]]))
     renderModal()
     expect(await screen.findByText('Edição indisponível nesta tela')).toBeTruthy()
-    expect(screen.getByText(/residentes\)\. Salvar por esta tela as removeria/)).toBeTruthy()
+    expect(screen.getByText(/Residentes\)\. Salvar por esta tela as removeria/)).toBeTruthy()
     expect(screen.queryByRole('checkbox')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Salvar permissões' })).toBeNull()
     expect(screen.getByText('Fechar', { selector: 'button' })).toBeTruthy()
@@ -97,8 +97,8 @@ describe('UX-10 — permissões de perfil partem do que o perfil tem', () => {
   it('sem permissão para atribuir, mostra o que o perfil pode fazer sem editar', async () => {
     respondePerfil(atual([['funcionarios', 'ler', true], ['funcionarios', 'criar', true]]))
     renderModal({ somenteLeitura: true })
-    const lista = await screen.findByText('funcionarios')
-    expect(within(lista.closest('div')!).getByText('criar')).toBeTruthy()
+    const lista = await screen.findByText('Funcionários')
+    expect(within(lista.closest('div')!).getByText('Cadastrar')).toBeTruthy()
     expect(screen.queryByRole('checkbox')).toBeNull()
   })
 

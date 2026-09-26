@@ -261,9 +261,10 @@ describe('PH-01/5 — avatar não desloga', () => {
     const botoes = screen.getAllByRole('button')
     expect(botoes.some(b => (b.textContent || '').trim() === 'G')).toBe(false)
 
-    // Sair continua disponível — no menu lateral e no cabeçalho mobile.
-    const sair = screen.getAllByRole('button', { name: 'Sair' })
-    expect(sair.length).toBeGreaterThan(0)
+    // Sair continua explícito: item do menu da conta (UX-11), aberto por um
+    // botão rotulado "Menu da conta" — nunca pelo avatar.
+    await userEvent.setup().click(screen.getAllByRole('button', { name: 'Menu da conta' })[0])
+    expect(await screen.findByRole('menuitem', { name: 'Sair' })).toBeTruthy()
   })
 
   it('clicar em "Sair" dispara o mesmo fluxo de logout', async () => {
@@ -277,7 +278,8 @@ describe('PH-01/5 — avatar não desloga', () => {
     )
     await screen.findByText('conteúdo')
 
-    await user.click(screen.getAllByRole('button', { name: 'Sair' })[0])
+    await user.click(screen.getAllByRole('button', { name: 'Menu da conta' })[0])
+    await user.click(await screen.findByRole('menuitem', { name: 'Sair' }))
     await waitFor(() => expect(mockLogout).toHaveBeenCalled())
   })
 })

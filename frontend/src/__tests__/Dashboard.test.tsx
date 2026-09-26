@@ -60,6 +60,8 @@ function responde({ resumo: r = resumo(), plantao = PENDENCIAS, residentes = RES
     if (url === '/dashboard/resumo') return de(r)
     if (url === '/plantao/') return de(plantao)
     if (url === '/residentes/') return de(residentes)
+    // UX-11: "Atividade recente no turno" lê as listas oficiais.
+    if (url === '/sinais-vitais/' || url === '/intercorrencias/') return de([])
     throw new Error(`URL inesperada no Dashboard: ${url}`)
   })
 }
@@ -198,7 +200,7 @@ describe('Dashboard — só afirma o que tem fonte (PH-02 / #71)', () => {
   it('10. nenhum selo "Ativo" é inventado — a situação exibida é a real', async () => {
     responde()
     renderDashboard()
-    expect(await screen.findByText(/^Em admissao •/)).toBeTruthy()
+    expect(await screen.findByText(/^Em admissão •/)).toBeTruthy()
     expect(screen.queryByText('Ativo')).toBeNull()
   })
 })
@@ -255,5 +257,67 @@ describe('Dashboard — experiência por perfil (UX-02 / #85)', () => {
     await screen.findByText('Intercorrências abertas')
     expect(urlsChamadas()).not.toContain('/plantao/')
     expect(urlsChamadas()).not.toContain('/residentes/')
+  })
+})
+
+describe('Dashboard — design system (UX-11 / #101)', () => {
+  const agora = Date.now()
+  const iso = (horasAtras: number) => new Date(agora - horasAtras * 3600_000).toISOString()
+  const COM_ATIVIDADE = [...CUIDADO, 'sinais_vitais:ler']
+
+  function comAtividade({ sinais = [] as unknown, intercorrencias = [] as unknown } = {}) {
+    const de = (fonte: unknown) => (fonte instanceof Error ? Promise.reject(fonte) : Promise.resolve({ data: fonte } as any))
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/dashboard/resumo') return de(resumo({ intercorrencias_abertas: 1 }))
+      if (url === '/plantao/') return de(PENDENCIAS)
+      if (url === '/residentes/') return de(RESIDENTES)
+      if (url === '/sinais-vitais/') return de(sinais)
+      if (url === '/intercorrencias/') return de(intercorrencias)
+      throw new Error(`URL inesperada no Dashboard: ${url}`)
+    })
+  }
+
+  it('atividade recente: só as últimas 12 h, mais recente primeiro, linha leva ao prontuário', async () => {
+    comAtividade({
+      sinais: [{ id: 's1', residente_id: 'res-1', data: iso(1) }, { id: 's-velho', residente_id: 'res-1', data: iso(30) }],
+      intercorrencias: [{ id: 'i1', residente_id: 'res-1', tipo: 'Queda', gravidade: 'moderada', situacao: 'aberta', ocorrido_em: iso(0.5) }],
+    })
+    renderDashboard(COM_ATIVIDADE)
+    const bloco = within(await screen.findByRole('region', { name: 'Atividade recente no turno' }))
+    const linhas = await bloco.findAllByRole('link')
+    expect(linhas.map(l => l.textContent)).toEqual([
+      expect.stringContaining('Intercorrência: Queda (moderada)'),
+      expect.stringContaining('Sinais vitais aferidos'),
+    ])
+    expect(linhas[0].getAttribute('href')).toBe('/residentes/res-1')
+  })
+
+  it('atividade recente: fonte que falha vira aviso, não "nenhum registro"; sem permissão, não consulta', async () => {
+    comAtividade({ sinais: [{ id: 's1', residente_id: 'res-1', data: iso(1) }], intercorrencias: new Error('rede') })
+    const parcial = renderDashboard(COM_ATIVIDADE)
+    const bloco = within(await screen.findByRole('region', { name: 'Atividade recente no turno' }))
+    expect(await bloco.findByText('Parte da atividade não pôde ser consultada agora.')).toBeTruthy()
+    expect(bloco.getByText('Sinais vitais aferidos')).toBeTruthy()
+    expect(bloco.queryByText(/Nenhum registro/)).toBeNull()
+    parcial.unmount()
+
+    mockGet.mockClear()
+    responde()
+    renderDashboard(['plantao:ler', 'residentes:ler'])
+    await screen.findByText('Pendências do turno')
+    expect(screen.queryByRole('region', { name: 'Atividade recente no turno' })).toBeNull()
+    expect(urlsChamadas()).not.toContain('/sinais-vitais/')
+    expect(urlsChamadas()).not.toContain('/intercorrencias/')
+  })
+
+  it('ações do cuidador abrem o registro direto; KPI de intercorrência aberta carrega o tom de alerta', async () => {
+    comAtividade()
+    renderDashboard(COM_ATIVIDADE)
+    const acoes = within(await screen.findByRole('region', { name: 'Ações rápidas' }))
+    expect(acoes.getByRole('link', { name: /Registrar sinal vital/ }).getAttribute('href')).toBe('/sinais?registrar=1')
+    expect(acoes.getByRole('link', { name: /Registrar intercorrência/ }).getAttribute('href')).toBe('/intercorrencias?registrar=1')
+    const kpi = (await screen.findByText('Intercorrências abertas')).closest('[data-tom]')!
+    await waitFor(() => expect(kpi.getAttribute('data-tom')).toBe('alerta'))
+    expect(kpi.className).not.toMatch(/bg-(orange|amber)/)
   })
 })

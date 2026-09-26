@@ -127,7 +127,7 @@ export function QuartosLeitos() {
             <div role="tablist" aria-label="Visão" className="flex w-fit gap-1 rounded-lg bg-muted p-1">
               {([['leitos', 'Leitos'], ['ausencias', 'Ausências']] as [Aba, string][]).map(([id, rotulo]) => (
                 <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
-                  className={cn('min-h-[40px] rounded-md px-4 text-sm font-medium', aba === id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                  className={cn('min-h-[40px] rounded-md px-4 text-sm font-medium', aba === id ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground')}>
                   {rotulo}
                 </button>
               ))}
@@ -214,7 +214,7 @@ function CartaoLeito({ leito: l, nome, ausencia, aoAbrir }: { leito: Leito; nome
       </div>
       {estado === 'ocupado' && <span className="truncate text-sm text-foreground">{nome || 'Residente'}</span>}
       {ausencia && (
-        <span className="text-xs font-medium text-amber-800">
+        <span className="text-xs font-medium text-orange-800">
           {ROTULO_AUSENCIA[ausencia.tipo]} desde {formatDate(ausencia.data_inicio)}
         </span>
       )}

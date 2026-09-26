@@ -3,6 +3,7 @@ import { Modal } from '../Modal'
 import { Alert } from '../ui/feedback'
 import { equipeApi } from '../../services/equipe'
 import type { Perfil, PerfilAdminCreate, PerfilPermissoes, Permissao } from '../../types/equipe'
+import { rotuloAcao, rotuloModulo } from '../../lib/rotulos'
 
 interface PerfilFormModalProps {
   open: boolean
@@ -27,8 +28,6 @@ type Atuais =
   | { status: 'carregando' }
   | { status: 'erro' }
   | { status: 'ok'; dados: PerfilPermissoes }
-
-const rotuloModulo = (modulo: string) => modulo.replace(/_/g, ' ')
 
 export function PerfilFormModal({ open, onClose, perfil, permissoes, onSubmitPerfil, onSubmitPermissoes, somenteLeitura = false }: PerfilFormModalProps) {
   const [form, setForm] = useState<{ nome: string; chave: string; descricao: string }>(() => {
@@ -202,7 +201,7 @@ export function PerfilFormModal({ open, onClose, perfil, permissoes, onSubmitPer
                   {Object.entries(permissoesAgrupadas).map(([modulo, lista]) => (
                     <div key={modulo} className="border border-slate-200 rounded-xl overflow-hidden">
                       <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
-                        <span className="text-xs font-semibold text-textMain capitalize">{rotuloModulo(modulo)}</span>
+                        <span className="text-xs font-semibold text-textMain">{rotuloModulo(modulo)}</span>
                       </div>
                       <div className="p-2 space-y-1">
                         {lista.map(p => (
@@ -217,7 +216,7 @@ export function PerfilFormModal({ open, onClose, perfil, permissoes, onSubmitPer
                               className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
                             />
                             <div className="min-w-0">
-                              <span className="text-sm text-textMain">{p.acao.replace(/_/g, ' ')}</span>
+                              <span className="text-sm text-textMain">{rotuloAcao(p.acao)}</span>
                               {p.descricao && (
                                 <span className="text-xs text-textMuted ml-2">— {p.descricao}</span>
                               )}
@@ -267,10 +266,10 @@ export function ListaSomenteLeitura({ dados }: { dados: PerfilPermissoes }) {
     <dl className="space-y-2">
       {Object.entries(grupos).map(([modulo, itens]) => (
         <div key={modulo} className="rounded-lg border border-slate-200 px-3 py-2">
-          <dt className="text-xs font-semibold capitalize text-textMain">{rotuloModulo(modulo)}</dt>
+          <dt className="text-xs font-semibold text-textMain">{rotuloModulo(modulo)}</dt>
           <dd className="mt-1 flex flex-wrap gap-1.5">
             {itens.map(p => (
-              <span key={p.chave} title={p.descricao || undefined} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-textMain">{p.acao.replace(/_/g, ' ')}</span>
+              <span key={p.chave} title={p.descricao || undefined} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-textMain">{rotuloAcao(p.acao)}</span>
             ))}
           </dd>
         </div>

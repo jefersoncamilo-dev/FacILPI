@@ -100,7 +100,7 @@ export function Admissoes() {
                   onClick={() => setAba(a.id)}
                   className={cn(
                     'min-h-[40px] shrink-0 rounded-md px-3 text-sm font-medium transition-colors',
-                    aba === a.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    aba === a.id ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
                   )}
                 >
                   {a.label} <span className="text-xs text-muted-foreground">({contagem(a.id)})</span>

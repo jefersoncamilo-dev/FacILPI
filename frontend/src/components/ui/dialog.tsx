@@ -66,6 +66,9 @@ export function DialogContent({
     <DialogPrimitive.Portal>
       <Overlay />
       <DialogPrimitive.Content
+        // O Radix isola o resto da página com aria-hidden; aria-modal declara a
+        // modalidade também para leitores de tela que se guiam pelo atributo.
+        aria-modal="true"
         onOpenAutoFocus={foco.guardar}
         onCloseAutoFocus={foco.devolver}
         className={cn(

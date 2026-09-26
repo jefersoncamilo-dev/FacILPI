@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Paperclip, TriangleAlert } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { formatDate, mensagemDeErro } from '../services/api'
 // `GET /residentes/` já tem um consumidor tipado; duplicar a função criaria uma
@@ -117,8 +118,8 @@ export function Documentos() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primaryDeep">Documentos</h1>
-          <p className="text-textMuted text-sm">Documentação do residente, com arquivo anexado e validade</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Documentos</h1>
+          <p className="text-sm text-muted-foreground">Documentação do residente, com arquivo anexado e validade</p>
         </div>
         {!semPermissaoCriar && (
           <button onClick={() => { setSucesso(''); setCadastrando(true) }} className="btn-primary">
@@ -191,7 +192,7 @@ export function Documentos() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <div className="text-4xl mb-2" aria-hidden="true">⚠️</div>
+          <TriangleAlert className="mx-auto mb-2 size-9 text-orange-700" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
@@ -251,7 +252,7 @@ export function Documentos() {
               {documento.arquivo_presente ? (
                 <div className="mt-3 space-y-2">
                   <p className="text-sm text-textMuted break-words">
-                    📎 {documento.arquivo_nome_original || 'Arquivo anexado'}
+                    <Paperclip className="mr-1 inline size-4 align-[-2px]" aria-hidden="true" />{documento.arquivo_nome_original || 'Arquivo anexado'}
                     {documento.arquivo_tamanho != null && <> — {formatarTamanho(documento.arquivo_tamanho)}</>}
                   </p>
                   <button

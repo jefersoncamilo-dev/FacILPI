@@ -4,14 +4,14 @@ import { AlertCircle, CheckCircle2, Info, TriangleAlert, type LucideIcon } from 
 import { cn } from '../../lib/utils'
 
 const badgeVariants = cva(
-  'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold',
+  'inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold leading-none',
   {
     variants: {
       variant: {
-        neutral: 'border-border bg-muted text-muted-foreground',
+        neutral: 'border-border bg-muted text-slate-600',
         brand: 'border-emerald-200 bg-brand-soft text-accent-foreground',
         success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-        warning: 'border-amber-200 bg-amber-50 text-amber-800',
+        warning: 'border-orange-200 bg-orange-50 text-orange-800',
         danger: 'border-red-200 bg-red-50 text-red-700',
       },
     },
@@ -30,7 +30,7 @@ export function Badge({
 const alertStyles = {
   info: { box: 'border-sky-200 bg-sky-50 text-sky-900', icon: Info },
   success: { box: 'border-emerald-200 bg-emerald-50 text-emerald-900', icon: CheckCircle2 },
-  warning: { box: 'border-amber-200 bg-amber-50 text-amber-900', icon: TriangleAlert },
+  warning: { box: 'border-orange-200 bg-orange-50 text-orange-900', icon: TriangleAlert },
   error: { box: 'border-red-200 bg-red-50 text-red-800', icon: AlertCircle },
 } satisfies Record<string, { box: string; icon: LucideIcon }>
 

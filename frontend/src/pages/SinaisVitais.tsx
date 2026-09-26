@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { TriangleAlert } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'
@@ -24,11 +24,21 @@ export function SinaisVitais() {
   // "nenhum registro" na tela de quem não tem permissão de leitura.
   const [erro, setErro] = useState('')
 
+  const [params, setParams] = useSearchParams()
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
   const [residenteId, setResidenteId] = useState<string>(TODOS)
 
-  const [modalAberto, setModalAberto] = useState(false)
+  const [modalAberto, setModalAberto] = useState(() => params.get('registrar') === '1')
+  // UX-11 (#101): `?registrar=1` (ações rápidas do Início) abre o registro
+  // direto; ao fechar, o parâmetro sai para não reabrir ao recarregar.
+  useEffect(() => {
+    if (!modalAberto && params.has('registrar')) {
+      const p = new URLSearchParams(params)
+      p.delete('registrar')
+      setParams(p, { replace: true })
+    }
+  }, [modalAberto, params, setParams])
   const [sucesso, setSucesso] = useState('')
   // O token não carrega permissões, então a tela só descobre a incapacidade
   // pela resposta do backend. Depois do primeiro 403 a ação deixa de ser
@@ -143,7 +153,7 @@ export function SinaisVitais() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-amber-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>

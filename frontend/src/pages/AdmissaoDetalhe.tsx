@@ -286,7 +286,7 @@ function Stepper({ admissao: a, verificacao }: { admissao: Admissao; verificacao
               </span>
               <span className="sr-only">{feito ? 'concluída' : corrente ? 'etapa atual' : 'pendente'}</span>
               {pendente && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-800">
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-orange-800">
                   <CircleDot className="size-3" aria-hidden="true" /> pendência
                 </span>
               )}
@@ -313,8 +313,8 @@ function ListaPendencias({ pendencias, compacta = false, residenteId }: { penden
         const etapa = ETAPA_DA_PENDENCIA[p.codigo]
         const onde = ONDE_RESOLVER[etapa]
         return (
-          <li key={`${p.codigo}-${p.referencia_id ?? i}`} className="flex items-start gap-2.5 rounded-lg bg-amber-50/60 px-3 py-2 text-sm">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-amber-700" aria-hidden="true" />
+          <li key={`${p.codigo}-${p.referencia_id ?? i}`} className="flex items-start gap-2.5 rounded-lg bg-orange-50/60 px-3 py-2 text-sm">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-orange-700" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="text-foreground">{descreverPendencia(p)}</p>
               {compacta ? (

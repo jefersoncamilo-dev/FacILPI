@@ -10,7 +10,7 @@ function Selo({ situacao }: { situacao: string }) {
     ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
     : ehInativa(situacao)
       ? 'bg-slate-100 text-slate-600 border-slate-200'
-      : 'bg-amber-50 text-amber-800 border-amber-200'
+      : 'bg-orange-50 text-orange-800 border-orange-200'
   return (
     <span className={`inline-block text-xs font-medium px-2 py-1 rounded-lg border ${cor}`}>
       {rotuloSituacao(situacao)}
@@ -51,7 +51,7 @@ export function PlatformInstituicoes() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-bold text-primaryDeep">Instituições</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Instituições</h1>
         <Link to="/platform/instituicoes/nova" className="btn-primary ml-auto min-h-[44px] px-4 py-2 text-sm">
           Nova ILPI
         </Link>
@@ -66,7 +66,7 @@ export function PlatformInstituicoes() {
       />
 
       {erro && (
-        <div role="alert" className="text-sm p-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">
+        <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
           {erro}
         </div>
       )}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Ban, KeyRound, Pencil } from 'lucide-react'
+import { Ban, CheckCircle2, KeyRound, Pencil, UserRound } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../../context/PermissoesContext'
 import { Modal } from '../Modal'
 import type { User, Funcionario, Perfil } from '../../types/equipe'
@@ -168,7 +168,7 @@ export function UsuariosSection({
 
       {filtered.length === 0 && !loading && (
         <div className="card py-16 text-center">
-          <span className="text-4xl mb-3 block">👤</span>
+          <UserRound className="mx-auto mb-3 size-9 text-muted-foreground" aria-hidden="true" />
           <p className="text-textMuted font-medium">Nenhum usuário encontrado</p>
           <p className="text-xs text-textMuted mt-1">Crie um usuário ou conceda acesso a um funcionário existente.</p>
         </div>
@@ -202,7 +202,7 @@ export function UsuariosSection({
           <div className="space-y-4">
             <div className="text-center">
               <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-                <span className="text-2xl">✅</span>
+                <CheckCircle2 className="size-7 text-emerald-700" aria-hidden="true" />
               </div>
               <h4 className="font-semibold text-textMain">Senha redefinida</h4>
               <p className="text-sm text-textMuted mt-1">Nova senha temporária para {selectedUser?.nome}:</p>
@@ -220,7 +220,7 @@ export function UsuariosSection({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200">
+            <div className="p-3 rounded-xl bg-orange-50 border border-orange-200">
               <p className="text-sm text-textMuted">
                 Uma nova senha temporária será gerada para <strong>{selectedUser?.nome}</strong>.
                 As sessões atuais do usuário serão encerradas.

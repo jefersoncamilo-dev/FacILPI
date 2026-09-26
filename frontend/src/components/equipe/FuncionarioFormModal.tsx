@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { CheckCircle2, IdCard } from 'lucide-react'
 import { Modal } from '../Modal'
 import type { Funcionario, FuncionarioCreate, FuncionarioUpdate, Perfil } from '../../types/equipe'
 import { UF_VALIDAS, REGULATED_PROFESSIONS } from '../../types/equipe'
@@ -136,7 +137,7 @@ export function FuncionarioFormModal({ open, onClose, funcionario, perfis = [], 
         <div className="space-y-4">
           <div className="text-center">
             <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-              <span className="text-2xl">✅</span>
+              <CheckCircle2 className="size-7 text-emerald-700" aria-hidden="true" />
             </div>
             <h4 className="font-semibold text-textMain">Funcionário criado com acesso</h4>
             <p className="text-sm text-textMuted mt-1">Senha temporária para o novo usuário:</p>
@@ -189,7 +190,7 @@ export function FuncionarioFormModal({ open, onClose, funcionario, perfis = [], 
 
           {showConselho && (
             <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 space-y-3">
-              <p className="text-xs text-primary font-medium">📋 Dados do conselho profissional (obrigatórios)</p>
+              <p className="flex items-center gap-1.5 text-xs text-primary font-medium"><IdCard className="size-4" aria-hidden="true" /> Dados do conselho profissional (obrigatórios)</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="text-xs text-textMuted font-medium">Conselho *</label>

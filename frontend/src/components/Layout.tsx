@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { ChevronRight, ClipboardList, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, Users } from 'lucide-react'
+import { ChevronRight, ClipboardList, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, Settings, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'
 import { mensagemDeErro } from '../services/api'
@@ -13,14 +13,16 @@ import { Button } from './ui/button'
 import { Label } from './ui/input'
 import { Alert, Skeleton } from './ui/feedback'
 import { Dialog, DialogContent, Sheet, SheetContent } from './ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './ui/dropdown-menu'
 import { ErrorBoundary } from './ui/states'
 
 /**
  * AppShell da ILPI (UX-01 / #83).
  *
- * Desktop (≥1024px): sidebar fixa agrupada por tarefa + barra superior com a
- * trilha e o contexto institucional. Mobile/tablet: cabeçalho com menu em
- * Sheet e navegação inferior com os destinos do dia a dia.
+ * Desktop (≥1280px): sidebar fixa agrupada por tarefa + barra superior com a
+ * trilha e o contexto institucional. Mobile e tablet (inclusive deitado):
+ * cabeçalho com menu em Sheet e navegação inferior com os destinos do dia a
+ * dia — padrão de toque, sem sidebar rolando (UX-11 / #101).
  *
  * O menu só mostra o que a sessão pode abrir (GET /auth/permissoes); isso
  * orienta a interface, não autoriza — cada rota do backend decide.
@@ -48,32 +50,32 @@ function Shell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-screen border-r border-border bg-card lg:block">
+    <div className="min-h-screen bg-background xl:grid xl:grid-cols-[264px_minmax(0,1fr)]">
+      <aside className="sticky top-0 hidden h-screen border-r border-border bg-card xl:block">
         <PainelNavegacao onAlterarSenha={abrirSenha} />
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col">
         {/* Mobile/tablet */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-card/95 px-3 backdrop-blur sm:px-5 lg:hidden">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-card/95 px-3 backdrop-blur sm:px-5 xl:hidden">
           <Button variant="ghost" size="icon" aria-label="Abrir menu" onClick={() => setMenuAberto(true)}>
             <Menu className="!size-5" aria-hidden="true" />
           </Button>
           <Logo />
-          <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground sm:block">
+          <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-slate-600 sm:block">
             {contextTitle(activeContext)}
           </span>
         </header>
 
         {/* Desktop */}
-        <header className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-border bg-background/90 px-8 backdrop-blur lg:flex">
+        <header className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-border bg-background/90 px-8 backdrop-blur xl:flex">
           <Trilha pathname={pathname} />
           <div className="ml-auto">
             <ContextSwitcher compact />
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-8 xl:pb-10 xl:pt-8">
           <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
         </main>
 
@@ -110,7 +112,8 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
         </div>
       )}
 
-      <nav aria-label="Navegação principal" className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+      {/* UX-11: compacto para caber sem rolagem em 1080p (12 itens, 4 grupos). */}
+      <nav aria-label="Navegação principal" className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
         {status === 'carregando' ? (
           <div className="space-y-3 px-3" aria-label="Carregando menu">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -123,7 +126,7 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
             if (itens.length === 0) return null
             return (
               <div key={grupo.titulo}>
-                <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                   {grupo.titulo}
                 </p>
                 <ul className="space-y-0.5">
@@ -134,15 +137,15 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
                         end={item.to === '/'}
                         className={({ isActive }) =>
                           cn(
-                            'group relative flex min-h-[44px] items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+                            'group relative flex min-h-[40px] items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
                             isActive
-                              ? 'bg-accent font-semibold text-accent-foreground before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-brand'
+                              ? 'bg-brand-soft font-semibold text-accent-foreground'
                               : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                           )
                         }
                       >
                         <item.icon className="size-[18px] shrink-0" aria-hidden="true" />
-                        <span className="min-w-0 flex-1 py-1.5">
+                        <span className="min-w-0 flex-1 py-1">
                           <span className="block truncate">{item.label}</span>
                           {item.emBreve && (
                             <span className="block text-[11px] font-normal leading-tight text-muted-foreground">Em breve</span>
@@ -158,28 +161,37 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
         )}
       </nav>
 
-      <div className="shrink-0 space-y-3 border-t border-border p-4">
-        <div className="flex items-center gap-3">
-          {/* PH-01: o avatar é só identificação — nunca botão, nunca logout. */}
-          <div
-            aria-hidden="true"
-            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-primary"
-          >
-            {inicial}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-foreground">{user?.nome || 'Usuário'}</p>
-            <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
-          </div>
+      <div className="flex shrink-0 items-center gap-3 border-t border-border px-4 py-3">
+        {/* PH-01: o avatar é só identificação — nunca botão, nunca logout. */}
+        <div
+          aria-hidden="true"
+          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-primary"
+        >
+          {inicial}
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="outline" className="h-11 px-2 text-xs" onClick={onAlterarSenha}>
-            <KeyRound aria-hidden="true" /> Alterar senha
-          </Button>
-          <Button variant="ghost" className="h-11 px-2 text-xs text-foreground" onClick={logout}>
-            <LogOut aria-hidden="true" /> Sair
-          </Button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">{user?.nome || 'Usuário'}</p>
+          <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
         </div>
+        {/* UX-11: Alterar senha e Sair num menu da conta, com a barra limpa.
+            "Sair" continua explícito (PH-01), agora como item do menu. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" aria-label="Menu da conta" className="shrink-0 text-muted-foreground">
+              <Settings className="!size-5" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="top" align="end">
+            <DropdownMenuLabel>{user?.nome || 'Sua conta'}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onAlterarSenha}>
+              <KeyRound aria-hidden="true" /> Alterar senha
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => { void logout() }} className="text-red-700 [&_svg]:text-red-700">
+              <LogOut aria-hidden="true" /> Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
@@ -227,7 +239,7 @@ function NavegacaoInferior({ onMenu }: { onMenu: () => void }) {
   return (
     <nav
       aria-label="Navegação rápida"
-      className="fixed inset-x-0 bottom-0 z-30 flex gap-1 border-t border-border bg-card/95 px-2 pt-1.5 backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 flex gap-1 border-t border-border bg-card/95 px-2 pt-1.5 backdrop-blur xl:hidden"
       style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
     >
       {destinos.map(d => (

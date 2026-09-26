@@ -7,17 +7,22 @@
  * Canvas #F8FAFC, neutros amplos, esmeralda para identidade, acao e selecao.
  * `--primary` e o esmeralda -700 (#047857): texto branco sobre ele passa AA;
  * #10B981 e #059669 ficam para marca, foco e superficies grandes.
+ *
+ * UX-11 (#101) — Design System coeso: texto principal #1E293B; atencao em
+ * laranja (#EA580C para icones/numeros, #C2410C para preenchido com texto
+ * branco, AA) e critico em vermelho (#DC2626). Amarelo/ambar nao sinaliza
+ * alerta de prioridade.
  */
 @layer base {
   :root {
     --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
+    --foreground: 217 33% 17%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    --card-foreground: 217 33% 17%;
     --primary: 163 94% 24%;
     --primary-foreground: 0 0% 100%;
     --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
+    --secondary-foreground: 217 33% 17%;
     --muted: 210 40% 96%;
     --muted-foreground: 215 16% 47%;
     --accent: 152 81% 96%;
@@ -31,6 +36,9 @@
     --brand-strong: 161 94% 30%;
     --brand-soft: 152 81% 96%;
     --brand-ink: 164 86% 16%;
+    --alerta: 21 90% 48%;
+    --alerta-forte: 17 88% 40%;
+    --critico: 0 72% 51%;
     --radius: 0.75rem;
   }
 
@@ -53,8 +61,10 @@
    as primitivas de components/ui. */
 @layer components {
   .card { @apply bg-card text-card-foreground rounded-card shadow-card p-5 border border-border; }
-  .btn-primary { @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none; }
-  .btn-secondary { @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted transition-colors min-h-[44px]; }
+  .btn-primary { @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60; }
+  .btn-secondary { @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted active:bg-slate-200 active:scale-[.98] transition min-h-[44px]; }
+  /* Acao que pede atencao (ex.: registrar intercorrencia): preenchida, AA. */
+  .btn-alerta { @apply bg-alerta-forte text-white rounded-lg px-5 py-3 font-semibold hover:bg-orange-800 active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60; }
   .input { @apply w-full rounded-lg border border-input bg-card px-4 py-3 text-[16px] placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-brand-strong; }
   .badge-success { @apply bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
   .badge-warning { @apply bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }

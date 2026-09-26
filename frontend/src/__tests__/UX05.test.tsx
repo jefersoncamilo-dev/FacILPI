@@ -32,8 +32,8 @@ const mockPermissoes = vi.mocked(contextApi.permissoesDaSessao)
 
 const HORA = 60 * 60 * 1000
 const ATRASADO = { origem: 'cuidado', registro_id: 'oc-1', residente_id: 'r1', descricao: 'Banho assistido', previsto_em: new Date(Date.now() - HORA).toISOString(), prioridade: 'alta' }
-const PROXIMO = { origem: 'medicacao', registro_id: 'dose-1', residente_id: 'r1', descricao: 'Dose de losartana', previsto_em: new Date(Date.now() + HORA).toISOString(), prioridade: null }
-const SEM_HORA = { origem: 'intercorrencia', registro_id: 'int-1', residente_id: 'r1', descricao: 'Queda sem lesão', previsto_em: null, prioridade: null }
+const PROXIMO = { origem: 'medicacao', registro_id: 'dose-1', residente_id: 'r1', descricao: 'Dose prevista de medicacao', previsto_em: new Date(Date.now() + HORA).toISOString(), prioridade: null }
+const SEM_HORA = { origem: 'intercorrencia', registro_id: 'int-1', residente_id: 'r1', descricao: 'Intercorrencia aberta: Queda sem lesão', previsto_em: null, prioridade: null }
 
 function responde(plantao: unknown[] = [ATRASADO, PROXIMO, SEM_HORA]) {
   mockGet.mockImplementation((url: string) => {
@@ -62,13 +62,13 @@ describe('UX-05 — Meu Plantão', () => {
     renderCom(<MeuPlantao />, TUDO)
     const atrasadas = await screen.findByRole('region', { name: 'Atrasadas' })
     expect(within(atrasadas).getByText('Banho assistido')).toBeTruthy()
-    expect(within(screen.getByRole('region', { name: 'Próximas' })).getByText('Dose de losartana')).toBeTruthy()
-    expect(within(screen.getByRole('region', { name: 'Sem horário' })).getByText('Queda sem lesão')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Próximas' })).getByText('Dose prevista de medicação')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Intercorrências abertas' })).getByText('Intercorrência aberta: Queda sem lesão')).toBeTruthy()
   })
 
   it('sem permissão da ação, a pendência continua visível mas sem botão', async () => {
     renderCom(<MeuPlantao />, ['plantao:ler', 'execucoes:criar'])
-    await screen.findByText('Queda sem lesão')
+    await screen.findByText('Intercorrência aberta: Queda sem lesão')
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Encerrar' })).toBeNull())
     expect(screen.queryByRole('button', { name: 'Registrar administração' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Registrar execução' })).toBeTruthy()

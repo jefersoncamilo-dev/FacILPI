@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowRight, BedDouble, ClipboardList, Pill, RefreshCw, TriangleAlert } from 'lucide-react'
 import { formatDateTime } from '../services/api'
-import { getPlantao, getResidentesResumo, type PlantaoItem } from '../services/plantao'
+import { getPlantao, getResidentesResumo, rotuloDoItem, type PlantaoItem } from '../services/plantao'
 import { GRAVIDADES, getIntercorrencias, INTERCORRENCIAS_LIMIT_PADRAO, type Intercorrencia } from '../services/intercorrencias'
 import { ausenciasApi, ROTULO_AUSENCIA, type Ausencia } from '../services/leitos'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
@@ -194,9 +194,9 @@ export function PassagemPlantao() {
 
 function Numero({ rotulo, valor, destaque }: { rotulo: string; valor: number | null; destaque?: boolean }) {
   return (
-    <div className={cn('rounded-card border bg-card p-4 shadow-card', destaque ? 'border-amber-300' : 'border-border')}>
+    <div className={cn('rounded-card border bg-card p-4 shadow-card', destaque ? 'border-orange-300' : 'border-border')}>
       <dt className="text-xs text-muted-foreground">{rotulo}</dt>
-      <dd className={cn('mt-1 font-display text-2xl font-bold', destaque ? 'text-amber-800' : 'text-foreground')}>{valor ?? '—'}</dd>
+      <dd className={cn('mt-1 font-display text-2xl font-bold', destaque ? 'text-orange-800' : 'text-foreground')}>{valor ?? '—'}</dd>
     </div>
   )
 }
@@ -234,11 +234,11 @@ function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; j
       )}
 
       {r.abertas.map(({ item, detalhe }) => (
-        <div key={item.registro_id} className="rounded-lg border border-amber-200 bg-amber-50/60 px-3 py-2 text-sm">
-          <p className="flex items-center gap-2 font-medium text-amber-900"><TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-            {detalhe ? <>{detalhe.tipo}{detalhe.gravidade ? ` · ${ROTULO_GRAVIDADE[detalhe.gravidade] || detalhe.gravidade}` : ''}</> : item.descricao}
+        <div key={item.registro_id} className="rounded-lg border border-orange-200 bg-orange-50/60 px-3 py-2 text-sm">
+          <p className="flex items-center gap-2 font-medium text-orange-900"><TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+            {detalhe ? <>{detalhe.tipo}{detalhe.gravidade ? ` · ${ROTULO_GRAVIDADE[detalhe.gravidade] || detalhe.gravidade}` : ''}</> : rotuloDoItem(item)}
           </p>
-          {detalhe?.ocorrido_em && <p className="text-xs text-amber-900/80">Aberta desde {formatDateTime(detalhe.ocorrido_em)}{detalhe.responsavel ? ` · ${detalhe.responsavel}` : ''}</p>}
+          {detalhe?.ocorrido_em && <p className="text-xs text-orange-900/80">Aberta desde {formatDateTime(detalhe.ocorrido_em)}{detalhe.responsavel ? ` · ${detalhe.responsavel}` : ''}</p>}
           {detalhe?.sbar_recomendacao && <p className="mt-1 text-foreground"><strong className="font-semibold">Recomendação:</strong> {detalhe.sbar_recomendacao}</p>}
           {detalhe?.providencia && <p className="text-foreground"><strong className="font-semibold">Providência:</strong> {detalhe.providencia}</p>}
         </div>
@@ -258,7 +258,7 @@ function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; j
               <li key={p.registro_id} className="flex items-center gap-2 text-sm">
                 {p.origem === 'medicacao' ? <Pill className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ClipboardList className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
                 <span className="tabular-nums text-muted-foreground">{formatDateTime(p.previsto_em)}</span>
-                <span className="text-foreground">{p.origem === 'medicacao' ? 'Dose prevista de medicação' : p.descricao}</span>
+                <span className="text-foreground">{rotuloDoItem(p)}</span>
               </li>
             ))}
           </ul>

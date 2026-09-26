@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  ArrowRight,
+  Activity,
   BedDouble,
   ClipboardList,
   DoorOpen,
@@ -12,12 +12,16 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { api } from '../services/api'
-import { getPlantao, PLANTAO_LIMIT_PADRAO, type PlantaoItem } from '../services/plantao'
+import { getPlantao, PLANTAO_LIMIT_PADRAO, rotuloDoItem, type PlantaoItem } from '../services/plantao'
 import { getResumoDashboard, type DashboardResumo } from '../services/dashboard'
+import { getSinaisVitais, type SinalVital } from '../services/sinaisVitais'
+import { getIntercorrencias, GRAVIDADES, type Intercorrencia } from '../services/intercorrencias'
 import { useAuth } from '../context/AuthContext'
 import { usePermissoes } from '../context/PermissoesContext'
 import { MetricCard } from '../components/ui/metric-card'
 import { Badge, Skeleton } from '../components/ui/feedback'
+import { Button } from '../components/ui/button'
+import { rotuloSituacaoResidente } from '../lib/rotulos'
 
 /**
  * Início (UX-02 / #85). Responde à pergunta de quem abre:
@@ -57,8 +61,10 @@ function dataPorExtenso(agora = new Date()): string {
   return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' }).format(agora)
 }
 
+// Sem horário previsto só existe para intercorrência aberta: o estado real é
+// "Aberta" (UX-11), não "sem hora".
 function horaPrevista(iso?: string | null): string {
-  if (!iso) return 'sem hora'
+  if (!iso) return 'Aberta'
   return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(iso))
 }
 
@@ -97,12 +103,14 @@ export function Dashboard() {
 
   const nomes = new Map((residentes.status === 'ok' ? residentes.dados : []).map(r => [r.id, r.nome]))
   const cards = montarIndicadores({ resumo, pendencias, gestao, pode, podePlantao })
-  const acoes = [
-    { to: '/sinais', label: 'Registrar sinal vital', icon: HeartPulse, permissao: 'sinais_vitais:criar' },
-    { to: '/intercorrencias', label: 'Registrar intercorrência', icon: TriangleAlert, permissao: 'intercorrencias:criar' },
-    { to: '/plantao', label: 'Abrir Meu Plantão', icon: ClipboardList, permissao: 'plantao:ler' },
-    { to: '/residentes', label: 'Cadastrar residente', icon: UserPlus, permissao: 'residentes:criar' },
-  ].filter(a => pode(a.permissao))
+  // UX-11: as ações do dia a dia são botões preenchidos e abrem o registro
+  // direto (`?registrar=1`); as demais ficam como secundárias.
+  const acoes = ([
+    { to: '/sinais?registrar=1', label: 'Registrar sinal vital', icon: HeartPulse, permissao: 'sinais_vitais:criar', variante: 'default' },
+    { to: '/intercorrencias?registrar=1', label: 'Registrar intercorrência', icon: TriangleAlert, permissao: 'intercorrencias:criar', variante: 'alerta' },
+    { to: '/plantao', label: 'Abrir Meu Plantão', icon: ClipboardList, permissao: 'plantao:ler', variante: 'outline' },
+    { to: '/residentes', label: 'Cadastrar residente', icon: UserPlus, permissao: 'residentes:criar', variante: 'outline' },
+  ] as const).filter(a => pode(a.permissao))
 
   return (
     <div className="space-y-6">
@@ -143,22 +151,21 @@ export function Dashboard() {
         <div className="space-y-6">
           {acoes.length > 0 && (
             <Painel titulo="Ações rápidas">
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {acoes.map(a => (
                   <li key={a.label}>
-                    <Link
-                      to={a.to}
-                      className="group flex min-h-[48px] items-center gap-3 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:border-brand/50 hover:bg-accent"
-                    >
-                      <a.icon className="size-[18px] shrink-0 text-primary" aria-hidden="true" />
-                      <span className="flex-1">{a.label}</span>
-                      <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
-                    </Link>
+                    <Button asChild variant={a.variante} size="lg" className="w-full justify-start text-sm">
+                      <Link to={a.to}>
+                        <a.icon aria-hidden="true" />
+                        {a.label}
+                      </Link>
+                    </Button>
                   </li>
                 ))}
               </ul>
             </Painel>
           )}
+          <AtividadeRecente nomes={nomes} />
           {gestao && <ProcessosEmAndamento resumo={resumo} />}
         </div>
       </div>
@@ -197,7 +204,7 @@ function montarIndicadores({
         valor={pendencias.status === 'ok'
           ? pendencias.dados.length >= PLANTAO_LIMIT_PADRAO ? `${PLANTAO_LIMIT_PADRAO}+` : pendencias.dados.length
           : INDISPONIVEL}
-        atencao={pendencias.status === 'ok' && pendencias.dados.length > 0}
+        tom={pendencias.status !== 'ok' ? 'neutro' : pendencias.dados.length > 0 ? 'alerta' : 'normal'}
         detalhe={pendencias.status === 'erro' ? indisponivel : 'Próximas 24 horas'}
         acao={<Link to="/plantao" className={LINK}>Ver Meu Plantão</Link>}
       />
@@ -211,6 +218,7 @@ function montarIndicadores({
         titulo="Residentes cadastrados"
         carregando={carregando}
         valor={dados?.residentes_total ?? INDISPONIVEL}
+        tom={dados ? 'normal' : 'neutro'}
         detalhe={dados ? undefined : indisponivel}
         acao={<Link to="/residentes" className={LINK}>Ver residentes</Link>}
       />
@@ -224,6 +232,7 @@ function montarIndicadores({
         titulo="Ocupação de leitos"
         carregando={carregando}
         valor={dados?.ocupacao ? `${dados.ocupacao.ocupados}/${dados.ocupacao.leitos_ativos}` : INDISPONIVEL}
+        tom={dados?.ocupacao ? 'normal' : 'neutro'}
         detalhe={!dados?.ocupacao
           ? indisponivel
           : dados.ocupacao.leitos_ativos === 0
@@ -238,6 +247,7 @@ function montarIndicadores({
         titulo="Ausentes agora"
         carregando={carregando}
         valor={dados?.ausencias_ativas?.total ?? INDISPONIVEL}
+        tom={dados?.ausencias_ativas ? 'normal' : 'neutro'}
         detalhe={dados?.ausencias_ativas
           ? `${dados.ausencias_ativas.hospitalizacoes} em hospitalização`
           : indisponivel}
@@ -250,7 +260,7 @@ function montarIndicadores({
         titulo="Intercorrências abertas"
         carregando={carregando}
         valor={dados?.intercorrencias_abertas ?? INDISPONIVEL}
-        atencao={(dados?.intercorrencias_abertas ?? 0) > 0}
+        tom={dados?.intercorrencias_abertas == null ? 'neutro' : dados.intercorrencias_abertas > 0 ? 'alerta' : 'normal'}
         detalhe={dados ? undefined : indisponivel}
         acao={<Link to="/intercorrencias" className={LINK}>Ver intercorrências</Link>}
       />
@@ -261,6 +271,85 @@ function montarIndicadores({
     ? ['residentes', 'ocupacao', 'ausencias', 'intercorrencias', 'pendencias']
     : ['pendencias', 'intercorrencias', 'residentes', 'ausencias', 'ocupacao']
   return ordem.map(k => card[k]).filter(Boolean).slice(0, 4)
+}
+
+const JANELA_ATIVIDADE_H = 12
+const ROTULO_GRAVIDADE = Object.fromEntries(GRAVIDADES.map(g => [g.value, g.label])) as Record<string, string>
+
+type Registro = { id: string; residenteId: string; quando: number; texto: string; tipo: 'sinal' | 'intercorrencia'; grave?: boolean }
+
+/**
+ * Atividade recente no turno (UX-11 / #101): os últimos registros das
+ * últimas 12 h, lidos das listas oficiais de sinais vitais e intercorrências
+ * — nada criado nem copiado. Cada fonte só é consultada com a própria
+ * permissão; fonte que falha vira aviso de visão parcial, nunca "nada".
+ */
+function AtividadeRecente({ nomes }: { nomes: Map<string, string> }) {
+  const { pode } = usePermissoes()
+  const podeSinais = pode('sinais_vitais:ler')
+  const podeIntercorrencias = pode('intercorrencias:ler')
+  const [carga, setCarga] = useState<{ status: 'carregando' } | { status: 'ok'; registros: Registro[]; parcial: boolean }>({ status: 'carregando' })
+
+  useEffect(() => {
+    if (!podeSinais && !podeIntercorrencias) return
+    let vigente = true
+    const desde = Date.now() - JANELA_ATIVIDADE_H * 3600_000
+    const quando = (iso?: string | null) => (iso ? Date.parse(iso) : NaN)
+    Promise.allSettled([
+      podeSinais ? getSinaisVitais({ limit: 30 }) : Promise.resolve([] as SinalVital[]),
+      podeIntercorrencias ? getIntercorrencias({ limit: 30 }) : Promise.resolve([] as Intercorrencia[]),
+    ]).then(([sinais, intercorrencias]) => {
+      if (!vigente) return
+      const registros: Registro[] = []
+      if (sinais.status === 'fulfilled') {
+        for (const s of sinais.value) registros.push({ id: `s:${s.id}`, residenteId: s.residente_id, quando: quando(s.data), texto: 'Sinais vitais aferidos', tipo: 'sinal' })
+      }
+      if (intercorrencias.status === 'fulfilled') {
+        for (const i of intercorrencias.value) {
+          registros.push({
+            id: `i:${i.id}`, residenteId: i.residente_id, quando: quando(i.ocorrido_em), tipo: 'intercorrencia', grave: i.gravidade === 'grave',
+            texto: `Intercorrência: ${i.tipo}${i.gravidade ? ` (${(ROTULO_GRAVIDADE[i.gravidade] || i.gravidade).toLowerCase()})` : ''}${i.situacao === 'encerrada' ? ' · encerrada' : ''}`,
+          })
+        }
+      }
+      setCarga({
+        status: 'ok',
+        registros: registros.filter(r => r.quando >= desde).sort((a, b) => b.quando - a.quando).slice(0, 6),
+        parcial: sinais.status === 'rejected' || intercorrencias.status === 'rejected',
+      })
+    })
+    return () => { vigente = false }
+  }, [podeSinais, podeIntercorrencias])
+
+  if (!podeSinais && !podeIntercorrencias) return null
+  return (
+    <Painel titulo="Atividade recente no turno">
+      {carga.status === 'carregando' ? <Carregando /> : (
+        <div className="space-y-3">
+          {carga.parcial && <p className="text-xs text-orange-800">Parte da atividade não pôde ser consultada agora.</p>}
+          {carga.registros.length === 0 ? (
+            carga.parcial ? null : <Vazio icon={Activity} titulo={`Nenhum registro nas últimas ${JANELA_ATIVIDADE_H} horas`} texto="Sinais vitais e intercorrências registrados aparecem aqui." />
+          ) : (
+            <ul className="space-y-0.5">
+              {carga.registros.map(r => (
+                <li key={r.id}>
+                  {/* A linha inteira leva ao prontuário: alvo de toque de 44px. */}
+                  <Link to={`/residentes/${r.residenteId}`} className="-mx-2 flex min-h-[44px] items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted">
+                    <span className="w-12 shrink-0 text-sm font-semibold tabular-nums text-foreground">{horaPrevista(new Date(r.quando).toISOString())}</span>
+                    <span aria-hidden="true" className={r.tipo === 'sinal' ? 'size-2 shrink-0 rounded-full bg-brand' : r.grave ? 'size-2 shrink-0 rounded-full bg-critico' : 'size-2 shrink-0 rounded-full bg-alerta'} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-foreground">{r.texto}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{nomes.get(r.residenteId) || 'Abrir prontuário'}</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </Painel>
+  )
 }
 
 function Painel({ titulo, acao, children }: { titulo: string; acao?: ReactNode; children: ReactNode }) {
@@ -289,7 +378,7 @@ function Vazio({ icon: Icon, titulo, texto, children }: { icon: LucideIcon; titu
 function Falha({ titulo, texto }: { titulo: string; texto: string }) {
   return (
     <div role="alert" className="flex flex-col items-center py-6 text-center">
-      <TriangleAlert className="mb-2 size-7 text-amber-700" aria-hidden="true" />
+      <TriangleAlert className="mb-2 size-7 text-orange-700" aria-hidden="true" />
       <p className="text-sm font-medium text-foreground">{titulo}</p>
       <p className="mt-1 text-xs text-muted-foreground">{texto}</p>
     </div>
@@ -316,11 +405,11 @@ function ListaPendencias({ carga, nomes }: { carga: Carga<PlantaoItem[]>; nomes:
     <ul className="divide-y divide-border">
       {carga.dados.slice(0, 6).map(item => (
         <li key={`${item.origem}:${item.registro_id}`} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
-          <span className={item.previsto_em ? 'w-12 shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-foreground' : 'w-12 shrink-0 pt-1 text-[11px] leading-tight text-muted-foreground'}>
+          <span className={item.previsto_em ? 'w-12 shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-foreground' : 'w-12 shrink-0 pt-0.5 text-xs font-semibold text-alerta-forte'}>
             {horaPrevista(item.previsto_em)}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground">{item.descricao}</p>
+            <p className="text-sm font-medium text-foreground">{rotuloDoItem(item)}</p>
             <p className="truncate text-xs text-muted-foreground">{nomes.get(item.residente_id) || 'Residente'}</p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1">
@@ -356,7 +445,7 @@ function ListaResidentes({ carga, podeCriar }: { carga: Carga<ResidenteResumo[]>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-medium text-foreground">{r.nome}</span>
               {/* PH02-03 (#71): a situação exibida é a real; nenhum selo "Ativo" inventado. */}
-              <span className="block truncate text-xs text-muted-foreground">{r.situacao || 'Situação não informada'} • {r.grau_dependencia || 'Sem grau'}</span>
+              <span className="block truncate text-xs text-muted-foreground">{r.situacao ? rotuloSituacaoResidente(r.situacao) : 'Situação não informada'} • {r.grau_dependencia || 'Sem grau'}</span>
             </span>
           </Link>
         </li>
@@ -381,7 +470,7 @@ function ProcessosEmAndamento({ resumo }: { resumo: Carga<DashboardResumo> }) {
   const linha = (rotulo: string, valor: number, destaque = false) => (
     <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
       <dt className="text-muted-foreground">{rotulo}</dt>
-      <dd className={destaque && valor > 0 ? 'font-semibold text-amber-800' : 'font-semibold text-foreground'}>{valor}</dd>
+      <dd className={destaque && valor > 0 ? 'font-semibold text-orange-800' : 'font-semibold text-foreground'}>{valor}</dd>
     </div>
   )
   return (

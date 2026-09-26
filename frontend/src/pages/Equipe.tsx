@@ -132,7 +132,7 @@ export function Equipe() {
             className={`flex-1 min-w-0 px-2 sm:px-4 py-3 rounded-lg text-[13px] sm:text-sm font-medium transition min-h-[44px] whitespace-nowrap ${
               tab === t.key
                 ? 'bg-card text-primary shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
+                : 'text-slate-600 hover:text-foreground'
             }`}
           >
             {t.label}
@@ -162,7 +162,7 @@ export function Equipe() {
                 className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition min-h-[44px] ${
                   situacaoFilter === f.value
                     ? 'bg-primary text-white'
-                    : 'bg-slate-100 text-textMuted hover:bg-slate-200'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
                 {f.label}

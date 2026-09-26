@@ -45,6 +45,12 @@ export default {
           soft: token("brand-soft"),
           ink: token("brand-ink"),
         },
+        // UX-11 (#101): atencao (laranja) e critico (vermelho).
+        alerta: {
+          DEFAULT: token("alerta"),
+          forte: token("alerta-forte"),
+        },
+        critico: token("critico"),
         // Nomes legados das telas existentes, remapeados para a nova
         // identidade. Cada jornada migra as proprias telas para os tokens acima.
         primaryDeep: token("foreground"),
@@ -55,7 +61,7 @@ export default {
         textMuted: token("muted-foreground"),
         // Tons -700: texto pequeno sobre fundo claro precisa de contraste AA.
         success: "#047857",
-        warning: "#B45309",
+        warning: "#C2410C",
         danger: "#DC2626",
       },
       borderRadius: {
@@ -65,8 +71,8 @@ export default {
         card: "calc(var(--radius) + 4px)",
       },
       boxShadow: {
-        card: "0 1px 2px rgb(15 23 42 / 0.04), 0 1px 3px rgb(15 23 42 / 0.06)",
-        cardHover: "0 4px 12px rgb(15 23 42 / 0.08)",
+        card: "0 2px 8px rgb(0 0 0 / 0.04)",
+        cardHover: "0 6px 16px rgb(0 0 0 / 0.08)",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],

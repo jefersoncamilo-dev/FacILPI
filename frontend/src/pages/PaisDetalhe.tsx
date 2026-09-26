@@ -162,7 +162,7 @@ export function PaisDetalhe() {
               {SECOES.map(s => {
                 const ok = ativos[s.tipo].length > 0
                 return (
-                  <li key={s.tipo} className={cn('flex items-center gap-2', ok ? 'text-emerald-800' : 'text-amber-800')}>
+                  <li key={s.tipo} className={cn('flex items-center gap-2', ok ? 'text-emerald-800' : 'text-orange-800')}>
                     {ok ? <CheckCircle2 className="size-4" aria-hidden="true" /> : <CircleDot className="size-4" aria-hidden="true" />}
                     Ao menos uma {s.singular} ativa{ok ? '' : ' — pendente'}
                   </li>
@@ -250,7 +250,7 @@ export function PaisDetalhe() {
           )}
         </section>
       )}
-      {p.anterior_id && <p className="text-xs text-muted-foreground"><Link to={`/plano/${p.anterior_id}`} className="font-medium text-primary hover:underline">Ver versão anterior</Link></p>}
+      {p.anterior_id && <p className="text-xs text-muted-foreground"><Link to={`/plano/${p.anterior_id}`} className="inline-flex min-h-[32px] items-center font-medium text-primary hover:underline">Ver versão anterior</Link></p>}
 
       {(dialogo === 'necessidades' || dialogo === 'metas' || dialogo === 'intervencoes') && (
         <DialogoItem tipo={dialogo} plano={p} equipe={equipe} aoFechar={() => setDialogo(null)}
