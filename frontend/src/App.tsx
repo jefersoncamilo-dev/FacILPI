@@ -15,6 +15,8 @@ import { Placeholder } from './pages/Placeholder'
 import { Admissoes } from './pages/Admissoes'
 import { AdmissaoDetalhe } from './pages/AdmissaoDetalhe'
 import { QuartosLeitos } from './pages/QuartosLeitos'
+import { Pais } from './pages/Pais'
+import { PaisDetalhe } from './pages/PaisDetalhe'
 import { ErrorBoundary } from './components/ui/states'
 import { Equipe } from './pages/Equipe'
 import { PlatformRoute } from './components/PlatformRoute'
@@ -51,7 +53,8 @@ export default function App() {
           <Route path="/admissoes" element={<Protected><Admissoes /></Protected>} />
           <Route path="/admissoes/:id" element={<Protected><AdmissaoDetalhe /></Protected>} />
           <Route path="/avaliacoes" element={<Protected><Placeholder title="Avaliações" emConstrucao /></Protected>} />
-          <Route path="/plano" element={<Protected><Placeholder title="Plano de Cuidados" emConstrucao /></Protected>} />
+          <Route path="/plano" element={<Protected><Pais /></Protected>} />
+          <Route path="/plano/:id" element={<Protected><PaisDetalhe /></Protected>} />
           <Route path="/cuidados" element={<Protected><Placeholder title="Cuidados Diários" /></Protected>} />
           <Route path="/medicacao" element={<Protected><Placeholder title="Medicação" /></Protected>} />
           <Route path="/sinais" element={<Protected><SinaisVitais /></Protected>} />

@@ -24,7 +24,7 @@ const ONDE_RESOLVER: Partial<Record<Etapa, { rotulo: string; to?: string; emBrev
   documentacao: { rotulo: 'Documentos', to: '/documentos' },
   avaliacoes: { rotulo: 'Avaliações', emBreve: true },
   quarto_leito: { rotulo: 'Quartos e leitos', to: '/quartos' },
-  pais: { rotulo: 'Plano de cuidados (PAIS)', emBreve: true },
+  pais: { rotulo: 'Plano de cuidados (PAIS)', to: '/plano' },
 }
 
 type Acao = 'cancelar' | 'desistir' | 'reabrir' | 'contrato'

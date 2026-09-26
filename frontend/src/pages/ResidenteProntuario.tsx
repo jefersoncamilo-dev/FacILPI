@@ -227,6 +227,15 @@ export function ResidenteProntuario() {
                   Documentos
                 </Link>
               )}
+              {/* UX-07: mesmo padrão — navegação para o PAIS do residente. */}
+              {id && pode('planos_cuidados:ler') && (
+                <Link
+                  to={`/plano?residente=${id}`}
+                  className="btn-secondary w-full sm:w-auto text-center inline-flex items-center justify-center"
+                >
+                  Plano de cuidados
+                </Link>
+              )}
             </div>
 
             {semPermissaoSinais && (
