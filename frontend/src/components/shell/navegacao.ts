@@ -59,7 +59,7 @@ export const NAVEGACAO: GrupoNav[] = [
       { to: '/residentes', label: 'Residentes', icon: Users, permissao: 'residentes:ler' },
       { to: '/admissoes', label: 'Admissões', icon: UserPlus, permissao: 'admissoes:ler' },
       { to: '/avaliacoes', label: 'Avaliações', icon: ClipboardCheck, permissao: 'avaliacoes:ler', emBreve: { issue: 79 } },
-      { to: '/plano', label: 'Plano de Cuidados', icon: NotebookPen, permissao: 'planos_cuidados:ler', emBreve: { issue: 80 } },
+      { to: '/plano', label: 'Plano de Cuidados', icon: NotebookPen, permissao: 'planos_cuidados:ler' },
       { to: '/documentos', label: 'Documentos', icon: FileText, permissao: 'documentos:ler' },
       { to: '/quartos', label: 'Quartos e Leitos', icon: BedDouble, permissao: 'quartos_leitos:ler' },
     ],
