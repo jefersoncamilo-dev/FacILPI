@@ -120,6 +120,36 @@ async def _record(db, obj, context, request, acao, before=None, motivo=None, ver
     return after
 
 
+async def _ativar_residente(db, obj, context, request):
+    """UX-03 / #76: conclusao da admissao e o marco de entrada do residente.
+
+    Na mesma transacao da conclusao: situacao "Ativo" e data_admissao na data
+    local da ILPI derivada de concluida_em. So isso — nenhuma outra automacao
+    (tarefas, alertas, financeiro, familia) nasce da conclusao (DOMAIN_RULES).
+    Reabrir uma admissao ja concluida NAO desfaz esta mudanca: essa semantica
+    ainda nao tem regra decidida e nao e inventada aqui.
+    """
+    residente = await _residente(db, obj.residente_id, context, lock=True)
+    institution = await db.get(m.Instituicao, context.ilpi_id)
+    try:
+        fuso = ZoneInfo(institution.fuso_horario or "America/Sao_Paulo")
+    except ZoneInfoNotFoundError:
+        _fail("Fuso horario institucional invalido", 422)
+    antes = {"situacao": residente.situacao, "data_admissao": _data_iso(residente.data_admissao)}
+    residente.situacao = "Ativo"
+    residente.data_admissao = obj.concluida_em.astimezone(fuso).date()
+    add_audit(db, acao="residente.admissao_concluida", entidade="residentes", registro_id=residente.id,
+              usuario_id=context.user.id, ilpi_id=context.ilpi_id, valores_anteriores=antes,
+              valores_posteriores={"situacao": residente.situacao,
+                                   "data_admissao": _data_iso(residente.data_admissao),
+                                   "admissao_id": obj.id},
+              request=request)
+
+
+def _data_iso(valor):
+    return valor.isoformat() if valor is not None else None
+
+
 async def _pendencias(db, obj, context, lock=False):
     # Na transicao, trava o pai (tambem impede novos filhos via FK no PG)
     # e as evidencias ate o commit. SQLite ja tem a trava de escrita do CAS.
@@ -263,6 +293,7 @@ async def _transicao(id, payload, request, db, context, acao):
                 if verificacao["pendencias"]:
                     _fail("Admissao possui pendencias", 422, pendencias=verificacao["pendencias"])
                 obj.situacao, obj.concluida_em = "concluida", _now()
+                await _ativar_residente(db, obj, context, request)
             elif acao == "cancelar":
                 obj.situacao, obj.cancelada_em, obj.motivo_cancelamento = "cancelada", _now(), payload.motivo
             elif acao == "desistir":

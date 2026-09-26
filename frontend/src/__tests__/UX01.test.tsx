@@ -122,11 +122,11 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
 
   it('marca como "Em breve" a tela ainda não entregue, sem esconder a permissão', async () => {
     seedSessao()
-    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['admissoes:ler'] } } as any)
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['avaliacoes:ler'] } } as any)
     renderShell()
 
-    const admissoes = await menu().findByRole('link', { name: /Admissões/ })
-    expect(within(admissoes).getByText('Em breve')).toBeTruthy()
+    const avaliacoes = await menu().findByRole('link', { name: /Avaliações/ })
+    expect(within(avaliacoes).getByText('Em breve')).toBeTruthy()
   })
 
   it('sem o endpoint, mostra os módulos prontos e deixa o backend decidir', async () => {

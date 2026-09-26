@@ -3,7 +3,8 @@
 import asyncio
 import json
 import os
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 import pytest
@@ -324,8 +325,19 @@ def test_conclusao_revalida_fontes_e_registra_auditoria(d3_db):
         after = json.loads(audit.valores_posteriores)
         assert after["verificacao"]["pendencias"] == [] and after["verificacao"]["pais_ids"] == [pais_id]
         assert audit.usuario_id == user.id and audit.ilpi_id == tenant.id
+        # UX-03 / #76: a conclusao e o marco de entrada — residente Ativo com
+        # data_admissao na data local da ILPI de concluida_em, na mesma transacao.
         await db.refresh(resident)
-        assert resident.situacao == "Em admissao" and resident.data_admissao is None
+        concluida_em = datetime.fromisoformat(completed["concluida_em"].replace("Z", "+00:00"))
+        fuso = ZoneInfo(tenant.fuso_horario or "America/Sao_Paulo")
+        assert resident.situacao == "Ativo"
+        assert resident.data_admissao == concluida_em.astimezone(fuso).date()
+        mudanca = await db.scalar(select(m.Auditoria).where(
+            m.Auditoria.acao == "residente.admissao_concluida", m.Auditoria.registro_id == resident.id))
+        assert mudanca is not None and mudanca.usuario_id == user.id and mudanca.ilpi_id == tenant.id
+        assert json.loads(mudanca.valores_anteriores) == {"situacao": "Em admissao", "data_admissao": None}
+        assert json.loads(mudanca.valores_posteriores)["admissao_id"] == obj["id"]
+        # Nenhuma outra automacao nasce da conclusao (DOMAIN_RULES).
         for table in (m.Tarefa, m.ProgramacaoCuidado, m.Intercorrencia, m.Alerta, m.Familiar, m.Avaliacao):
             assert await db.scalar(select(func.count()).select_from(table)) == 0
     asyncio.run(_client(d3_db, op))
