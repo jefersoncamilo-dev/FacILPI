@@ -14,6 +14,7 @@ import { Documentos } from './pages/Documentos'
 import { Placeholder } from './pages/Placeholder'
 import { Admissoes } from './pages/Admissoes'
 import { AdmissaoDetalhe } from './pages/AdmissaoDetalhe'
+import { QuartosLeitos } from './pages/QuartosLeitos'
 import { ErrorBoundary } from './components/ui/states'
 import { Equipe } from './pages/Equipe'
 import { PlatformRoute } from './components/PlatformRoute'
@@ -58,7 +59,7 @@ export default function App() {
           <Route path="/documentos" element={<Protected><Documentos /></Protected>} />
           <Route path="/agenda" element={<Protected><Placeholder title="Agenda Clínica" /></Protected>} />
           <Route path="/passagem" element={<Protected><Placeholder title="Passagem de Plantão" emConstrucao /></Protected>} />
-          <Route path="/quartos" element={<Protected><Placeholder title="Quartos e Leitos" emConstrucao /></Protected>} />
+          <Route path="/quartos" element={<Protected><QuartosLeitos /></Protected>} />
           <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
           <Route path="/estoque" element={<Protected><Placeholder title="Estoque" /></Protected>} />
           <Route path="/financeiro" element={<Protected><Placeholder title="Financeiro" /></Protected>} />
