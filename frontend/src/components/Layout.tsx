@@ -8,6 +8,7 @@ import { cn } from '../lib/utils'
 import { ContextSwitcher, contextTitle } from './ContextSwitcher'
 import { Logo } from './brand/Logo'
 import { NAVEGACAO, itemDaRota } from './shell/navegacao'
+import { SinoAlertas, useSinoAlertas } from './shell/SinoAlertas'
 import { PasswordInput } from './auth/PasswordInput'
 import { Button } from './ui/button'
 import { Label } from './ui/input'
@@ -40,6 +41,7 @@ function Shell({ children }: { children: ReactNode }) {
   const [senhaAberta, setSenhaAberta] = useState(false)
   const { activeContext } = useAuth()
   const { pathname } = useLocation()
+  const sino = useSinoAlertas()
 
   // Navegar fecha o menu mobile (inclusive pelo botão voltar do navegador).
   useEffect(() => setMenuAberto(false), [pathname])
@@ -65,12 +67,16 @@ function Shell({ children }: { children: ReactNode }) {
           <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-slate-600 sm:block">
             {contextTitle(activeContext)}
           </span>
+          <div className="ml-auto sm:ml-0">
+            <SinoAlertas {...sino} />
+          </div>
         </header>
 
         {/* Desktop */}
         <header className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-border bg-background/90 px-8 backdrop-blur xl:flex">
           <Trilha pathname={pathname} />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-2">
+            <SinoAlertas {...sino} />
             <ContextSwitcher compact />
           </div>
         </header>

@@ -13,6 +13,7 @@ import { Intercorrencias } from './pages/Intercorrencias'
 import { Documentos } from './pages/Documentos'
 import { Placeholder } from './pages/Placeholder'
 import { Admissoes } from './pages/Admissoes'
+import { Alertas } from './pages/Alertas'
 import { AdmissaoDetalhe } from './pages/AdmissaoDetalhe'
 import { QuartosLeitos } from './pages/QuartosLeitos'
 import { Avaliacoes } from './pages/Avaliacoes'
@@ -74,7 +75,7 @@ export default function App() {
           <Route path="/compliance" element={<Protected><Placeholder title="Compliance e Fiscalização" /></Protected>} />
           <Route path="/auditoria" element={<Protected><Placeholder title="Auditoria" /></Protected>} />
           <Route path="/config" element={<Protected><Placeholder title="Configurações" /></Protected>} />
-          <Route path="/alertas" element={<Protected><Placeholder title="Alertas" /></Protected>} />
+          <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </ErrorBoundary>

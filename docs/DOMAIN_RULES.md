@@ -74,6 +74,20 @@ Prontuário deve consultar/agregar fatos oficiais já persistidos. Não criar um
 
 Deve sintetizar informações relevantes do turno sem virar nova fonte de fatos clínicos. Deve apontar para origens oficiais e permitir complemento humano quando necessário.
 
+## Alertas do gestor
+
+Decisão do responsável (26/09, #107): alertas são **projeção derivada**, calculada a cada consulta (`GET /api/central-alertas/`) a partir das fontes oficiais. Não há tabela, job agendado, "ciente" ou dispensa: o alerta some quando o problema é resolvido na tela de origem. A tabela legada `alertas` (001) e o CRUD `/api/alertas/` continuam `fail_closed`.
+
+Destinatário: Administrador da ILPI (`alertas:ler`, migration 022, template `ilpi_admin` e clones). `alertas` é módulo clínico, fora do catálogo local. Cada regra só é calculada se a sessão também lê o módulo de origem; sem essa leitura a regra não existe para ela (nem contagem). Tenant sempre da sessão.
+
+Regras v1 e limiares (constantes em `backend/src/application/alertas.py`, exibidos na tela):
+- Admissão e documentos: admissão sem transição há mais de 7 dias; documento obrigatório não validado (mesmo predicado da pendência de admissão); documento vencido ou que vence em até 30 dias.
+- Avaliação, grau e PAIS: avaliação mais recente do par tipo/instrumento vencida sem outra válida; residente `Ativo` sem grau ativo ou com grau vencido; residente `Ativo` sem PAIS vigente (crítico); PAIS em ciclo sem mudança há mais de 7 dias; PAIS vigente com data final vencida.
+- Plantão: cuidados e doses com horário já passado nas últimas 24 h e sem registro, agrupados por residente (doses são críticas); intercorrência grave aberta (crítica); intercorrência aberta há mais de 24 h.
+- Ocupação e equipe: residente `Ativo` sem leito; ausência sem retorno há mais de 7 dias; senha temporária não trocada há mais de 7 dias.
+
+A janela de 24 h do plantão é recorte de período, não tolerância de atraso (D.2). Regras clínicas de valor (ex.: sinais vitais fora de faixa) não entram sem decisão própria. Notificação externa (e-mail, WhatsApp) e limiares configuráveis ficam fora da v1.
+
 ## IA e voz
 
 IA pode apoiar entrada, organização e consulta, mas não deve tomar decisão clínica automaticamente. Entrada por voz futura deve preencher texto/estruturas sob confirmação humana, não executar conduta clínica por conta própria.

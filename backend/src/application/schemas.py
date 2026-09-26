@@ -99,6 +99,35 @@ class DashboardResumoResponse(BaseModel):
     planos: Optional[DashboardPlanos] = None
     equipe: Optional[DashboardEquipe] = None
 
+# ---- Central de alertas do gestor (#107): projecao, nunca persistida ----
+AlertaGravidade = Literal["critico", "atencao", "aviso"]
+AlertaCategoria = Literal["admissao_documentos", "avaliacao_grau_pais", "plantao", "ocupacao_equipe"]
+
+
+class AlertaGestorItem(BaseModel):
+    id: str
+    regra: str
+    categoria: AlertaCategoria
+    gravidade: AlertaGravidade
+    titulo: str
+    detalhe: Optional[str] = None
+    residente_id: Optional[str] = None
+    residente_nome: Optional[str] = None
+    referencia_id: Optional[str] = None
+    desde: Optional[datetime] = None
+
+
+class AlertaGestorContagem(BaseModel):
+    critico: int = 0
+    atencao: int = 0
+    aviso: int = 0
+
+
+class AlertaGestorResponse(BaseModel):
+    gerado_em: datetime
+    contagem: AlertaGestorContagem
+    alertas: list[AlertaGestorItem]
+
 class PrimeiroAcessoUpdate(BaseModel):
     nova_senha: str = Field(..., min_length=8)
     confirmar: str = Field(..., min_length=8)

@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import {
   Activity,
   BedDouble,
+  BellRing,
+  CheckCircle2,
   HeartHandshake,
   ChevronDown,
   ClipboardList,
@@ -18,6 +20,8 @@ import {
 import { api } from '../services/api'
 import { getPlantao, PLANTAO_LIMIT_PADRAO, rotuloDoItem, type PlantaoItem } from '../services/plantao'
 import { getResumoDashboard, type DashboardResumo } from '../services/dashboard'
+import { GRAVIDADES as GRAVIDADES_ALERTA, listarAlertas, ROTULO_GRAVIDADE as ROTULO_ALERTA, type CentralAlertas } from '../services/alertas'
+import { ItemAlerta } from '../components/alertas/ItemAlerta'
 import { getSinaisVitais, type SinalVital } from '../services/sinaisVitais'
 import { getIntercorrencias, GRAVIDADES, type Intercorrencia } from '../services/intercorrencias'
 import { useAuth } from '../context/AuthContext'
@@ -38,7 +42,8 @@ import { cn } from '../lib/utils'
  * Todo número e todo gráfico vêm de fonte oficial: GET /dashboard/resumo
  * (contagens no banco, por permissão), a projeção /plantao/ e as listas de
  * sinais vitais e intercorrências. Indisponível nunca vira zero; nada sem fonte
- * é exibido — alertas, conformidade e tendências não têm fonte (GAP #71).
+ * é exibido — conformidade e tendências não têm fonte (GAP #71). Alertas têm
+ * fonte desde a #107 (GET /central-alertas/, só com `alertas:ler`).
  */
 
 // Indisponível não é zero: sem resposta da fonte, o valor é este traço.
@@ -49,6 +54,7 @@ const COLUNAS_INDICADORES: Record<number, string> = { 1: 'xl:grid-cols-1', 2: 'x
 const INDISPONIVEL = '—'
 const HORA = 3600_000
 const ACOES_VISIVEIS = 6
+const ALERTAS_NO_INICIO = 5
 
 type Carga<T> = { status: 'carregando' } | { status: 'ok'; dados: T } | { status: 'erro' }
 
@@ -98,9 +104,12 @@ export function Dashboard() {
   const [resumo, setResumo] = useState<Carga<DashboardResumo>>({ status: 'carregando' })
   const [pendencias, setPendencias] = useState<Carga<PlantaoItem[]>>({ status: 'carregando' })
   const [residentes, setResidentes] = useState<Carga<ResidenteResumo[]>>({ status: 'carregando' })
+  const [alertas, setAlertas] = useState<Carga<CentralAlertas>>({ status: 'carregando' })
 
   const podePlantao = pode('plantao:ler')
   const podeResidentes = pode('residentes:ler')
+  // Só com a permissão confirmada pelo backend (indisponível não consulta às cegas).
+  const podeAlertas = permissoes === 'ok' && pode('alertas:ler')
   // Perfil de experiência: quem responde pela instituição vê o espelho dela
   // primeiro; quem está no turno vê primeiro o que precisa fazer.
   const gestao = pode('funcionarios:ler') || pode('quartos_leitos:ler') || pode('admissoes:ler')
@@ -124,6 +133,13 @@ export function Dashboard() {
       .then(r => setResidentes({ status: 'ok', dados: r.data || [] }))
       .catch(() => setResidentes({ status: 'erro' }))
   }, [permissoes, podeResidentes])
+
+  useEffect(() => {
+    if (!podeAlertas) return
+    listarAlertas()
+      .then(dados => setAlertas({ status: 'ok', dados }))
+      .catch(() => setAlertas({ status: 'erro' }))
+  }, [podeAlertas])
 
   const nomes = new Map((residentes.status === 'ok' ? residentes.dados : []).map(r => [r.id, r.nome]))
   const cards = montarIndicadores({ resumo, pendencias, gestao, pode, podePlantao })
@@ -149,6 +165,15 @@ export function Dashboard() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
+          {podeAlertas && (
+            <Painel
+              titulo="Precisa de atenção"
+              icone={BellRing}
+              acao={<Link to="/alertas" className={LINK}>Ver todos os alertas</Link>}
+            >
+              <PrecisaDeAtencao carga={alertas} />
+            </Painel>
+          )}
           {podePlantao && (
             <Painel
               titulo="Próximas pendências do turno"
@@ -479,6 +504,30 @@ function AtividadeRecente({ nomes }: { nomes: Map<string, string> }) {
         </div>
       )}
     </Painel>
+  )
+}
+
+/** #107: os primeiros alertas da central (críticos antes), da mesma fonte oficial. */
+function PrecisaDeAtencao({ carga }: { carga: Carga<CentralAlertas> }) {
+  if (carga.status === 'carregando') return <Carregando />
+  if (carga.status === 'erro') {
+    return <Falha titulo="Não foi possível carregar os alertas" texto="Isso não significa que não há pendências." />
+  }
+  const { alertas, contagem } = carga.dados
+  if (alertas.length === 0) {
+    return <Vazio icon={CheckCircle2} titulo="Nada pedindo atenção agora" texto="Quando algo ficar pendente, vencer ou sair do combinado, aparece aqui." />
+  }
+  const resto = alertas.length - ALERTAS_NO_INICIO
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        {GRAVIDADES_ALERTA.map(g => `${ROTULO_ALERTA[g]}: ${contagem[g]}`).join(' · ')}
+      </p>
+      <ul className="space-y-2">
+        {alertas.slice(0, ALERTAS_NO_INICIO).map(a => <li key={a.id}><ItemAlerta alerta={a} compacto /></li>)}
+      </ul>
+      {resto > 0 && <p className="text-xs text-muted-foreground">E mais {plural(resto, 'alerta', 'alertas')} na central.</p>}
+    </div>
   )
 }
 
