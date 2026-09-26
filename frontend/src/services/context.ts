@@ -60,6 +60,22 @@ export const contextApi = {
   listPerfis() {
     return api.get<PerfilRef[]>('/perfis/')
   },
+  /**
+   * UX-01 (#83): permissões efetivas do contexto da sessão. Só orienta a
+   * navegação; cada rota do backend continua decidindo por si.
+   */
+  permissoesDaSessao() {
+    return api.get<PermissoesSessao>('/auth/permissoes')
+  },
+}
+
+export interface PermissoesSessao {
+  scope: 'global' | 'ilpi'
+  ilpi_id?: string | null
+  /** Nomes do PRÓPRIO contexto da sessão, disponíveis para qualquer perfil. */
+  ilpi_nome?: string | null
+  perfil_nome?: string | null
+  permissoes: string[]
 }
 
 export function displayIlpiName(ilpi: Pick<InstituicaoRef, 'razao_social' | 'nome_fantasia'>): string {
@@ -73,6 +89,17 @@ export function displayIlpiName(ilpi: Pick<InstituicaoRef, 'razao_social' | 'nom
 export async function resolveContextLabels(ctx: ActiveContext): Promise<ActiveContext> {
   if (ctx.scope !== 'ilpi' || !ctx.ilpi_id) {
     return { scope: 'global' }
+  }
+  // UX-01: a sessão informa os nomes do próprio contexto a qualquer perfil —
+  // listar ILPIs exige `ilpis:ler`, e um cuidador ficava vendo só "ILPI".
+  // Só vale se for o mesmo contexto (numa troca, o token antigo ainda responde).
+  try {
+    const { data } = await contextApi.permissoesDaSessao()
+    if (data?.ilpi_id === ctx.ilpi_id && data.ilpi_nome) {
+      return { ...ctx, ilpiNome: data.ilpi_nome, perfilNome: data.perfil_nome ?? null }
+    }
+  } catch {
+    // Segue pelos caminhos anteriores.
   }
   let ilpiNome: string | null = null
   let perfilNome: string | null = null

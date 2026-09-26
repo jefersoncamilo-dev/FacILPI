@@ -1,15 +1,21 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Check, Circle, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { Modal } from '../components/Modal'
+import { mensagemDeErro } from '../services/api'
 import { ContextPicker } from '../components/ContextPicker'
+import { AuthLayout } from '../components/auth/AuthLayout'
+import { PasswordInput } from '../components/auth/PasswordInput'
+import { Button } from '../components/ui/button'
+import { Label } from '../components/ui/input'
+import { Alert } from '../components/ui/feedback'
 import type { ContextOption } from '../types/context'
 
-const RULES = [
-  'Mínimo de 8 caracteres',
-  'Uma letra maiúscula',
-  'Uma letra minúscula',
-  'Um número',
+const RULES: { label: string; ok: (pwd: string) => boolean }[] = [
+  { label: 'Mínimo de 8 caracteres', ok: p => p.length >= 8 },
+  { label: 'Uma letra maiúscula', ok: p => /[A-Z]/.test(p) },
+  { label: 'Uma letra minúscula', ok: p => /[a-z]/.test(p) },
+  { label: 'Um número', ok: p => /[0-9]/.test(p) },
 ]
 
 function localCheck(pwd: string): string | null {
@@ -26,26 +32,21 @@ export function PrimeiroAcesso() {
   const [nova, setNova] = useState('')
   const [confirmar, setConfirmar] = useState('')
   const [err, setErr] = useState('')
-  const [open, setOpen] = useState(false)
   const [options, setOptions] = useState<ContextOption[] | null>(null)
   const [picking, setPicking] = useState(false)
-  const { completePasswordChange, switchContext, loading } = useAuth()
+  const { completePasswordChange, switchContext, loading, logout } = useAuth()
   const navigate = useNavigate()
-
-  function fail(msg: string) {
-    setErr(msg)
-    setOpen(true)
-  }
 
   async function handle(e: React.FormEvent) {
     e.preventDefault()
+    setErr('')
     if (nova !== confirmar) {
-      fail('As senhas não conferem. Digite a mesma senha nos dois campos.')
+      setErr('As senhas não conferem. Digite a mesma senha nos dois campos.')
       return
     }
     const rule = localCheck(nova)
     if (rule) {
-      fail(rule)
+      setErr(rule)
       return
     }
     try {
@@ -59,8 +60,7 @@ export function PrimeiroAcesso() {
         navigate('/')
       }
     } catch (e: any) {
-      const detail = e.response?.data?.detail
-      fail(typeof detail === 'string' ? detail : detail?.message || 'Não foi possível salvar a nova senha')
+      setErr(mensagemDeErro(e, 'Não foi possível salvar a nova senha'))
     }
   }
 
@@ -69,13 +69,13 @@ export function PrimeiroAcesso() {
       navigate('/')
       return
     }
+    setErr('')
     setPicking(true)
     try {
       await switchContext(opt)
       navigate('/')
     } catch (e: any) {
-      const detail = e.response?.data?.detail
-      fail(typeof detail === 'string' ? detail : detail?.message || 'Contexto não autorizado')
+      setErr(mensagemDeErro(e, 'Contexto não autorizado'))
     } finally {
       setPicking(false)
     }
@@ -83,44 +83,99 @@ export function PrimeiroAcesso() {
 
   if (options) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primaryLight via-white to-bg p-4">
-        <div className="w-full max-w-md card space-y-3">
-          <h2 className="font-semibold text-lg">Senha atualizada 🎉</h2>
-          <p className="text-sm text-textMuted">Agora escolha onde deseja operar.</p>
+      <AuthLayout>
+        <div className="space-y-6">
+          <Alert variant="success" title="Senha atualizada">
+            Agora escolha onde deseja operar.
+          </Alert>
+          {err && <Alert variant="error">{err}</Alert>}
           <ContextPicker options={options} onPick={choose} disabled={picking} />
         </div>
-        <Modal open={open} onClose={() => setOpen(false)} title="Atenção">
-          <p className="text-sm text-textMain">{err}</p>
-          <button onClick={() => setOpen(false)} className="btn-primary w-full mt-4">Fechar</button>
-        </Modal>
-      </div>
+      </AuthLayout>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primaryLight via-white to-bg p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primaryDeep mx-auto flex items-center justify-center text-white font-bold text-xl">FL</div>
-          <h1 className="mt-4 text-2xl font-bold text-primaryDeep">Defina sua nova senha</h1>
-          <p className="text-textMuted text-sm mt-1">Por segurança, você precisa definir uma nova senha antes de continuar.</p>
+    <AuthLayout>
+      <div className="space-y-7">
+        <div className="space-y-1.5">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Defina sua nova senha</h1>
+          <p className="text-sm text-muted-foreground">
+            Por segurança, você precisa definir uma nova senha antes de continuar.
+          </p>
         </div>
-        <form onSubmit={handle} className="card space-y-4">
-          <input className="input" type="password" placeholder="Senha temporária (a que você acabou de usar)" value={atual} onChange={e => setAtual(e.target.value)} required autoComplete="current-password" />
-          <input className="input" type="password" placeholder="Nova senha" value={nova} onChange={e => setNova(e.target.value)} required autoComplete="new-password" />
-          <input className="input" type="password" placeholder="Confirmar nova senha" value={confirmar} onChange={e => setConfirmar(e.target.value)} required autoComplete="new-password" />
-          <ul className="text-xs text-textMuted space-y-1">
-            {RULES.map(r => <li key={r}>• {r}</li>)}
+
+        {err && <Alert variant="error">{err}</Alert>}
+
+        <form onSubmit={handle} className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="pa-atual">Senha temporária</Label>
+            <PasswordInput
+              id="pa-atual"
+              placeholder="Senha temporária"
+              value={atual}
+              onChange={e => setAtual(e.target.value)}
+              required
+              autoComplete="current-password"
+              aria-describedby="pa-atual-dica"
+            />
+            <p id="pa-atual-dica" className="text-xs text-muted-foreground">A mesma senha que você acabou de usar para entrar.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pa-nova">Nova senha</Label>
+            <PasswordInput
+              id="pa-nova"
+              placeholder="Nova senha"
+              value={nova}
+              onChange={e => setNova(e.target.value)}
+              required
+              autoComplete="new-password"
+              aria-describedby="pa-regras"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="pa-confirmar">Confirmar nova senha</Label>
+            <PasswordInput
+              id="pa-confirmar"
+              placeholder="Confirmar nova senha"
+              value={confirmar}
+              onChange={e => setConfirmar(e.target.value)}
+              required
+              autoComplete="new-password"
+            />
+          </div>
+          <ul id="pa-regras" className="grid gap-1.5 rounded-lg bg-muted px-4 py-3 text-xs sm:grid-cols-2">
+            {RULES.map(r => {
+              const ok = r.ok(nova)
+              return (
+                <li key={r.label} className={ok ? 'flex items-center gap-2 text-emerald-800' : 'flex items-center gap-2 text-muted-foreground'}>
+                  {ok ? <Check className="size-3.5" aria-hidden="true" /> : <Circle className="size-3.5" aria-hidden="true" />}
+                  <span>
+                    {r.label}
+                    <span className="sr-only">{ok ? ' — atendido' : ' — pendente'}</span>
+                  </span>
+                </li>
+              )
+            })}
           </ul>
-          <button disabled={loading} className="btn-primary w-full disabled:opacity-60">
-            {loading ? 'Salvando...' : 'Salvar nova senha'}
-          </button>
+          <Button type="submit" size="lg" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden="true" /> Salvando…
+              </>
+            ) : (
+              'Salvar nova senha'
+            )}
+          </Button>
         </form>
+
+        {/* Sem saída, quem entrou com a conta errada ficava preso aqui. */}
+        <div className="border-t border-border pt-5 text-center">
+          <Button variant="link" type="button" onClick={logout}>
+            Sair e entrar com outra conta
+          </Button>
+        </div>
       </div>
-      <Modal open={open} onClose={() => setOpen(false)} title="Atenção">
-        <p className="text-sm text-textMain">{err}</p>
-        <button onClick={() => setOpen(false)} className="btn-primary w-full mt-4">Fechar</button>
-      </Modal>
-    </div>
+    </AuthLayout>
   )
 }

@@ -2,15 +2,61 @@
 @tailwind components;
 @tailwind utilities;
 
-* { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-h1,h2,h3 { font-family: 'Manrope', 'Inter', sans-serif; }
+/*
+ * UX-01 (#83) — identidade FacILPI "Haze Esmeralda".
+ * Canvas #F8FAFC, neutros amplos, esmeralda para identidade, acao e selecao.
+ * `--primary` e o esmeralda -700 (#047857): texto branco sobre ele passa AA;
+ * #10B981 e #059669 ficam para marca, foco e superficies grandes.
+ */
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 163 94% 24%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 152 81% 96%;
+    --accent-foreground: 163 88% 20%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 213 27% 84%;
+    --ring: 160 84% 39%;
+    --brand: 160 84% 39%;
+    --brand-strong: 161 94% 30%;
+    --brand-soft: 152 81% 96%;
+    --brand-ink: 164 86% 16%;
+    --radius: 0.75rem;
+  }
 
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  h1, h2, h3 {
+    @apply font-display;
+  }
+
+  /* Foco visivel para teclado em tudo que nao definir o proprio anel. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+/* Classes das telas existentes, na nova identidade. Componentes novos usam
+   as primitivas de components/ui. */
 @layer components {
-  .card { @apply bg-surface rounded-card shadow-card p-5 border border-slate-100; }
-  .btn-primary { @apply bg-primary text-white rounded-xl px-5 py-3 font-semibold hover:bg-primaryDeep transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2; }
-  .btn-secondary { @apply bg-white text-primary border border-primaryLight rounded-xl px-5 py-3 font-medium hover:bg-primaryLight transition min-h-[44px]; }
-  .input { @apply w-full rounded-xl border border-slate-200 px-4 py-3 text-[16px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary bg-white; }
-  .badge-success { @apply bg-emerald-50 text-success border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
-  .badge-warning { @apply bg-amber-50 text-warning border border-amber-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
-  .badge-danger { @apply bg-red-50 text-danger border border-red-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
+  .card { @apply bg-card text-card-foreground rounded-card shadow-card p-5 border border-border; }
+  .btn-primary { @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none; }
+  .btn-secondary { @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted transition-colors min-h-[44px]; }
+  .input { @apply w-full rounded-lg border border-input bg-card px-4 py-3 text-[16px] placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-brand-strong; }
+  .badge-success { @apply bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
+  .badge-warning { @apply bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
+  .badge-danger { @apply bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
 }

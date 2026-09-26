@@ -1,173 +1,314 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Link, NavLink, useLocation } from 'react-router-dom'
+import { ChevronRight, ClipboardList, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'
 import { mensagemDeErro } from '../services/api'
-import { Modal } from './Modal'
-import { ContextSwitcher } from './ContextSwitcher'
+import { cn } from '../lib/utils'
+import { ContextSwitcher, contextTitle } from './ContextSwitcher'
+import { Logo } from './brand/Logo'
+import { NAVEGACAO, itemDaRota } from './shell/navegacao'
+import { PasswordInput } from './auth/PasswordInput'
+import { Button } from './ui/button'
+import { Label } from './ui/input'
+import { Alert, Skeleton } from './ui/feedback'
+import { Dialog, DialogContent, Sheet, SheetContent } from './ui/dialog'
+import { ErrorBoundary } from './ui/states'
 
-const menu = [
-  { to: '/', label: 'Início', icon: '🏠' },
-  { to: '/plantao', label: 'Meu Plantão', icon: '🩺' },
-  { to: '/residentes', label: 'Residentes', icon: '👥' },
-  { to: '/admissoes', label: 'Admissões', icon: '📋' },
-  { to: '/documentos', label: 'Documentos', icon: '📄' },
-  { to: '/avaliacoes', label: 'Avaliações', icon: '📊' },
-  { to: '/plano', label: 'Plano de Cuidados', icon: '📝' },
-  { to: '/cuidados', label: 'Cuidados Diários', icon: '💧' },
-  { to: '/medicacao', label: 'Medicação', icon: '💊' },
-  { to: '/sinais', label: 'Sinais Vitais', icon: '❤️' },
-  { to: '/intercorrencias', label: 'Intercorrências', icon: '⚠️' },
-  { to: '/agenda', label: 'Agenda Clínica', icon: '📅' },
-  { to: '/passagem', label: 'Passagem de Plantão', icon: '🔄' },
-  { to: '/quartos', label: 'Quartos e Leitos', icon: '🛏️' },
-  { to: '/equipe', label: 'Equipe e Escalas', icon: '👩‍⚕️' },
-  { to: '/estoque', label: 'Estoque', icon: '📦' },
-  { to: '/financeiro', label: 'Financeiro', icon: '💰' },
-  { to: '/familia', label: 'Portal da Família', icon: '👨‍👩‍👧' },
-  { to: '/relatorios', label: 'Relatórios', icon: '📈' },
-  { to: '/supervisao', label: 'Supervisão', icon: '👁️' },
-  { to: '/compliance', label: 'Compliance e Fiscalização', icon: '✅' },
-  { to: '/auditoria', label: 'Auditoria', icon: '🔍' },
-  { to: '/config', label: 'Configurações', icon: '⚙️' },
-]
+/**
+ * AppShell da ILPI (UX-01 / #83).
+ *
+ * Desktop (≥1024px): sidebar fixa agrupada por tarefa + barra superior com a
+ * trilha e o contexto institucional. Mobile/tablet: cabeçalho com menu em
+ * Sheet e navegação inferior com os destinos do dia a dia.
+ *
+ * O menu só mostra o que a sessão pode abrir (GET /auth/permissoes); isso
+ * orienta a interface, não autoriza — cada rota do backend decide.
+ */
+export function Layout({ children }: { children: ReactNode }) {
+  return (
+    <PermissoesProvider>
+      <Shell>{children}</Shell>
+    </PermissoesProvider>
+  )
+}
 
-export function Layout({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false)
-  const [pwdOpen, setPwdOpen] = useState(false)
+function Shell({ children }: { children: ReactNode }) {
+  const [menuAberto, setMenuAberto] = useState(false)
+  const [senhaAberta, setSenhaAberta] = useState(false)
+  const { activeContext } = useAuth()
+  const { pathname } = useLocation()
+
+  // Navegar fecha o menu mobile (inclusive pelo botão voltar do navegador).
+  useEffect(() => setMenuAberto(false), [pathname])
+
+  function abrirSenha() {
+    setMenuAberto(false)
+    setSenhaAberta(true)
+  }
+
+  return (
+    <div className="min-h-screen bg-background lg:grid lg:grid-cols-[272px_minmax(0,1fr)]">
+      <aside className="sticky top-0 hidden h-screen border-r border-border bg-card lg:block">
+        <PainelNavegacao onAlterarSenha={abrirSenha} />
+      </aside>
+
+      <div className="flex min-h-screen min-w-0 flex-col">
+        {/* Mobile/tablet */}
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-card/95 px-3 backdrop-blur sm:px-5 lg:hidden">
+          <Button variant="ghost" size="icon" aria-label="Abrir menu" onClick={() => setMenuAberto(true)}>
+            <Menu className="!size-5" aria-hidden="true" />
+          </Button>
+          <Logo />
+          <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground sm:block">
+            {contextTitle(activeContext)}
+          </span>
+        </header>
+
+        {/* Desktop */}
+        <header className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-border bg-background/90 px-8 backdrop-blur lg:flex">
+          <Trilha pathname={pathname} />
+          <div className="ml-auto">
+            <ContextSwitcher compact />
+          </div>
+        </header>
+
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
+          <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
+        </main>
+
+        <NavegacaoInferior onMenu={() => setMenuAberto(true)} />
+      </div>
+
+      <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
+        <SheetContent title="Menu de navegação">
+          <PainelNavegacao mobile onAlterarSenha={abrirSenha} />
+        </SheetContent>
+      </Sheet>
+
+      <AlterarSenhaDialog open={senhaAberta} onOpenChange={setSenhaAberta} />
+    </div>
+  )
+}
+
+function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean; onAlterarSenha: () => void }) {
+  const { user, logout } = useAuth()
+  const { status, pode } = usePermissoes()
+  const inicial = user?.nome?.[0]?.toUpperCase() || 'U'
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="flex h-16 shrink-0 items-center border-b border-border px-5">
+        <Link to="/" aria-label="FacILPI — ir para o início" className="rounded-lg">
+          <Logo />
+        </Link>
+      </div>
+
+      {mobile && (
+        <div className="border-b border-border p-4">
+          <ContextSwitcher />
+        </div>
+      )}
+
+      <nav aria-label="Navegação principal" className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+        {status === 'carregando' ? (
+          <div className="space-y-3 px-3" aria-label="Carregando menu">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-9 w-full" />
+            ))}
+          </div>
+        ) : (
+          NAVEGACAO.map(grupo => {
+            const itens = grupo.itens.filter(item => pode(item.permissao))
+            if (itens.length === 0) return null
+            return (
+              <div key={grupo.titulo}>
+                <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {grupo.titulo}
+                </p>
+                <ul className="space-y-0.5">
+                  {itens.map(item => (
+                    <li key={item.to}>
+                      <NavLink
+                        to={item.to}
+                        end={item.to === '/'}
+                        className={({ isActive }) =>
+                          cn(
+                            'group relative flex min-h-[44px] items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
+                            isActive
+                              ? 'bg-accent font-semibold text-accent-foreground before:absolute before:inset-y-2 before:left-0 before:w-1 before:rounded-full before:bg-brand'
+                              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                          )
+                        }
+                      >
+                        <item.icon className="size-[18px] shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 flex-1 py-1.5">
+                          <span className="block truncate">{item.label}</span>
+                          {item.emBreve && (
+                            <span className="block text-[11px] font-normal leading-tight text-muted-foreground">Em breve</span>
+                          )}
+                        </span>
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })
+        )}
+      </nav>
+
+      <div className="shrink-0 space-y-3 border-t border-border p-4">
+        <div className="flex items-center gap-3">
+          {/* PH-01: o avatar é só identificação — nunca botão, nunca logout. */}
+          <div
+            aria-hidden="true"
+            className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-primary"
+          >
+            {inicial}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">{user?.nome || 'Usuário'}</p>
+            <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" className="h-11 px-2 text-xs" onClick={onAlterarSenha}>
+            <KeyRound aria-hidden="true" /> Alterar senha
+          </Button>
+          <Button variant="ghost" className="h-11 px-2 text-xs text-foreground" onClick={logout}>
+            <LogOut aria-hidden="true" /> Sair
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function Trilha({ pathname }: { pathname: string }) {
+  const atual = itemDaRota(pathname)
+  if (!atual) return <span />
+  const { grupo, item } = atual
+  const emDetalhe = item.to !== '/' && pathname !== item.to
+  return (
+    <nav aria-label="Trilha de navegação">
+      <ol className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        {grupo.titulo !== item.label && (
+          <>
+            <li>{grupo.titulo}</li>
+            <ChevronRight className="size-3.5" aria-hidden="true" />
+          </>
+        )}
+        {emDetalhe ? (
+          <>
+            <li>
+              <Link to={item.to} className="rounded hover:text-foreground hover:underline">{item.label}</Link>
+            </li>
+            <ChevronRight className="size-3.5" aria-hidden="true" />
+            <li aria-current="page" className="font-medium text-foreground">Detalhe</li>
+          </>
+        ) : (
+          <li aria-current="page" className="font-medium text-foreground">{item.label}</li>
+        )}
+      </ol>
+    </nav>
+  )
+}
+
+function NavegacaoInferior({ onMenu }: { onMenu: () => void }) {
+  const { pode } = usePermissoes()
+  const destinos = [
+    { to: '/', label: 'Início', icon: LayoutDashboard },
+    { to: '/plantao', label: 'Plantão', icon: ClipboardList, permissao: 'plantao:ler' },
+    { to: '/residentes', label: 'Residentes', icon: Users, permissao: 'residentes:ler' },
+  ].filter(d => pode(d.permissao))
+
+  const estilo = 'flex min-h-[52px] min-w-[64px] flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium'
+  return (
+    <nav
+      aria-label="Navegação rápida"
+      className="fixed inset-x-0 bottom-0 z-30 flex gap-1 border-t border-border bg-card/95 px-2 pt-1.5 backdrop-blur lg:hidden"
+      style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
+    >
+      {destinos.map(d => (
+        <NavLink
+          key={d.to}
+          to={d.to}
+          end={d.to === '/'}
+          className={({ isActive }) => cn(estilo, isActive ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
+        >
+          {({ isActive }) => (
+            <>
+              <d.icon className={cn('size-5', isActive && 'stroke-[2.4]')} aria-hidden="true" />
+              {d.label}
+            </>
+          )}
+        </NavLink>
+      ))}
+      <button type="button" onClick={onMenu} className={cn(estilo, 'text-muted-foreground hover:text-foreground')}>
+        <Menu className="size-5" aria-hidden="true" />
+        Menu
+      </button>
+    </nav>
+  )
+}
+
+function AlterarSenhaDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { updatePassword } = useAuth()
   const [atual, setAtual] = useState('')
   const [nova, setNova] = useState('')
   const [confirmar, setConfirmar] = useState('')
-  const [msg, setMsg] = useState('')
-  const { user, logout, updatePassword } = useAuth()
-  const navigate = useNavigate()
+  const [erro, setErro] = useState('')
+  const [sucesso, setSucesso] = useState(false)
+  const [salvando, setSalvando] = useState(false)
 
-  async function handlePwd() {
-    if (nova !== confirmar) { setMsg('Senhas não conferem'); return }
+  function fechar(aberto: boolean) {
+    onOpenChange(aberto)
+    if (!aberto) {
+      setAtual(''); setNova(''); setConfirmar(''); setErro(''); setSucesso(false)
+    }
+  }
+
+  async function salvar(e: React.FormEvent) {
+    e.preventDefault()
+    setErro('')
+    if (nova !== confirmar) { setErro('Senhas não conferem'); return }
+    setSalvando(true)
     try {
       await updatePassword(atual, nova, confirmar)
-      setMsg('Senha alterada com sucesso')
-      setTimeout(() => { setPwdOpen(false); setMsg(''); setAtual(''); setNova(''); setConfirmar('') }, 1200)
-    } catch (e: any) {
-      setMsg(mensagemDeErro(e, 'Erro ao alterar senha'))
+      setSucesso(true)
+      setTimeout(() => fechar(false), 1200)
+    } catch (err) {
+      setErro(mensagemDeErro(err, 'Erro ao alterar senha'))
+    } finally {
+      setSalvando(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-bg flex">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-[280px] bg-white border-r border-slate-100 flex-col sticky top-0 h-screen overflow-auto">
-        <div className="px-6 py-6 border-b">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primaryDeep flex items-center justify-center text-white font-bold">FL</div>
-            <div>
-              <div className="font-bold text-primaryDeep leading-none">FáciLPI</div>
-              <div className="text-xs text-textMuted">Gestão & Cuidados</div>
-            </div>
+    <Dialog open={open} onOpenChange={fechar}>
+      <DialogContent title="Alterar senha" description="As outras sessões abertas com a sua conta serão encerradas.">
+        <form onSubmit={salvar} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="as-atual">Senha atual</Label>
+            <PasswordInput id="as-atual" placeholder="Senha atual" value={atual} onChange={e => setAtual(e.target.value)} autoComplete="current-password" required />
           </div>
-        </div>
-        <nav className="flex-1 p-3 space-y-1">
-          {menu.map(m => (
-            <NavLink key={m.to} to={m.to} className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium min-h-[44px] ${isActive ? 'bg-primary text-white shadow-sm' : 'text-textMuted hover:bg-slate-50 hover:text-textMain'}`}>
-              <span>{m.icon}</span> {m.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="p-4 border-t space-y-3">
-          <ContextSwitcher />
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primaryLight flex items-center justify-center text-primary font-semibold">{user?.nome?.[0]?.toUpperCase() || 'U'}</div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium truncate">{user?.nome || 'Usuário'}</div>
-              <div className="text-xs text-textMuted truncate">{user?.email}</div>
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="as-nova">Nova senha</Label>
+            <PasswordInput id="as-nova" placeholder="Nova senha" value={nova} onChange={e => setNova(e.target.value)} autoComplete="new-password" aria-describedby="as-nova-dica" required />
+            <p id="as-nova-dica" className="text-xs text-muted-foreground">Mínimo de 8 caracteres, com maiúscula, minúscula e número.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 mt-3">
-            <button onClick={() => setPwdOpen(true)} className="btn-secondary text-xs py-2">Alterar senha</button>
-            <button onClick={logout} className="bg-slate-900 text-white rounded-xl py-2 text-xs font-medium hover:bg-black">Sair</button>
+          <div className="space-y-2">
+            <Label htmlFor="as-confirmar">Confirmar nova senha</Label>
+            <PasswordInput id="as-confirmar" placeholder="Confirmar nova senha" value={confirmar} onChange={e => setConfirmar(e.target.value)} autoComplete="new-password" required />
           </div>
-        </div>
-      </aside>
-
-      {/* Mobile */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="lg:hidden sticky top-0 z-30 bg-white border-b px-4 h-[64px] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button onClick={() => setOpen(true)} className="w-11 h-11 rounded-xl bg-slate-900 text-white flex items-center justify-center">☰</button>
-            <span className="font-bold text-primaryDeep">FáciLPI</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => navigate('/plantao')} aria-label="Meu Plantão" className="w-11 h-11 rounded-xl bg-primary text-white">🩺</button>
-            {/* PH-01: este avatar ERA o botão de logout — sem rótulo, sem
-                confirmação. Tocar no próprio nome encerrava a sessão. Agora é
-                apenas identificação (não é botão), e sair tem ação explícita,
-                pelo mesmo `logout` do menu lateral. */}
-            <div
-              aria-hidden="true"
-              className="w-9 h-9 rounded-full bg-primaryLight text-primary font-bold flex items-center justify-center shrink-0"
-            >
-              {user?.nome?.[0]?.toUpperCase() || 'U'}
-            </div>
-            <button
-              onClick={logout}
-              className="min-h-[44px] px-3 rounded-xl bg-slate-900 text-white text-xs font-medium"
-            >
-              Sair
-            </button>
-          </div>
-        </header>
-
-        {open && (
-          <div className="fixed inset-0 z-40 lg:hidden">
-            <div className="absolute inset-0 bg-slate-900/40" onClick={() => setOpen(false)} />
-            <div className="absolute left-0 top-0 bottom-0 w-[85%] max-w-[320px] bg-white overflow-auto">
-              <div className="p-4 border-b flex items-center justify-between">
-                <span className="font-bold">Menu</span>
-                <button onClick={() => setOpen(false)} className="w-10 h-10 rounded-full hover:bg-slate-100">×</button>
-              </div>
-              <div className="p-3 border-b">
-                <ContextSwitcher />
-              </div>
-              <nav className="p-3 space-y-1">
-                {menu.map(m => (
-                  <NavLink key={m.to} to={m.to} onClick={() => setOpen(false)} className={({ isActive }) => `flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium ${isActive ? 'bg-primary text-white' : 'text-textMuted hover:bg-slate-50'}`}>
-                    <span>{m.icon}</span> {m.label}
-                  </NavLink>
-                ))}
-              </nav>
-            </div>
-          </div>
-        )}
-
-        <main className="flex-1 p-4 lg:p-8 pb-20 lg:pb-8 max-w-[1400px] w-full mx-auto">
-          {children}
-        </main>
-
-        {/* Bottom nav mobile */}
-        <nav className="lg:hidden fixed bottom-0 inset-x-0 bg-white border-t flex justify-around py-2 pb-safe">
-          {[
-            { to: '/', label: 'Início', icon: '🏠' },
-            { to: '/plantao', label: 'Plantão', icon: '🩺' },
-            { to: '/residentes', label: 'Residentes', icon: '👥' },
-            { to: '/alertas', label: 'Alertas', icon: '🔔' },
-            { to: '/config', label: 'Mais', icon: '⋯' },
-          ].map(m => (
-            <NavLink key={m.to} to={m.to} className={({ isActive }) => `flex flex-col items-center gap-1 px-3 py-1 rounded-xl min-w-[56px] min-h-[44px] justify-center ${isActive ? 'text-primary' : 'text-textMuted'}`}>
-              <span className="text-lg">{m.icon}</span>
-              <span className="text-[11px] font-medium">{m.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-      </div>
-
-      <Modal open={pwdOpen} onClose={() => setPwdOpen(false)} title="Alterar senha">
-        <div className="space-y-4">
-          <input className="input" type="password" placeholder="Senha atual" value={atual} onChange={e => setAtual(e.target.value)} autoComplete="current-password" />
-          <input className="input" type="password" placeholder="Nova senha (mín. 8, maiúscula, minúscula, número)" value={nova} onChange={e => setNova(e.target.value)} />
-          <input className="input" type="password" placeholder="Confirmar nova senha" value={confirmar} onChange={e => setConfirmar(e.target.value)} />
-          {msg && <div className="text-sm p-3 rounded-xl bg-amber-50 text-amber-800 border border-amber-200">{msg}</div>}
-          <button onClick={handlePwd} className="btn-primary w-full">Salvar</button>
-        </div>
-      </Modal>
-    </div>
+          {erro && <Alert variant="error">{erro}</Alert>}
+          {sucesso && <Alert variant="success">Senha alterada com sucesso</Alert>}
+          <Button type="submit" className="w-full" disabled={salvando || sucesso}>
+            {salvando ? (<><Loader2 className="animate-spin" aria-hidden="true" /> Salvando…</>) : 'Salvar nova senha'}
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

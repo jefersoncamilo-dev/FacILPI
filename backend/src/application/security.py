@@ -800,6 +800,42 @@ def require_permission(permission_key: str):
     return permission_guard
 
 
+async def allowed_permission_keys(db: AsyncSession, context: SecurityContext) -> list[str]:
+    """Chaves que `require_permission` aceitaria agora, neste contexto.
+
+    UX-01 (#83): a navegacao so oferece o que o backend aceitaria. Mesmo
+    recarregamento do contexto e mesmo predicado do guard, para a lista nunca
+    divergir da autorizacao real. Continua sendo so leitura: quem decide cada
+    rota e o `require_permission` dela.
+    """
+    if not _context_is_valid(context):
+        _deny(
+            code=AUTH_CONTEXT_REQUIRED,
+            http_status=status.HTTP_403_FORBIDDEN,
+            message="Contexto de autorização não disponível",
+            context=context if isinstance(context, SecurityContext) else None,
+        )
+    context = await load_security_context(
+        db,
+        context.user.id,
+        scope=context.scope,
+        ilpi_id=context.ilpi_id,
+        perfil_id=context.perfil.id,
+    )
+    permissions = (
+        await db.execute(
+            select(Permissao)
+            .join(PerfilPermissao, PerfilPermissao.permissao_id == Permissao.id)
+            .where(PerfilPermissao.perfil_id == context.perfil.id)
+        )
+    ).scalars().all()
+    return sorted(
+        permission.chave
+        for permission in permissions
+        if _permission_is_allowed(context, permission)
+    )
+
+
 async def block_pending_permission_catalog(
     current_user: User = Depends(get_current_user),
 ) -> None:

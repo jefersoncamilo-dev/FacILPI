@@ -1,20 +1,31 @@
-export function Placeholder({ title, desc }: { title: string; desc?: string }) {
+import { Link } from 'react-router-dom'
+import { Construction } from 'lucide-react'
+import { Button } from '../components/ui/button'
+import { EmptyState } from '../components/ui/states'
+
+/**
+ * Módulo sem tela. UX-01: o texto antigo afirmava "API pronta" e
+ * "responsividade validada" para módulos sem implementação — agora diz só o
+ * que é verdade: a tela ainda não existe e, quando há jornada, qual Issue a entrega.
+ */
+export function Placeholder({ title, emConstrucao = false }: { title: string; emConstrucao?: boolean }) {
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-primaryDeep">{title}</h1>
-        <p className="text-textMuted text-sm mt-1">{desc || 'Módulo em construção — estrutura pronta para expansão conforme Project.md'}</p>
-      </div>
-      <div className="card py-16 text-center">
-        <div className="text-5xl mb-3">🚧</div>
-        <p className="font-medium">{title}</p>
-        <p className="text-sm text-textMuted mt-2 max-w-md mx-auto">Esta seção está com layout, rota protegida e API pronta. Conecte aos endpoints já existentes (<code className="bg-slate-100 px-1 rounded">/api/*</code>) para listar/criar registros. Sidebar e responsividade já validadas em 360/768/1366px.</p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <span className="badge-success">Auth Bearer</span>
-          <span className="badge-warning">/api prefix</span>
-          <span className="badge-danger">Modal (sem alert)</span>
-        </div>
-      </div>
+      <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+      <EmptyState
+        icon={Construction}
+        title={emConstrucao ? 'Tela em construção' : 'Módulo ainda não disponível'}
+        description={
+          emConstrucao
+            ? 'Esta tela faz parte das próximas entregas do FacILPI. Enquanto isso, as demais áreas seguem funcionando normalmente.'
+            : 'Este módulo ainda não faz parte desta versão do FacILPI.'
+        }
+        action={
+          <Button asChild variant="outline">
+            <Link to="/">Voltar ao início</Link>
+          </Button>
+        }
+      />
     </div>
   )
 }

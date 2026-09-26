@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { ArrowLeftRight, Building2, Check, Globe, Lock } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { cn } from '../lib/utils'
 import { Modal } from './Modal'
 
 export function contextTitle(ctx: { scope: string; ilpiNome?: string | null } | null): string {
@@ -21,13 +23,14 @@ export function ContextSwitcher({ compact = false }: { compact?: boolean }) {
   // Troca pendente: seletor bloqueado até a definição da nova senha.
   if (requiresPasswordChange) {
     return (
-      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
-        🔒 Defina sua nova senha para escolher o contexto.
+      <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+        <Lock className="size-4 shrink-0" aria-hidden="true" /> Defina sua nova senha para escolher o contexto.
       </div>
     )
   }
 
   const showPicker = availableContexts.length > 1
+  const Icone = activeContext?.scope === 'ilpi' ? Building2 : Globe
 
   async function pick(key: string) {
     const opt = availableContexts.find(o => o.key === key)
@@ -41,24 +44,27 @@ export function ContextSwitcher({ compact = false }: { compact?: boolean }) {
   }
 
   return (
-    <div>
+    <div className="min-w-0">
       <button
         onClick={() => showPicker && setOpen(true)}
         disabled={!showPicker || switching}
         aria-label="Contexto atual"
         title={showPicker ? 'Trocar de contexto' : 'Contexto atual'}
-        className={`${compact ? 'px-3 h-11' : 'w-full px-3 py-2.5'} rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 flex items-center gap-2 text-left min-h-[44px] disabled:opacity-80`}
+        className={cn(
+          'flex min-h-[44px] items-center gap-2.5 rounded-lg border border-border bg-card text-left transition-colors enabled:hover:bg-muted disabled:cursor-default',
+          compact ? 'max-w-[280px] px-2.5 py-1.5' : 'w-full px-3 py-2.5',
+        )}
       >
-        <span className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center text-sm shrink-0">
-          {activeContext?.scope === 'ilpi' ? '🏠' : '🌐'}
+        <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-brand-soft text-primary">
+          <Icone className="size-4" aria-hidden="true" />
         </span>
-        <span className="flex-1 min-w-0">
-          <span className="block text-sm font-semibold text-textMain truncate">
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-sm font-semibold text-foreground">
             {switching ? 'Trocando...' : contextTitle(activeContext)}
           </span>
-          <span className="block text-xs text-textMuted truncate">{contextSubtitle(activeContext)}</span>
+          <span className="block truncate text-xs text-muted-foreground">{contextSubtitle(activeContext)}</span>
         </span>
-        {showPicker && <span className="text-textMuted">⇄</span>}
+        {showPicker && <ArrowLeftRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Trocar de contexto">
@@ -71,10 +77,20 @@ export function ContextSwitcher({ compact = false }: { compact?: boolean }) {
                 key={o.key}
                 onClick={() => pick(o.key)}
                 disabled={switching || isActive}
-                className={`w-full text-left px-4 py-3 rounded-xl border min-h-[44px] ${isActive ? 'border-primary bg-primaryLight/40' : 'border-slate-200 hover:bg-slate-50'}`}
+                className={cn(
+                  'flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left',
+                  isActive ? 'border-brand bg-accent' : 'border-border hover:bg-muted',
+                )}
               >
-                <div className="text-sm font-semibold text-textMain">{o.label}{isActive ? ' ✓' : ''}</div>
-                <div className="text-xs text-textMuted">{o.sublabel}</div>
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold text-foreground">{o.label}</span>
+                  <span className="block text-xs text-muted-foreground">{o.sublabel}</span>
+                </span>
+                {isActive && (
+                  <span className="flex items-center gap-1 text-xs font-semibold text-primary">
+                    <Check className="size-4" aria-hidden="true" /> Atual
+                  </span>
+                )}
               </button>
             )
           })}
@@ -82,8 +98,8 @@ export function ContextSwitcher({ compact = false }: { compact?: boolean }) {
       </Modal>
 
       <Modal open={errOpen} onClose={() => { setErrOpen(false); clearContextError() }} title="Não foi possível trocar">
-        <p className="text-sm text-textMain">{contextError || 'Contexto não autorizado para este usuário.'}</p>
-        <button onClick={() => { setErrOpen(false); clearContextError() }} className="btn-primary w-full mt-4">Fechar</button>
+        <p className="text-sm text-foreground">{contextError || 'Contexto não autorizado para este usuário.'}</p>
+        <button onClick={() => { setErrOpen(false); clearContextError() }} className="btn-primary mt-4 w-full">Fechar</button>
       </Modal>
     </div>
   )

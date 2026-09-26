@@ -60,6 +60,13 @@ class ContextSelection(BaseModel):
     ilpi_id: Optional[str] = None
     perfil_id: Optional[str] = None
 
+class PermissoesSessaoResponse(BaseModel):
+    scope: str
+    ilpi_id: Optional[str] = None
+    ilpi_nome: Optional[str] = None
+    perfil_nome: Optional[str] = None
+    permissoes: list[str]
+
 class PrimeiroAcessoUpdate(BaseModel):
     nova_senha: str = Field(..., min_length=8)
     confirmar: str = Field(..., min_length=8)

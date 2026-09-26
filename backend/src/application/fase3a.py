@@ -47,6 +47,8 @@ from .security import (
     ILPI_INATIVA,
     ILPI_SCOPE,
     SecurityContext,
+    allowed_permission_keys,
+    get_security_context,
     load_security_context,
     require_permission,
 )
@@ -526,6 +528,36 @@ async def logout_session(
 
     clear_refresh_cookie(response)
     return {"mensagem": "Sessão encerrada"}
+
+
+@auth_session_router.get("/permissoes", response_model=s.PermissoesSessaoResponse)
+async def permissoes_da_sessao(
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(get_security_context),
+):
+    """Permissoes efetivas do contexto da sessao (UX-01 / #83), so leitura.
+
+    O contexto vem do token validado, nunca de parametro do cliente. Serve para
+    a navegacao nao oferecer o que o backend recusaria; nao autoriza nada.
+
+    Os nomes sao so os do proprio contexto: quem nao tem `ilpis:ler` tambem
+    precisa saber em qual instituicao esta operando.
+    """
+    permissoes = await allowed_permission_keys(db, context)
+    ilpi_nome = None
+    if context.ilpi_id is not None:
+        ilpi = (
+            await db.execute(select(m.Instituicao).where(m.Instituicao.id == context.ilpi_id))
+        ).scalar_one_or_none()
+        if ilpi is not None:
+            ilpi_nome = (ilpi.nome_fantasia or "").strip() or ilpi.razao_social
+    return {
+        "scope": context.scope,
+        "ilpi_id": context.ilpi_id,
+        "ilpi_nome": ilpi_nome,
+        "perfil_nome": context.perfil.nome,
+        "permissoes": permissoes,
+    }
 
 
 @auth_session_router.post("/contexto", response_model=s.TokenResponse)
