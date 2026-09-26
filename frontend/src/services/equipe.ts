@@ -3,7 +3,7 @@ import type {
   Funcionario, FuncionarioCreate, FuncionarioUpdate,
   User, UsuarioAdminCreate, UsuarioAdminUpdate,
   Perfil, PerfilAdminCreate,
-  Permissao,
+  Permissao, PerfilPermissoes,
 } from '../types/equipe'
 
 export const equipeApi = {
@@ -71,6 +71,10 @@ export const equipeApi = {
 
   createPerfil(data: PerfilAdminCreate) {
     return api.post<Perfil>('/perfis/', data)
+  },
+
+  getPermissoesPerfil(perfilId: string) {
+    return api.get<PerfilPermissoes>(`/perfis/${perfilId}/permissoes`)
   },
 
   updatePermissoes(perfilId: string, permissoes: string[]) {

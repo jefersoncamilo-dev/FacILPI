@@ -329,6 +329,23 @@ class PerfilResponse(PerfilAdminCreate):
 class PerfilPermissoesUpdate(BaseModel):
     permissoes: list[str]
 
+
+class PermissaoDoPerfil(BaseModel):
+    chave: str
+    modulo: str
+    acao: str
+    descricao: Optional[str] = None
+    # False = fora do catálogo local (módulo clínico, só-global ou curinga):
+    # o PUT local não aceita a chave e, por substituir a lista, a apagaria.
+    editavel: bool
+
+
+class PerfilPermissoesResponse(BaseModel):
+    perfil_id: str
+    permissoes: list[PermissaoDoPerfil]
+    # Só é seguro editar pelo PUT local quando todas as permissões são editáveis.
+    editavel: bool
+
 class ResetPasswordResponse(BaseModel):
     senha_temporaria: str
 
