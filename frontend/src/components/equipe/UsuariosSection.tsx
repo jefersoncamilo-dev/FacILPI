@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Ban, KeyRound, Pencil } from 'lucide-react'
+import { usePermissoesOuPadrao } from '../../context/PermissoesContext'
 import { Modal } from '../Modal'
 import type { User, Funcionario, Perfil } from '../../types/equipe'
 
@@ -18,6 +20,7 @@ export function UsuariosSection({
   usuarios, funcionarios, perfis, searchQuery, onSearchChange,
   loading, onEditUser, onResetPassword, onRevogarAcesso,
 }: UsuariosSectionProps) {
+  const { pode } = usePermissoesOuPadrao()
   const [resetModalOpen, setResetModalOpen] = useState(false)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
@@ -134,24 +137,28 @@ export function UsuariosSection({
             </div>
 
             <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                onClick={() => openEdit(u)}
-                className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center"
-              >
-                ✏️ Editar
-              </button>
-              <button
-                onClick={() => openReset(u)}
-                className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center"
-              >
-                🔑 Resetar senha
-              </button>
-              {u.ativo && (
+              {pode('usuarios:atualizar') && (
+                <button
+                  onClick={() => openEdit(u)}
+                  className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
+                >
+                  <Pencil className="size-3.5" aria-hidden="true" /> Editar
+                </button>
+              )}
+              {pode('usuarios:redefinir_senha') && (
+                <button
+                  onClick={() => openReset(u)}
+                  className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
+                >
+                  <KeyRound className="size-3.5" aria-hidden="true" /> Resetar senha
+                </button>
+              )}
+              {u.ativo && pode('usuarios:inativar') && (
                 <button
                   onClick={() => onRevogarAcesso(u)}
-                  className="text-xs px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50 text-danger min-h-[44px] min-w-[44px] flex items-center justify-center"
+                  className="text-xs px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50 text-danger min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
                 >
-                  🚫 Revogar acesso
+                  <Ban className="size-3.5" aria-hidden="true" /> Revogar acesso
                 </button>
               )}
             </div>

@@ -1448,6 +1448,48 @@ async def atualizar_permissoes_perfil(
     return {"perfil_id": profile.id, "permissoes": sorted(payload.permissoes)}
 
 
+@perfis_router.get("/{perfil_id}/permissoes", response_model=s.PerfilPermissoesResponse)
+async def listar_permissoes_perfil(
+    perfil_id: str,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("perfis:ler")),
+):
+    """UX-10 (#98): permissões reais de um perfil local, somente leitura.
+
+    Sem esta leitura a tela de perfis não sabia o que o perfil tinha e partia
+    de "tudo marcado"; como o PUT substitui a lista inteira, salvar concedia ou
+    apagava permissões sem intenção. Mesmo filtro de tenant/escopo do PUT:
+    perfil de outra ILPI (ou global) responde 404.
+    """
+    _require_ilpi_context(context)
+    profile = (
+        await db.execute(
+            select(m.Perfil).where(m.Perfil.id == perfil_id, m.Perfil.ilpi_id == context.ilpi_id, m.Perfil.escopo == ILPI_SCOPE)
+        )
+    ).scalar_one_or_none()
+    if profile is None:
+        raise _http_error(status.HTTP_404_NOT_FOUND, "PERFIL_NOT_FOUND", "Perfil não encontrado")
+    permissions = (
+        await db.execute(
+            select(m.Permissao)
+            .join(m.PerfilPermissao, m.PerfilPermissao.permissao_id == m.Permissao.id)
+            .where(m.PerfilPermissao.perfil_id == profile.id)
+            .order_by(m.Permissao.modulo, m.Permissao.acao)
+        )
+    ).scalars().all()
+    items = [
+        {
+            "chave": permission.chave,
+            "modulo": permission.modulo,
+            "acao": permission.acao,
+            "descricao": permission.descricao,
+            "editavel": _permission_allowed_for_local(permission),
+        }
+        for permission in permissions
+    ]
+    return {"perfil_id": profile.id, "permissoes": items, "editavel": all(item["editavel"] for item in items)}
+
+
 @funcionarios_router.get("/", response_model=list[s.FuncionarioResponse])
 async def listar_funcionarios(
     skip: int = 0,

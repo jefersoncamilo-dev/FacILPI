@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Ban, EllipsisVertical, KeyRound, Link2, Pencil, UserX } from 'lucide-react'
+import { usePermissoesOuPadrao } from '../../context/PermissoesContext'
 import type { Funcionario } from '../../types/equipe'
 
 interface FuncionarioCardProps {
@@ -26,6 +28,16 @@ const situacaoLabel: Record<string, string> = {
 export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAcesso, onVincular, onRevogarAcesso, onInativar }: FuncionarioCardProps) {
   const [menuOpen, setMenuOpen] = useState(false)
   const temAcesso = !!funcionario.usuario_id
+  const { pode } = usePermissoesOuPadrao()
+  // UX-10 (#98): só o que o backend aceitaria para este perfil.
+  const acoes = {
+    editar: pode('funcionarios:atualizar'),
+    conceder: !temAcesso && funcionario.situacao === 'ativo' && pode('usuarios:criar') && pode('funcionarios:vincular_usuario'),
+    vincular: !temAcesso && funcionario.situacao === 'ativo' && pode('funcionarios:vincular_usuario'),
+    revogar: temAcesso && pode('usuarios:inativar'),
+    inativar: funcionario.situacao !== 'inativo' && pode('funcionarios:inativar'),
+  }
+  const temAcao = Object.values(acoes).some(Boolean)
 
   return (
     <div className="card hover:shadow-cardHover transition min-w-0">
@@ -39,60 +51,62 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
             {funcionario.profissao || funcionario.cargo || 'Sem função definida'}
           </div>
         </div>
-        <div className="relative shrink-0">
+        {temAcao && <div className="relative shrink-0">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
             className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-textMuted"
             aria-label="Ações"
           >
-            ⋮
+            <EllipsisVertical className="size-5" aria-hidden="true" />
           </button>
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
               <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 min-w-[180px]">
+                {acoes.editar && (
                 <button
                   className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px]"
                   onClick={() => { setMenuOpen(false); onEdit(funcionario) }}
                 >
-                  <span className="text-textMuted">✏️</span> Editar
+                  <Pencil className="size-4 text-textMuted" aria-hidden="true" /> Editar
                 </button>
-                {!temAcesso && funcionario.situacao === 'ativo' && (
+                )}
+                {acoes.conceder && (
                   <button
                     className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-primary"
                     onClick={() => { setMenuOpen(false); onConcederAcesso(funcionario) }}
                   >
-                    <span>🔑</span> Conceder acesso
+                    <KeyRound className="size-4" aria-hidden="true" /> Conceder acesso
                   </button>
                 )}
-                {!temAcesso && funcionario.situacao === 'ativo' && (
+                {acoes.vincular && (
                   <button
                     className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-primary"
                     onClick={() => { setMenuOpen(false); onVincular(funcionario) }}
                   >
-                    <span>🔗</span> Vincular usuário existente
+                    <Link2 className="size-4" aria-hidden="true" /> Vincular usuário existente
                   </button>
                 )}
-                {temAcesso && (
+                {acoes.revogar && (
                   <button
                     className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-danger"
                     onClick={() => { setMenuOpen(false); onRevogarAcesso(funcionario) }}
                   >
-                    <span>🚫</span> Revogar acesso
+                    <Ban className="size-4" aria-hidden="true" /> Revogar acesso
                   </button>
                 )}
-                {funcionario.situacao !== 'inativo' && (
+                {acoes.inativar && (
                   <button
                     className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-danger"
                     onClick={() => { setMenuOpen(false); onInativar(funcionario) }}
                   >
-                    <span>👁️‍🗨️</span> Inativar funcionário
+                    <UserX className="size-4" aria-hidden="true" /> Inativar funcionário
                   </button>
                 )}
               </div>
             </>
           )}
-        </div>
+        </div>}
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2">

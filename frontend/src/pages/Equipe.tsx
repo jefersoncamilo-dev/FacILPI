@@ -1,4 +1,8 @@
 import { useEffect, useCallback, useState } from 'react'
+import { ShieldCheck, UsersRound } from 'lucide-react'
+import { usePermissoesOuPadrao } from '../context/PermissoesContext'
+import { Alert } from '../components/ui/feedback'
+import { EmptyState, ErrorState } from '../components/ui/states'
 import { useEquipe } from '../hooks/useEquipe'
 import type { Tab } from '../hooks/useEquipe'
 import type { Funcionario, User, Perfil } from '../types/equipe'
@@ -35,10 +39,11 @@ const situacaoFilters = [
   { value: 'inativo', label: 'Inativos' },
 ] as const
 
-const tabConfig: { key: Tab; label: string }[] = [
-  { key: 'funcionarios', label: 'Funcionários' },
-  { key: 'usuarios', label: 'Usuários' },
-  { key: 'perfis', label: 'Perfis' },
+// UX-10 (#98): cada aba só aparece para quem o backend deixaria consultar.
+const tabConfig: { key: Tab; label: string; permissao: string }[] = [
+  { key: 'funcionarios', label: 'Funcionários', permissao: 'funcionarios:ler' },
+  { key: 'usuarios', label: 'Usuários', permissao: 'usuarios:ler' },
+  { key: 'perfis', label: 'Perfis', permissao: 'perfis:ler' },
 ]
 
 export function Equipe() {
@@ -52,16 +57,27 @@ export function Equipe() {
     createUsuario, updateUsuario, resetPassword, revogarAcesso,
     createPerfil, updatePerfilPermissoes,
   } = useEquipe()
+  const { pode, status } = usePermissoesOuPadrao()
+  const abas = tabConfig.filter(t => pode(t.permissao))
+  // Sem nenhuma aba permitida (só se chega por URL: o menu esconde a Equipe),
+  // a tela explica o bloqueio em vez de mostrar erro e "nenhum funcionário".
+  const semAcesso = status !== 'carregando' && abas.length === 0
+  useEffect(() => {
+    const permitidas = tabConfig.filter(t => pode(t.permissao))
+    if (permitidas.length > 0 && !permitidas.some(t => t.key === tab)) setTab(permitidas[0].key)
+  }, [pode, tab, setTab])
 
   const loadData = useCallback(async () => {
+    if (status === 'carregando' || semAcesso) return
     // Aba Funcionários precisa de perfis (seletores de concessão) e usuários
     // (vincular existente, revogar pelo card) além dos funcionários.
-    if (tab === 'funcionarios') await Promise.all([loadFuncionarios(situacaoFilter), loadPerfis(), loadUsuarios()])
+    // Perfis e usuários são auxiliares aqui: só consulta o que a sessão pode ler.
+    if (tab === 'funcionarios') await Promise.all([loadFuncionarios(situacaoFilter), pode('perfis:ler') && loadPerfis(), pode('usuarios:ler') && loadUsuarios()])
     else if (tab === 'usuarios') await loadUsuarios()
     else if (tab === 'perfis') {
       await Promise.all([loadPerfis(), loadPermissoes()])
     }
-  }, [tab, situacaoFilter, loadFuncionarios, loadUsuarios, loadPerfis, loadPermissoes])
+  }, [tab, situacaoFilter, loadFuncionarios, loadUsuarios, loadPerfis, loadPermissoes, pode, status, semAcesso])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -89,32 +105,34 @@ export function Equipe() {
     inativarModal.open(f)
   }
 
+  if (semAcesso) return <ErrorState title="Sem acesso à equipe" description="Seu perfil não permite consultar a equipe nesta ILPI." />
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primaryDeep">Equipe</h1>
-          <p className="text-textMuted text-sm">Funcionários, usuários e acessos da instituição</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Equipe</h1>
+          <p className="text-muted-foreground text-sm">Funcionários, usuários e acessos da instituição — quem pode fazer o quê</p>
         </div>
         <div className="flex gap-2">
-          {(tab === 'funcionarios' || tab === 'usuarios') && (
+          {(tab === 'funcionarios' || tab === 'usuarios') && pode('funcionarios:criar') && (
             <button onClick={() => formModal.open(null)} className="btn-primary">+ Novo funcionário</button>
           )}
-          {tab === 'perfis' && (
+          {tab === 'perfis' && pode('perfis:criar') && (
             <button onClick={() => perfilModal.open(null)} className="btn-primary">+ Novo perfil</button>
           )}
         </div>
       </div>
 
-      <div className="flex gap-1 bg-slate-100 rounded-xl p-1 overflow-x-auto">
-        {tabConfig.map(t => (
+      <div className="flex gap-1 bg-muted rounded-xl p-1 overflow-x-auto">
+        {abas.map(t => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             className={`flex-1 min-w-0 px-2 sm:px-4 py-3 rounded-lg text-[13px] sm:text-sm font-medium transition min-h-[44px] whitespace-nowrap ${
               tab === t.key
-                ? 'bg-white text-primary shadow-sm'
-                : 'text-textMuted hover:text-textMain'
+                ? 'bg-card text-primary shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {t.label}
@@ -155,15 +173,10 @@ export function Equipe() {
       </div>
 
       {error && (
-        <div className="card bg-red-50 border-red-200">
-          <div className="flex items-start gap-3">
-            <span className="text-lg">⚠️</span>
-            <div className="flex-1">
-              <p className="text-sm text-danger font-medium">{error}</p>
-              <button onClick={clearError} className="text-xs text-danger underline mt-1">Dispensar</button>
-            </div>
-          </div>
-        </div>
+        <Alert variant="error">
+          <p className="font-medium">{error}</p>
+          <button onClick={clearError} className="mt-1 min-h-[32px] text-xs underline">Dispensar</button>
+        </Alert>
       )}
 
       {loading && tab !== 'perfis' && (
@@ -195,11 +208,10 @@ export function Equipe() {
               onInativar={handleInativar}
             />
           ))}
-          {filteredFuncionarios.length === 0 && (
-            <div className="col-span-full card py-16 text-center">
-              <span className="text-4xl mb-3 block">👩‍⚕️</span>
-              <p className="text-textMuted font-medium">Nenhum funcionário encontrado</p>
-              <p className="text-xs text-textMuted mt-1">Cadastre o primeiro funcionário ou ajuste os filtros.</p>
+          {/* Falha de consulta não vira "nenhum funcionário". */}
+          {filteredFuncionarios.length === 0 && !error && (
+            <div className="col-span-full">
+              <EmptyState icon={UsersRound} title="Nenhum funcionário encontrado" description="Cadastre o primeiro funcionário ou ajuste os filtros." />
             </div>
           )}
         </div>
@@ -242,32 +254,26 @@ export function Equipe() {
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => perfilModal.open(p)}
-                    className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center"
+                    className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
                   >
-                    ✏️ Gerenciar
+                    <ShieldCheck className="size-3.5" aria-hidden="true" />
+                    {pode('perfis:atribuir_permissao') ? 'Ver e editar permissões' : 'Ver permissões'}
                   </button>
                 </div>
               </div>
             ))}
             {perfis.length === 0 && (
-              <div className="col-span-full card py-16 text-center">
-                <span className="text-4xl mb-3 block">🛡️</span>
-                <p className="text-textMuted font-medium">Nenhum perfil encontrado</p>
-                <p className="text-xs text-textMuted mt-1">Crie o primeiro perfil institucional.</p>
+              <div className="col-span-full">
+                <EmptyState icon={ShieldCheck} title="Nenhum perfil encontrado" description="Crie o primeiro perfil institucional." />
               </div>
             )}
           </div>
 
-          <div className="card bg-blue-50 border border-blue-100">
-            <div className="flex items-start gap-3">
-              <span className="text-lg">ℹ️</span>
-              <div className="text-xs text-primary space-y-1">
-                <p><strong>Perfis</strong> definem o que cada usuário pode fazer no sistema.</p>
-                <p>O perfil <code>platform_superuser</code> é exclusivo do escopo global e não pode ser atribuído por administradores ILPI.</p>
-                <p>Perfis com escopo <code>ilpi</code> são específicos desta instituição.</p>
-              </div>
-            </div>
-          </div>
+          <Alert variant="info" title="Perfis definem o que cada usuário pode fazer">
+            <p>Abra um perfil para ver exatamente as permissões que ele tem hoje.</p>
+            <p>Aqui não se editam permissões de módulos assistenciais (como residentes, documentos, avaliações, sinais vitais e intercorrências). Perfis que têm alguma delas ficam só para leitura, para não perdê-las ao salvar.</p>
+            <p>O perfil <code>platform_superuser</code> é exclusivo do escopo global e não pode ser atribuído por administradores ILPI.</p>
+          </Alert>
         </div>
       )}
 
@@ -331,6 +337,7 @@ export function Equipe() {
         allPerfis={perfis}
         onSubmitPerfil={createPerfil}
         onSubmitPermissoes={updatePerfilPermissoes}
+        somenteLeitura={!pode('perfis:atribuir_permissao')}
       />
     </div>
   )

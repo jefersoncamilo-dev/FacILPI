@@ -84,6 +84,14 @@ export interface Permissao {
   descricao: string | null
 }
 
+/** GET /perfis/{id}/permissoes (UX-10 / #98): o que o perfil tem de fato. */
+export interface PerfilPermissoes {
+  perfil_id: string
+  permissoes: (Pick<Permissao, 'chave' | 'modulo' | 'acao' | 'descricao'> & { editavel: boolean })[]
+  /** false: há permissão fora do catálogo local; o PUT local a apagaria. */
+  editavel: boolean
+}
+
 export interface ResetPasswordResponse {
   senha_temporaria: string
 }
