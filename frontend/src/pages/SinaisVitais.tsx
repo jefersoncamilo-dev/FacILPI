@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { TriangleAlert } from 'lucide-react'
+import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 // `GET /residentes/` já tem um consumidor tipado; duplicar a função criaria uma
 // segunda declaração da mesma chamada.
@@ -15,6 +17,7 @@ import { RegistrarSinalVitalModal } from '../components/sinaisVitais/RegistrarSi
 const TODOS = ''
 
 export function SinaisVitais() {
+  const { pode } = usePermissoesOuPadrao()
   const [registros, setRegistros] = useState<SinalVital[]>([])
   const [carregando, setCarregando] = useState(true)
   // `erro` separado de lista vazia: sem essa distinção um 403 viraria
@@ -73,10 +76,11 @@ export function SinaisVitais() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-primaryDeep">Sinais Vitais</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Sinais Vitais</h1>
           <p className="text-textMuted text-sm">Temperatura, pressão, frequências, saturação, glicemia e peso</p>
         </div>
-        {!semPermissaoCriar && (
+        {/* UX-05: só para quem pode registrar; o 403 segue como defesa. */}
+        {pode('sinais_vitais:criar') && !semPermissaoCriar && (
           <button onClick={() => { setSucesso(''); setModalAberto(true) }} className="btn-primary">
             + Registrar aferição
           </button>
@@ -139,7 +143,7 @@ export function SinaisVitais() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <div className="text-4xl mb-2" aria-hidden="true">⚠️</div>
+          <TriangleAlert className="mx-auto mb-3 size-7 text-amber-700" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>

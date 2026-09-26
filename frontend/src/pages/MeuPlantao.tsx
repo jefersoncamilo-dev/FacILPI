@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { AlarmClock, BellRing, Clock, Pill, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
+import { usePermissoesOuPadrao } from '../context/PermissoesContext'
+import { Alert } from '../components/ui/feedback'
+import { cn } from '../lib/utils'
 import {
   PLANTAO_LIMIT_PADRAO,
   PLANTAO_ORIGENS,
@@ -21,10 +25,24 @@ const ROTULO_ORIGEM: Record<PlantaoOrigem, string> = {
   intercorrencia: 'Intercorrência',
 }
 
-const ICONE_ORIGEM: Record<PlantaoOrigem, string> = {
-  cuidado: '🛎️',
-  medicacao: '💊',
-  intercorrencia: '⚠️',
+const ICONE_ORIGEM: Record<PlantaoOrigem, LucideIcon> = {
+  cuidado: BellRing,
+  medicacao: Pill,
+  intercorrencia: TriangleAlert,
+}
+
+// UX-05 (#91): permissão que cada ação exige no backend. Sem ela, a pendência
+// continua visível (informa o turno), mas o botão não é oferecido.
+const PERMISSAO_ACAO: Record<PlantaoOrigem, string> = {
+  cuidado: 'execucoes:criar',
+  medicacao: 'administracoes:criar',
+  intercorrencia: 'intercorrencias:atualizar',
+}
+
+const SUCESSO_ACAO: Record<PlantaoOrigem, string> = {
+  cuidado: 'Execução registrada.',
+  medicacao: 'Administração registrada.',
+  intercorrencia: 'Intercorrência encerrada.',
 }
 
 const ACAO_ORIGEM: Record<PlantaoOrigem, string> = {
@@ -61,6 +79,8 @@ function atrasado(item: PlantaoItem, agora: number): boolean {
 }
 
 export function MeuPlantao() {
+  const { pode } = usePermissoesOuPadrao()
+  const [sucesso, setSucesso] = useState('')
   const [itens, setItens] = useState<PlantaoItem[]>([])
   const [carregando, setCarregando] = useState(true)
   // `erro` separado de lista vazia: sem essa distinção um 403 viraria
@@ -111,6 +131,7 @@ export function MeuPlantao() {
   const atrasados = itens.filter(item => atrasado(item, agora)).length
 
   function abrir(item: PlantaoItem) {
+    setSucesso('')
     setItemAberto(item)
     setForm(FORM_VAZIO)
     setErroAcao('')
@@ -176,8 +197,10 @@ export function MeuPlantao() {
       } else {
         await encerrarIntercorrencia(itemAberto.registro_id, form.desfecho.trim())
       }
+      const origem = itemAberto.origem
       fechar()
       await carregar()
+      setSucesso(SUCESSO_ACAO[origem])
     } catch (e) {
       // Conflito de concorrência (outro plantonista já registrou) chega aqui.
       // A projeção é recarregada para que a lista atrás do modal reflita a
@@ -191,68 +214,101 @@ export function MeuPlantao() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-primaryDeep">Meu Plantão</h1>
-        <p className="text-textMuted text-sm">Pendências das próximas 24 horas — cuidados, doses e intercorrências abertas</p>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Meu Plantão</h1>
+        <p className="text-sm text-muted-foreground">Pendências das próximas 24 horas — cuidados, doses e intercorrências abertas</p>
       </div>
 
-      <div className="card p-2 flex gap-2 overflow-auto">
+      <div className="flex gap-2 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Filtrar por origem">
         {([{ value: 'todos' as Filtro, label: 'Todos' }, ...PLANTAO_ORIGENS]).map(opcao => (
           <button
             key={opcao.value}
+            aria-pressed={filtro === opcao.value}
             onClick={() => setFiltro(opcao.value as Filtro)}
-            className={`px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap min-h-[44px] ${filtro === opcao.value ? 'bg-primary text-white' : 'bg-slate-100 text-textMuted hover:bg-slate-200'}`}
+            className={cn(
+              'min-h-[40px] shrink-0 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors',
+              filtro === opcao.value ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            )}
           >
             {opcao.label} ({contagens[opcao.value as Filtro]})
           </button>
         ))}
       </div>
 
+      {sucesso && <Alert variant="success">{sucesso}</Alert>}
+
       {atrasados > 0 && !erro && (
-        <div className="card border-l-4 border-l-warning py-3">
-          <span className="text-sm font-medium text-warning">⏰ {atrasados} {atrasados === 1 ? 'pendência atrasada' : 'pendências atrasadas'}</span>
+        <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <AlarmClock className="size-4 text-amber-800" aria-hidden="true" />
+          <span className="text-sm font-medium text-amber-900">{atrasados} {atrasados === 1 ? 'pendência atrasada' : 'pendências atrasadas'}</span>
         </div>
       )}
 
       {itens.length >= PLANTAO_LIMIT_PADRAO && !erro && (
-        <div className="card border-l-4 border-l-warning py-3">
-          <span className="text-sm text-textMuted">Exibindo as primeiras {PLANTAO_LIMIT_PADRAO} pendências. Pode haver mais no período.</span>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <span className="text-sm text-muted-foreground">Exibindo as primeiras {PLANTAO_LIMIT_PADRAO} pendências. Pode haver mais no período.</span>
         </div>
       )}
 
       {carregando ? (
-        <div className="card py-16 text-center text-textMuted">Carregando plantão…</div>
+        <div className="card py-16 text-center text-muted-foreground">Carregando plantão…</div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <div className="text-4xl mb-2">⚠️</div>
-          <p className="text-sm text-danger font-medium">{erro}</p>
+          <TriangleAlert className="mx-auto mb-3 size-7 text-amber-700" aria-hidden="true" />
+          <p className="text-sm font-medium text-red-700">{erro}</p>
           <button onClick={carregar} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
+      ) : lista.length === 0 ? (
+        <div className="card py-16 text-center text-muted-foreground">Nenhuma pendência neste filtro</div>
       ) : (
-        <div className="grid gap-3">
-          {lista.map(item => (
-            <div
-              key={`${item.origem}:${item.registro_id}`}
-              className={`card flex gap-4 items-start border-l-4 ${item.prioridade === 'alta' ? 'border-l-danger' : item.prioridade === 'media' ? 'border-l-warning' : 'border-l-success'}`}
-            >
-              <div className="w-10 h-10 rounded-full bg-primaryLight flex items-center justify-center" aria-hidden="true">{ICONE_ORIGEM[item.origem]}</div>
-              <div className="flex-1 min-w-0">
-                <div className="font-medium truncate">{item.descricao}</div>
-                <div className="text-xs text-textMuted mt-1">
-                  {ROTULO_ORIGEM[item.origem]} • {nomes[item.residente_id] || item.residente_id}
-                  {item.previsto_em ? ` • ${formatDateTime(item.previsto_em)}` : ''}
-                  {item.prioridade ? ` • ${item.prioridade}` : ''}
-                </div>
-                {atrasado(item, agora) && <span className="badge-warning mt-2 inline-block">Atrasada</span>}
-              </div>
-              <button onClick={() => abrir(item)} className="btn-primary text-sm px-4 py-2">
-                {ACAO_ORIGEM[item.origem]}
-              </button>
-            </div>
+        <div className="space-y-6">
+          {/* UX-05: agrupado pela pergunta do turno — o que já passou da hora, o
+              que vem a seguir, e o que não tem horário (intercorrência aberta).
+              A ordem dentro de cada grupo é a da projeção oficial. */}
+          {[
+            { titulo: 'Atrasadas', itens: lista.filter(i => atrasado(i, agora)) },
+            { titulo: 'Próximas', itens: lista.filter(i => i.previsto_em && !atrasado(i, agora)) },
+            { titulo: 'Sem horário', itens: lista.filter(i => !i.previsto_em) },
+          ].filter(g => g.itens.length > 0).map(grupo => (
+            <section key={grupo.titulo} aria-label={grupo.titulo} className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {grupo.titulo} <span className="font-normal">({grupo.itens.length})</span>
+              </h2>
+              {grupo.itens.map(item => {
+                const Icone = ICONE_ORIGEM[item.origem]
+                const podeAgir = pode(PERMISSAO_ACAO[item.origem])
+                return (
+                  <div
+                    key={`${item.origem}:${item.registro_id}`}
+                    className={cn(
+                      'card flex flex-wrap items-start gap-4 border-l-4 sm:flex-nowrap',
+                      item.prioridade === 'alta' ? 'border-l-red-600' : item.prioridade === 'media' ? 'border-l-amber-500' : 'border-l-brand',
+                    )}
+                  >
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-primary" aria-hidden="true">
+                      <Icone className="size-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium">{item.descricao}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {ROTULO_ORIGEM[item.origem]} • {nomes[item.residente_id] || item.residente_id}
+                        {item.previsto_em ? ` • ${formatDateTime(item.previsto_em)}` : ''}
+                        {item.prioridade ? ` • ${item.prioridade}` : ''}
+                      </div>
+                      {atrasado(item, agora) && (
+                        <span className="badge-warning mt-2 inline-flex"><Clock className="size-3" aria-hidden="true" /> Atrasada</span>
+                      )}
+                    </div>
+                    {podeAgir && (
+                      <button onClick={() => abrir(item)} className="btn-primary w-full px-4 py-2 text-sm sm:w-auto">
+                        {ACAO_ORIGEM[item.origem]}
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </section>
           ))}
-          {lista.length === 0 && (
-            <div className="card py-16 text-center text-textMuted">Nenhuma pendência neste filtro</div>
-          )}
         </div>
       )}
 
