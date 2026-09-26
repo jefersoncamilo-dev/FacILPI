@@ -166,4 +166,20 @@ describe('UX-10 — ações só para quem o backend aceitaria', () => {
     expect(screen.queryByRole('button', { name: /Ver e editar permissões/ })).toBeNull()
     expect(screen.queryByRole('button', { name: /Novo perfil/ })).toBeNull()
   })
+
+  it('Equipe: sem nenhuma permissão da equipe, explica o bloqueio; 403 não vira "nenhum funcionário"', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/funcionarios/') return Promise.reject({ response: { status: 403, data: { detail: 'Permissão não autorizada' } } })
+      throw new Error(`URL inesperada: ${url}`)
+    })
+    const sem = comPermissoes(<Equipe />, ['plantao:ler'])
+    expect(await screen.findByText('Sem acesso à equipe')).toBeTruthy()
+    expect(screen.queryByText('Nenhum funcionário encontrado')).toBeNull()
+    expect(mockGet).not.toHaveBeenCalledWith('/funcionarios/', expect.anything())
+    sem.unmount()
+
+    comPermissoes(<Equipe />, ['funcionarios:ler'])
+    expect(await screen.findByText('Permissão não autorizada')).toBeTruthy()
+    expect(screen.queryByText('Nenhum funcionário encontrado')).toBeNull()
+  })
 })

@@ -2,7 +2,7 @@ import { useEffect, useCallback, useState } from 'react'
 import { ShieldCheck, UsersRound } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { Alert } from '../components/ui/feedback'
-import { EmptyState } from '../components/ui/states'
+import { EmptyState, ErrorState } from '../components/ui/states'
 import { useEquipe } from '../hooks/useEquipe'
 import type { Tab } from '../hooks/useEquipe'
 import type { Funcionario, User, Perfil } from '../types/equipe'
@@ -57,14 +57,18 @@ export function Equipe() {
     createUsuario, updateUsuario, resetPassword, revogarAcesso,
     createPerfil, updatePerfilPermissoes,
   } = useEquipe()
-  const { pode } = usePermissoesOuPadrao()
+  const { pode, status } = usePermissoesOuPadrao()
   const abas = tabConfig.filter(t => pode(t.permissao))
+  // Sem nenhuma aba permitida (só se chega por URL: o menu esconde a Equipe),
+  // a tela explica o bloqueio em vez de mostrar erro e "nenhum funcionário".
+  const semAcesso = status !== 'carregando' && abas.length === 0
   useEffect(() => {
     const permitidas = tabConfig.filter(t => pode(t.permissao))
     if (permitidas.length > 0 && !permitidas.some(t => t.key === tab)) setTab(permitidas[0].key)
   }, [pode, tab, setTab])
 
   const loadData = useCallback(async () => {
+    if (status === 'carregando' || semAcesso) return
     // Aba Funcionários precisa de perfis (seletores de concessão) e usuários
     // (vincular existente, revogar pelo card) além dos funcionários.
     // Perfis e usuários são auxiliares aqui: só consulta o que a sessão pode ler.
@@ -73,7 +77,7 @@ export function Equipe() {
     else if (tab === 'perfis') {
       await Promise.all([loadPerfis(), loadPermissoes()])
     }
-  }, [tab, situacaoFilter, loadFuncionarios, loadUsuarios, loadPerfis, loadPermissoes, pode])
+  }, [tab, situacaoFilter, loadFuncionarios, loadUsuarios, loadPerfis, loadPermissoes, pode, status, semAcesso])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -100,6 +104,8 @@ export function Equipe() {
   function handleInativar(f: Funcionario) {
     inativarModal.open(f)
   }
+
+  if (semAcesso) return <ErrorState title="Sem acesso à equipe" description="Seu perfil não permite consultar a equipe nesta ILPI." />
 
   return (
     <div className="space-y-6">
@@ -202,7 +208,8 @@ export function Equipe() {
               onInativar={handleInativar}
             />
           ))}
-          {filteredFuncionarios.length === 0 && (
+          {/* Falha de consulta não vira "nenhum funcionário". */}
+          {filteredFuncionarios.length === 0 && !error && (
             <div className="col-span-full">
               <EmptyState icon={UsersRound} title="Nenhum funcionário encontrado" description="Cadastre o primeiro funcionário ou ajuste os filtros." />
             </div>
