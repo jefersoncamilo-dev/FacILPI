@@ -57,7 +57,7 @@ export const NAVEGACAO: GrupoNav[] = [
     titulo: 'Residentes',
     itens: [
       { to: '/residentes', label: 'Residentes', icon: Users, permissao: 'residentes:ler' },
-      { to: '/admissoes', label: 'Admissões', icon: UserPlus, permissao: 'admissoes:ler', emBreve: { issue: 76 } },
+      { to: '/admissoes', label: 'Admissões', icon: UserPlus, permissao: 'admissoes:ler' },
       { to: '/avaliacoes', label: 'Avaliações', icon: ClipboardCheck, permissao: 'avaliacoes:ler', emBreve: { issue: 79 } },
       { to: '/plano', label: 'Plano de Cuidados', icon: NotebookPen, permissao: 'planos_cuidados:ler', emBreve: { issue: 80 } },
       { to: '/documentos', label: 'Documentos', icon: FileText, permissao: 'documentos:ler' },

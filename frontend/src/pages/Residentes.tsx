@@ -162,13 +162,12 @@ export function Residentes() {
           </div>
           <input className="input" placeholder="CPF (000.000.000-00) — opcional validado" value={form.cpf} onChange={e => setForm({...form, cpf: e.target.value})} />
           <input className="input" placeholder="CNS 15 dígitos — opcional" value={form.cns} onChange={e => setForm({...form, cns: e.target.value})} />
-          <select className="input" value={form.situacao} onChange={e => setForm({...form, situacao: e.target.value})}>
-            <option>Pré-admissão</option>
-            <option>Em admissao</option>
-            <option>Ativo</option>
-            <option>Hospitalizado</option>
-            <option>Inativo</option>
-          </select>
+          {/* UX-03 (#76): a situação não é escolhida no cadastro. Todo residente
+              entra "Em admissao" e só passa a "Ativo" ao concluir a admissão;
+              hospitalização é governada por Ausências. */}
+          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            O residente entra como <strong>Em admissão</strong>. Ele passa a <strong>Ativo</strong> quando a admissão é concluída, em Admissões.
+          </p>
           {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
           <button type="submit" className="btn-primary w-full">Salvar</button>
           <p className="text-xs text-textMuted text-center">CPF e CNS validados no backend. Duplicidade impede cadastro.</p>
