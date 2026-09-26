@@ -53,6 +53,10 @@ function responde({ leitos = LEITOS as unknown, ausencias = AUSENCIAS as unknown
   })
 }
 
+/** Leitos, residentes e ausências chegam por consultas independentes. */
+const residentesCarregados = () => screen.findByText('Antônia Ribeiro')
+const ausenciasCarregadas = () => screen.findByText(/Hospitalização desde/)
+
 function renderTela(permissoes = TUDO) {
   mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes } } as any)
   return render(<AuthProvider><MemoryRouter><PermissoesProvider><QuartosLeitos /></PermissoesProvider></MemoryRouter></AuthProvider>)
@@ -71,15 +75,16 @@ describe('Quartos e leitos — visão', () => {
     await waitFor(() => expect(resumo.getByText('1/3')).toBeTruthy())
     expect(resumo.getByText('Livres').nextElementSibling?.textContent).toBe('1')
     expect(resumo.getByText('Indisponíveis').nextElementSibling?.textContent).toBe('1')
-    expect(resumo.getByText('Ausentes agora').nextElementSibling?.textContent).toBe('1')
+    // Ausências vêm de outra consulta (permissão própria): esperar por elas.
+    expect((await resumo.findByText('Ausentes agora')).nextElementSibling?.textContent).toBe('1')
   })
 
   it('agrupa por quarto e mostra ocupante e ausência sem inventar regra', async () => {
     renderTela()
     const quarto101 = within(await screen.findByRole('region', { name: 'Quarto 101' }))
     const ocupado = quarto101.getByText('Leito A').closest('button')!
-    expect(within(ocupado).getByText('Antônia Ribeiro')).toBeTruthy()
-    expect(within(ocupado).getByText(/Hospitalização desde/)).toBeTruthy()
+    expect(await within(ocupado).findByText('Antônia Ribeiro')).toBeTruthy()
+    expect(await within(ocupado).findByText(/Hospitalização desde/)).toBeTruthy()
   })
 
   it('403 e falha de consulta não viram "nenhum leito"', async () => {
@@ -99,6 +104,7 @@ describe('Quartos e leitos — ações por estado', () => {
     const user = userEvent.setup()
     mockPost.mockResolvedValueOnce({ data: {} } as any)
     renderTela()
+    await residentesCarregados()
     await user.click((await screen.findByRole('region', { name: 'Quarto 101' })).querySelectorAll('button')[1] as HTMLElement)
     const dialog = within(await screen.findByRole('dialog'))
     const opcoes = within(dialog.getByLabelText('Alocar residente')).getAllByRole('option').map(o => o.textContent)
@@ -114,6 +120,7 @@ describe('Quartos e leitos — ações por estado', () => {
     const user = userEvent.setup()
     mockPost.mockResolvedValueOnce({ data: {} } as any)
     renderTela()
+    await ausenciasCarregadas()
     await user.click((await screen.findByRole('region', { name: 'Quarto 101' })).querySelectorAll('button')[0] as HTMLElement)
     const dialog = within(await screen.findByRole('dialog'))
     expect(dialog.queryByLabelText('Situação do leito vazio')).toBeNull()
@@ -147,6 +154,7 @@ describe('Quartos e leitos — ações por estado', () => {
     const user = userEvent.setup()
     mockPost.mockRejectedValueOnce({ response: { status: 409, data: { detail: 'Residente já possui leito ocupado' } } })
     renderTela()
+    await residentesCarregados()
     await user.click((await screen.findByRole('region', { name: 'Quarto 101' })).querySelectorAll('button')[1] as HTMLElement)
     const dialog = within(await screen.findByRole('dialog'))
     await user.selectOptions(dialog.getByLabelText('Alocar residente'), 'r2')
@@ -160,9 +168,10 @@ describe('Quartos e leitos — ausências', () => {
     const user = userEvent.setup()
     mockPost.mockResolvedValueOnce({ data: {} } as any)
     renderTela()
+    await ausenciasCarregadas()
     await user.click(await screen.findByRole('tab', { name: 'Ausências' }))
-    const ativas = within(screen.getByRole('region', { name: 'Ausências ativas' }))
-    await user.click(ativas.getByRole('button', { name: /Registrar retorno/ }))
+    const ativas = within(await screen.findByRole('region', { name: 'Ausências ativas' }))
+    await user.click(await ativas.findByRole('button', { name: /Registrar retorno/ }))
     expect(mockPost).toHaveBeenCalledWith('/ausencias/a1/encerrar', {})
   })
 
@@ -171,8 +180,10 @@ describe('Quartos e leitos — ausências', () => {
     responde({ ausencias: [] })
     mockPost.mockResolvedValueOnce({ data: {} } as any)
     renderTela()
+    await residentesCarregados()
     await user.click(await screen.findByRole('button', { name: /Registrar ausência/ }))
     const dialog = within(await screen.findByRole('dialog'))
+    await dialog.findByRole('option', { name: 'Antônia Ribeiro' })
     await user.selectOptions(dialog.getByLabelText('Residente'), 'r1')
     await user.type(dialog.getByLabelText('Motivo'), 'Consulta externa')
     await user.selectOptions(dialog.getByLabelText('Tipo'), 'saida_temporaria')
