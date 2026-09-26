@@ -196,6 +196,8 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "execucoes:criar",
         "execucoes:corrigir",
         "plantao:ler",
+        # #107: alertas derivados leem fatos clinicos da ILPI da sessao.
+        "alertas:ler",
         "medicamentos:ler",
         "medicamentos:criar",
         "medicamentos:atualizar",

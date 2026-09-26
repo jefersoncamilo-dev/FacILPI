@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BedDouble,
+  BellRing,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -23,8 +24,8 @@ import {
  *
  * Fora do menu por não terem tela nem jornada nesta fase (GAP registrado na
  * UX-01): Cuidados Diários, Medicação, Agenda, Estoque, Financeiro, Portal da
- * Família, Relatórios, Supervisão, Compliance, Auditoria, Configurações e
- * Alertas. As rotas continuam existindo e explicam a situação.
+ * Família, Relatórios, Supervisão, Compliance, Auditoria e Configurações. As
+ * rotas continuam existindo e explicam a situação. Alertas entrou com a #107.
  */
 export interface ItemNav {
   to: string
@@ -42,7 +43,10 @@ export interface GrupoNav {
 export const NAVEGACAO: GrupoNav[] = [
   {
     titulo: 'Visão geral',
-    itens: [{ to: '/', label: 'Início', icon: LayoutDashboard }],
+    itens: [
+      { to: '/', label: 'Início', icon: LayoutDashboard },
+      { to: '/alertas', label: 'Alertas', icon: BellRing, permissao: 'alertas:ler' },
+    ],
   },
   {
     titulo: 'Plantão',
