@@ -329,8 +329,9 @@ def test_anexo_cross_tenant_continua_bloqueado(d1_db):
 # -------------------------------------------------------------- migration ----
 
 def test_migration_upgrade_idempotente_e_downgrade(d1_db):
-    # Reaplicar head sobre head nao deve quebrar nem duplicar vinculo.
-    _migrate(d1_db, target="head")
+    # Reaplicar a 020 sobre a 020 nao deve quebrar nem duplicar vinculo.
+    # (Alvo fixo: com a 021 a ponta movel deixou de ser a 020.)
+    _migrate(d1_db, target=HEAD)
 
     async def apos_upgrade(client, db):
         assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == HEAD
