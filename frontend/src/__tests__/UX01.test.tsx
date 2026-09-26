@@ -120,15 +120,17 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     expect(menu().queryByRole('link', { name: /Admissões/ })).toBeNull()
   })
 
-  it('marca como "Em breve" a tela ainda não entregue, sem esconder a permissão', async () => {
+  it('jornadas entregues (UX-06..UX-09) não ficam marcadas "Em breve"', async () => {
+    // O marcador "Em breve" continua suportado pela navegação; desde a UX-09
+    // nenhuma tela do menu está pendente, então o teste afirma o inverso.
     seedSessao()
-    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['plantao:ler', 'avaliacoes:ler'] } } as any)
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['plantao:ler', 'avaliacoes:ler', 'planos_cuidados:ler', 'quartos_leitos:ler'] } } as any)
     renderShell()
 
-    const passagem = await menu().findByRole('link', { name: /Passagem de Plantão/ })
-    expect(within(passagem).getByText('Em breve')).toBeTruthy()
-    // Entregue na UX-06 (#79): deixa de ser "Em breve".
-    expect(within(menu().getByRole('link', { name: /Avaliações/ })).queryByText('Em breve')).toBeNull()
+    for (const nome of [/Passagem de Plantão/, /Avaliações/, /Plano de Cuidados/, /Quartos/]) {
+      const link = await menu().findByRole('link', { name: nome })
+      expect(within(link).queryByText('Em breve')).toBeNull()
+    }
   })
 
   it('sem o endpoint, mostra os módulos prontos e deixa o backend decidir', async () => {

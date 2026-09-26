@@ -16,6 +16,7 @@ import { Admissoes } from './pages/Admissoes'
 import { AdmissaoDetalhe } from './pages/AdmissaoDetalhe'
 import { QuartosLeitos } from './pages/QuartosLeitos'
 import { Avaliacoes } from './pages/Avaliacoes'
+import { PassagemPlantao } from './pages/PassagemPlantao'
 import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
 import { ErrorBoundary } from './components/ui/states'
@@ -62,7 +63,7 @@ export default function App() {
           <Route path="/intercorrencias" element={<Protected><Intercorrencias /></Protected>} />
           <Route path="/documentos" element={<Protected><Documentos /></Protected>} />
           <Route path="/agenda" element={<Protected><Placeholder title="Agenda Clínica" /></Protected>} />
-          <Route path="/passagem" element={<Protected><Placeholder title="Passagem de Plantão" emConstrucao /></Protected>} />
+          <Route path="/passagem" element={<Protected><PassagemPlantao /></Protected>} />
           <Route path="/quartos" element={<Protected><QuartosLeitos /></Protected>} />
           <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
           <Route path="/estoque" element={<Protected><Placeholder title="Estoque" /></Protected>} />
