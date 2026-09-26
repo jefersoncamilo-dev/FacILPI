@@ -1,176 +1,422 @@
-import { useEffect, useState } from 'react'
-import { api, formatDate } from '../services/api'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { getPlantao, type PlantaoItem } from '../services/plantao'
+import {
+  ArrowRight,
+  BedDouble,
+  ClipboardList,
+  DoorOpen,
+  HeartPulse,
+  TriangleAlert,
+  UserPlus,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
+import { api } from '../services/api'
+import { getPlantao, PLANTAO_LIMIT_PADRAO, type PlantaoItem } from '../services/plantao'
+import { getResumoDashboard, type DashboardResumo } from '../services/dashboard'
+import { useAuth } from '../context/AuthContext'
+import { usePermissoes } from '../context/PermissoesContext'
+import { MetricCard } from '../components/ui/metric-card'
+import { Badge, Skeleton } from '../components/ui/feedback'
 
-// Indisponível não é zero. Enquanto a fonte falhar — ou não existir — o cartão
-// mostra este traço; exibir 0 afirmaria que não há pendência nenhuma.
+/**
+ * Início (UX-02 / #85). Responde à pergunta de quem abre:
+ *  - gestão: "Como está minha instituição?" — indicadores do resumo oficial;
+ *  - operação: "O que preciso fazer agora?" — pendências do turno primeiro.
+ *
+ * Todo número vem de fonte oficial: GET /dashboard/resumo (contagens no banco,
+ * por permissão) e a projeção /plantao/. Indisponível nunca vira zero, e nada
+ * sem fonte é exibido — alertas e conformidade não têm fonte oficial (GAP).
+ */
+
+// Indisponível não é zero: sem resposta da fonte, o valor é este traço.
+// (Classes completas: o Tailwind não enxerga nomes montados em tempo de execução.)
+// Links de texto com alvo de toque >= 24px (WCAG 2.5.8); 32px na prática.
+const LINK = 'inline-flex min-h-[32px] items-center text-primary hover:underline'
+const COLUNAS_INDICADORES: Record<number, string> = { 1: 'xl:grid-cols-1', 2: 'xl:grid-cols-2', 3: 'xl:grid-cols-3', 4: 'xl:grid-cols-4' }
 const INDISPONIVEL = '—'
 
-// Teto padrão de GET /residentes/ (limit=100 na factory, main.py). Ao atingi-lo a
-// tela não sabe o total — mostra "100+" em vez de afirmar exatamente 100.
-const LIMITE_LISTAGEM = 100
+type Carga<T> = { status: 'carregando' } | { status: 'ok'; dados: T } | { status: 'erro' }
 
-type Stats = { residentes: number }
+type ResidenteResumo = { id: string; nome: string; situacao?: string | null; grau_dependencia?: string | null }
+
+const ORIGEM: Record<PlantaoItem['origem'], string> = {
+  cuidado: 'Cuidado',
+  medicacao: 'Medicação',
+  intercorrencia: 'Intercorrência',
+}
+
+function saudacao(agora = new Date()): string {
+  const hora = Number(new Intl.DateTimeFormat('pt-BR', { hour: 'numeric', hour12: false, timeZone: 'America/Sao_Paulo' }).format(agora))
+  if (hora < 12) return 'Bom dia'
+  if (hora < 18) return 'Boa tarde'
+  return 'Boa noite'
+}
+
+function dataPorExtenso(agora = new Date()): string {
+  return new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'America/Sao_Paulo' }).format(agora)
+}
+
+function horaPrevista(iso?: string | null): string {
+  if (!iso) return 'sem hora'
+  return new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(iso))
+}
 
 export function Dashboard() {
-  const [stats, setStats] = useState<Stats>({ residentes: 0 })
-  const [residentes, setResidentes] = useState<any[]>([])
-  // PH-01: o `.catch(() => ({ data: [] }))` anterior transformava 403 e falha de
-  // rede em "0 residentes" e "Ocupação 0%" — os mesmos números que uma ILPI
-  // recém-criada mostra legitimamente. A indisponibilidade passa a ser explícita,
-  // como já era para pendências e alertas.
-  const [residentesIndisponiveis, setResidentesIndisponiveis] = useState(false)
-  const [pendencias, setPendencias] = useState<PlantaoItem[]>([])
-  const [pendenciasIndisponiveis, setPendenciasIndisponiveis] = useState(false)
+  const { activeContext } = useAuth()
+  const { pode, status: permissoes } = usePermissoes()
+  const [resumo, setResumo] = useState<Carga<DashboardResumo>>({ status: 'carregando' })
+  const [pendencias, setPendencias] = useState<Carga<PlantaoItem[]>>({ status: 'carregando' })
+  const [residentes, setResidentes] = useState<Carga<ResidenteResumo[]>>({ status: 'carregando' })
+
+  const podePlantao = pode('plantao:ler')
+  const podeResidentes = pode('residentes:ler')
+  // Perfil de experiência: quem responde pela instituição vê o espelho dela
+  // primeiro; quem está no turno vê primeiro o que precisa fazer.
+  const gestao = pode('funcionarios:ler') || pode('quartos_leitos:ler') || pode('admissoes:ler')
 
   useEffect(() => {
-    api.get('/residentes/')
-      .then(r => {
-        const lista = r.data || []
-        setResidentes(lista.slice(0, 5))
-        // Zero aqui é resultado legítimo: a consulta respondeu com lista vazia.
-        // PH02-03 (#71): sem "Ocupação". O cálculo dividia pela constante 40, que
-        // não é a capacidade da ILPI — e residente cadastrado não é leito ocupado.
-        setStats({ residentes: lista.length })
-        setResidentesIndisponiveis(false)
-      })
-      .catch(() => {
-        setResidentes([])
-        setStats({ residentes: 0 })
-        setResidentesIndisponiveis(true)
-      })
+    getResumoDashboard()
+      .then(dados => setResumo({ status: 'ok', dados }))
+      .catch(() => setResumo({ status: 'erro' }))
   }, [])
 
   useEffect(() => {
-    // Fonte oficial das pendências do turno é a projeção /plantao/, a mesma
-    // consumida por Meu Plantão. Falha marca indisponibilidade explícita.
+    if (permissoes === 'carregando' || !podePlantao) return
     getPlantao()
-      .then(itens => { setPendencias(itens); setPendenciasIndisponiveis(false) })
-      .catch(() => { setPendencias([]); setPendenciasIndisponiveis(true) })
-  }, [])
+      .then(dados => setPendencias({ status: 'ok', dados }))
+      .catch(() => setPendencias({ status: 'erro' }))
+  }, [permissoes, podePlantao])
+
+  useEffect(() => {
+    if (permissoes === 'carregando' || !podeResidentes) return
+    api.get<ResidenteResumo[]>('/residentes/')
+      .then(r => setResidentes({ status: 'ok', dados: r.data || [] }))
+      .catch(() => setResidentes({ status: 'erro' }))
+  }, [permissoes, podeResidentes])
+
+  const nomes = new Map((residentes.status === 'ok' ? residentes.dados : []).map(r => [r.id, r.nome]))
+  const cards = montarIndicadores({ resumo, pendencias, gestao, pode, podePlantao })
+  const acoes = [
+    { to: '/sinais', label: 'Registrar sinal vital', icon: HeartPulse, permissao: 'sinais_vitais:criar' },
+    { to: '/intercorrencias', label: 'Registrar intercorrência', icon: TriangleAlert, permissao: 'intercorrencias:criar' },
+    { to: '/plantao', label: 'Abrir Meu Plantão', icon: ClipboardList, permissao: 'plantao:ler' },
+    { to: '/residentes', label: 'Cadastrar residente', icon: UserPlus, permissao: 'residentes:criar' },
+  ].filter(a => pode(a.permissao))
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-primaryDeep">Início</h1>
-        <p className="text-textMuted">Visão geral da ILPI — {formatDate(new Date().toISOString())}</p>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Início</h1>
+        <p className="text-sm text-muted-foreground">
+          {saudacao()}
+          {activeContext?.ilpiNome ? ` · ${activeContext.ilpiNome}` : ''} · {dataPorExtenso()}
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* PH02-03 (#71): "cadastrados", não "ativos" — o número é o total
-            existente, e o domínio ainda não tem estado ativo/inativo governado. */}
-        <div className="card bg-gradient-to-br from-primary to-primaryDeep text-white border-0">
-          <div className="text-sm opacity-90">Residentes cadastrados</div>
-          <div className="text-3xl font-bold mt-1">
-            {residentesIndisponiveis
-              ? INDISPONIVEL
-              : stats.residentes >= LIMITE_LISTAGEM ? `${LIMITE_LISTAGEM}+` : stats.residentes}
-          </div>
-          {residentesIndisponiveis && (
-            <div className="text-xs opacity-80 mt-2">Indisponível no momento</div>
+      {cards.length > 0 && (
+        <section aria-label="Indicadores" className={`grid grid-cols-2 gap-3 sm:gap-4 ${COLUNAS_INDICADORES[cards.length] ?? 'xl:grid-cols-4'}`}>
+          {cards}
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          {podePlantao && (
+            <Painel
+              titulo="Próximas pendências do turno"
+              acao={<Link to="/plantao" className={LINK}>Abrir Meu Plantão</Link>}
+            >
+              <ListaPendencias carga={pendencias} nomes={nomes} />
+            </Painel>
           )}
-        </div>
-        <div className="card">
-          <div className="text-sm text-textMuted">Pendências do turno</div>
-          <div className="text-3xl font-bold text-warning mt-1">
-            {pendenciasIndisponiveis ? INDISPONIVEL : pendencias.length}
-          </div>
-          {pendenciasIndisponiveis
-            ? <span className="text-xs text-textMuted mt-2 inline-block">Indisponível no momento</span>
-            : <Link to="/plantao" className="text-xs text-primary font-semibold mt-2 inline-block">Ver Meu Plantão →</Link>}
-        </div>
-        <div className="card">
-          <div className="text-sm text-textMuted">Alertas ativos</div>
-          <div className="text-3xl font-bold text-danger mt-1">{INDISPONIVEL}</div>
-          <span className="text-xs text-textMuted mt-2 inline-block">Indisponível — sem fonte oficial</span>
-        </div>
-        {/* PH02-03 (#71): antes "✅ Em dia — Licenças verificadas" fixo no código,
-            inclusive para ILPI em configuração e sem rede. Não existe fonte de
-            conformidade no sistema; afirmar "em dia" seria fabricar um fato
-            regulatório. Mesma convenção do cartão de Alertas. */}
-        <div className="card">
-          <div className="text-sm text-textMuted">Conformidade</div>
-          <div className="text-3xl font-bold text-textMuted mt-1">{INDISPONIVEL}</div>
-          <span className="text-xs text-textMuted mt-2 inline-block">Não avaliada — sem fonte oficial</span>
-        </div>
-      </div>
-
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Residentes recentes</h3>
-            <Link to="/residentes" className="text-sm text-primary font-semibold">Ver todos</Link>
-          </div>
-          {residentesIndisponiveis ? (
-            <div className="py-10 text-center text-textMuted" role="alert">
-              <div className="text-4xl mb-2" aria-hidden="true">⚠️</div>
-              <p className="text-sm">Não foi possível carregar os residentes</p>
-              <p className="text-xs mt-1">Isso não significa que não há residentes cadastrados.</p>
-            </div>
-          ) : residentes.length === 0 ? (
-            <div className="py-10 text-center text-textMuted">
-              <div className="text-4xl mb-2">👥</div>
-              <p className="text-sm">Nenhum residente cadastrado</p>
-              <Link to="/residentes" className="btn-primary mt-4 inline-flex">Cadastrar residente</Link>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {residentes.map(r => (
-                <div key={r.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100">
-                  <div className="w-10 h-10 rounded-full bg-primaryLight flex items-center justify-center font-bold text-primary">{r.nome[0]}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate">{r.nome}</div>
-                    <div className="text-xs text-textMuted truncate">{r.situacao} • {r.grau_dependencia || 'Sem grau'}</div>
-                  </div>
-                  {/* PH02-03 (#71): sem selo "Ativo" fixo. A situação real já
-                      aparece na linha acima; o selo afirmava "Ativo" até para
-                      residente em admissão. */}
-                </div>
-              ))}
-            </div>
+          {podeResidentes && (
+            <Painel
+              titulo="Residentes recentes"
+              acao={<Link to="/residentes" className={LINK}>Ver todos</Link>}
+            >
+              <ListaResidentes carga={residentes} podeCriar={pode('residentes:criar')} />
+            </Painel>
           )}
         </div>
 
-        <div className="card">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold">Próximas pendências</h3>
-            <Link to="/plantao" className="text-sm text-primary font-semibold">Meu Plantão</Link>
-          </div>
-          {pendenciasIndisponiveis ? (
-            <div className="py-10 text-center text-textMuted" role="alert">
-              <div className="text-4xl mb-2">⚠️</div>
-              <p className="text-sm">Não foi possível carregar as pendências</p>
-              <p className="text-xs mt-1">Isso não significa que não há pendências.</p>
-            </div>
-          ) : pendencias.length === 0 ? (
-            <div className="py-10 text-center text-textMuted">
-              <div className="text-4xl mb-2">🩺</div>
-              <p className="text-sm">Nenhuma pendência no período</p>
-              <p className="text-xs mt-1">Cuidados, doses e intercorrências abertas aparecem aqui.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {pendencias.slice(0, 5).map(item => (
-                <div key={`${item.origem}:${item.registro_id}`} className="p-3 rounded-xl bg-amber-50 border border-amber-100">
-                  <div className="text-sm font-medium">{item.descricao}</div>
-                  <div className="text-xs text-textMuted mt-1">{item.origem}{item.prioridade ? ` • ${item.prioridade}` : ''}</div>
-                </div>
-              ))}
-            </div>
+        <div className="space-y-6">
+          {acoes.length > 0 && (
+            <Painel titulo="Ações rápidas">
+              <ul className="space-y-1.5">
+                {acoes.map(a => (
+                  <li key={a.label}>
+                    <Link
+                      to={a.to}
+                      className="group flex min-h-[48px] items-center gap-3 rounded-lg border border-border px-3 text-sm font-medium text-foreground transition-colors hover:border-brand/50 hover:bg-accent"
+                    >
+                      <a.icon className="size-[18px] shrink-0 text-primary" aria-hidden="true" />
+                      <span className="flex-1">{a.label}</span>
+                      <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Painel>
           )}
-        </div>
-      </div>
-
-      <div className="card bg-primaryLight/50 border-primaryLight">
-        <h3 className="font-semibold text-primaryDeep">Jornada do residente</h3>
-        <p className="text-sm text-textMuted mt-1">Pré-admissão → Admissão → Avaliações → Plano de Cuidados/PAIS → Programação → Meu Plantão → Execução → Prontuário → Intercorrências → Passagem de Plantão → Supervisão → Auditoria</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <span className="badge-success">LGPD</span>
-          <span className="badge-warning">Isolamento por ILPI</span>
-          <span className="badge-danger">Rastreabilidade</span>
+          {gestao && <ProcessosEmAndamento resumo={resumo} />}
         </div>
       </div>
     </div>
+  )
+}
+
+function montarIndicadores({
+  resumo,
+  pendencias,
+  gestao,
+  pode,
+  podePlantao,
+}: {
+  resumo: Carga<DashboardResumo>
+  pendencias: Carga<PlantaoItem[]>
+  gestao: boolean
+  pode: (chave?: string) => boolean
+  podePlantao: boolean
+}): ReactNode[] {
+  const carregando = resumo.status === 'carregando'
+  const dados = resumo.status === 'ok' ? resumo.dados : null
+  const indisponivel = <span>Indisponível no momento</span>
+  // Com o resumo em erro, mostra o traço só onde a sessão PODE ler — indicar
+  // indisponibilidade de um módulo que ela nem acessa seria ruído.
+  const mostrar = (bloco: keyof DashboardResumo, permissao: string) =>
+    carregando ? pode(permissao) : dados ? dados[bloco] !== null && dados[bloco] !== undefined : pode(permissao)
+
+  const card = {
+    pendencias: podePlantao ? (
+      <MetricCard
+        key="pendencias"
+        icon={ClipboardList}
+        titulo="Pendências do turno"
+        carregando={pendencias.status === 'carregando'}
+        valor={pendencias.status === 'ok'
+          ? pendencias.dados.length >= PLANTAO_LIMIT_PADRAO ? `${PLANTAO_LIMIT_PADRAO}+` : pendencias.dados.length
+          : INDISPONIVEL}
+        atencao={pendencias.status === 'ok' && pendencias.dados.length > 0}
+        detalhe={pendencias.status === 'erro' ? indisponivel : 'Próximas 24 horas'}
+        acao={<Link to="/plantao" className={LINK}>Ver Meu Plantão</Link>}
+      />
+    ) : null,
+    residentes: mostrar('residentes_total', 'residentes:ler') ? (
+      // PH02-03 (#71): "cadastrados", não "ativos" — a situação do residente
+      // ainda não é governada (#76); o total é contagem oficial, sem teto.
+      <MetricCard
+        key="residentes"
+        icon={Users}
+        titulo="Residentes cadastrados"
+        carregando={carregando}
+        valor={dados?.residentes_total ?? INDISPONIVEL}
+        detalhe={dados ? undefined : indisponivel}
+        acao={<Link to="/residentes" className={LINK}>Ver residentes</Link>}
+      />
+    ) : null,
+    ocupacao: mostrar('ocupacao', 'quartos_leitos:ler') ? (
+      // Fonte governada: leitos (ocupado = com residente atual). Nunca derivada
+      // do número de residentes.
+      <MetricCard
+        key="ocupacao"
+        icon={BedDouble}
+        titulo="Ocupação de leitos"
+        carregando={carregando}
+        valor={dados?.ocupacao ? `${dados.ocupacao.ocupados}/${dados.ocupacao.leitos_ativos}` : INDISPONIVEL}
+        detalhe={!dados?.ocupacao
+          ? indisponivel
+          : dados.ocupacao.leitos_ativos === 0
+            ? 'Nenhum leito ativo cadastrado'
+            : `${Math.round((dados.ocupacao.ocupados / dados.ocupacao.leitos_ativos) * 100)}% ocupados · ${dados.ocupacao.livres} ${dados.ocupacao.livres === 1 ? 'livre' : 'livres'}`}
+      />
+    ) : null,
+    ausencias: mostrar('ausencias_ativas', 'ausencias:ler') ? (
+      <MetricCard
+        key="ausencias"
+        icon={DoorOpen}
+        titulo="Ausentes agora"
+        carregando={carregando}
+        valor={dados?.ausencias_ativas?.total ?? INDISPONIVEL}
+        detalhe={dados?.ausencias_ativas
+          ? `${dados.ausencias_ativas.hospitalizacoes} em hospitalização`
+          : indisponivel}
+      />
+    ) : null,
+    intercorrencias: mostrar('intercorrencias_abertas', 'intercorrencias:ler') ? (
+      <MetricCard
+        key="intercorrencias"
+        icon={TriangleAlert}
+        titulo="Intercorrências abertas"
+        carregando={carregando}
+        valor={dados?.intercorrencias_abertas ?? INDISPONIVEL}
+        atencao={(dados?.intercorrencias_abertas ?? 0) > 0}
+        detalhe={dados ? undefined : indisponivel}
+        acao={<Link to="/intercorrencias" className={LINK}>Ver intercorrências</Link>}
+      />
+    ) : null,
+  }
+
+  const ordem: (keyof typeof card)[] = gestao
+    ? ['residentes', 'ocupacao', 'ausencias', 'intercorrencias', 'pendencias']
+    : ['pendencias', 'intercorrencias', 'residentes', 'ausencias', 'ocupacao']
+  return ordem.map(k => card[k]).filter(Boolean).slice(0, 4)
+}
+
+function Painel({ titulo, acao, children }: { titulo: string; acao?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="rounded-card border border-border bg-card shadow-card" aria-label={titulo}>
+      <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
+        <h2 className="font-display text-base font-semibold text-foreground">{titulo}</h2>
+        {acao && <div className="shrink-0 text-sm font-semibold">{acao}</div>}
+      </header>
+      <div className="p-4 sm:p-5">{children}</div>
+    </section>
+  )
+}
+
+function Vazio({ icon: Icon, titulo, texto, children }: { icon: LucideIcon; titulo: string; texto?: string; children?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center py-6 text-center">
+      <Icon className="mb-2 size-7 text-muted-foreground" aria-hidden="true" />
+      <p className="text-sm font-medium text-foreground">{titulo}</p>
+      {texto && <p className="mt-1 max-w-sm text-xs text-muted-foreground">{texto}</p>}
+      {children}
+    </div>
+  )
+}
+
+function Falha({ titulo, texto }: { titulo: string; texto: string }) {
+  return (
+    <div role="alert" className="flex flex-col items-center py-6 text-center">
+      <TriangleAlert className="mb-2 size-7 text-amber-700" aria-hidden="true" />
+      <p className="text-sm font-medium text-foreground">{titulo}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{texto}</p>
+    </div>
+  )
+}
+
+function Carregando() {
+  return (
+    <div className="space-y-3" aria-hidden="true">
+      {[0, 1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+    </div>
+  )
+}
+
+function ListaPendencias({ carga, nomes }: { carga: Carga<PlantaoItem[]>; nomes: Map<string, string> }) {
+  if (carga.status === 'carregando') return <Carregando />
+  if (carga.status === 'erro') {
+    return <Falha titulo="Não foi possível carregar as pendências" texto="Isso não significa que não há pendências." />
+  }
+  if (carga.dados.length === 0) {
+    return <Vazio icon={ClipboardList} titulo="Nenhuma pendência no período" texto="Cuidados, doses e intercorrências abertas aparecem aqui." />
+  }
+  return (
+    <ul className="divide-y divide-border">
+      {carga.dados.slice(0, 6).map(item => (
+        <li key={`${item.origem}:${item.registro_id}`} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+          <span className={item.previsto_em ? 'w-12 shrink-0 pt-0.5 text-sm font-semibold tabular-nums text-foreground' : 'w-12 shrink-0 pt-1 text-[11px] leading-tight text-muted-foreground'}>
+            {horaPrevista(item.previsto_em)}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">{item.descricao}</p>
+            <p className="truncate text-xs text-muted-foreground">{nomes.get(item.residente_id) || 'Residente'}</p>
+          </div>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <Badge variant={item.origem === 'intercorrencia' ? 'warning' : 'neutral'}>{ORIGEM[item.origem]}</Badge>
+            {item.prioridade && <Badge variant={item.prioridade === 'alta' ? 'danger' : 'neutral'}>Prioridade {item.prioridade}</Badge>}
+          </div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function ListaResidentes({ carga, podeCriar }: { carga: Carga<ResidenteResumo[]>; podeCriar: boolean }) {
+  if (carga.status === 'carregando') return <Carregando />
+  if (carga.status === 'erro') {
+    return <Falha titulo="Não foi possível carregar os residentes" texto="Isso não significa que não há residentes cadastrados." />
+  }
+  if (carga.dados.length === 0) {
+    return (
+      <Vazio icon={Users} titulo="Nenhum residente cadastrado">
+        {podeCriar && <Link to="/residentes" className="btn-primary mt-4 inline-flex">Cadastrar residente</Link>}
+      </Vazio>
+    )
+  }
+  return (
+    <ul className="space-y-1">
+      {carga.dados.slice(0, 5).map(r => (
+        <li key={r.id}>
+          <Link to={`/residentes/${r.id}`} className="flex min-h-[48px] items-center gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-muted">
+            <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-primary">
+              {r.nome[0]}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-foreground">{r.nome}</span>
+              {/* PH02-03 (#71): a situação exibida é a real; nenhum selo "Ativo" inventado. */}
+              <span className="block truncate text-xs text-muted-foreground">{r.situacao || 'Situação não informada'} • {r.grau_dependencia || 'Sem grau'}</span>
+            </span>
+          </Link>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+function ProcessosEmAndamento({ resumo }: { resumo: Carga<DashboardResumo> }) {
+  if (resumo.status === 'carregando') {
+    return <Painel titulo="Processos em andamento"><Carregando /></Painel>
+  }
+  if (resumo.status === 'erro') {
+    return (
+      <Painel titulo="Processos em andamento">
+        <Falha titulo="Não foi possível carregar os processos" texto="Isso não significa que não há processos em andamento." />
+      </Painel>
+    )
+  }
+  const { admissoes_em_andamento: admissoes, planos, equipe } = resumo.dados
+  if (admissoes === null && planos === null && equipe === null) return null
+  const linha = (rotulo: string, valor: number, destaque = false) => (
+    <div className="flex items-center justify-between gap-3 py-1.5 text-sm">
+      <dt className="text-muted-foreground">{rotulo}</dt>
+      <dd className={destaque && valor > 0 ? 'font-semibold text-amber-800' : 'font-semibold text-foreground'}>{valor}</dd>
+    </div>
+  )
+  return (
+    <Painel titulo="Processos em andamento">
+      <div className="space-y-4">
+        {admissoes !== null && (
+          <div>
+            <p className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Admissões</p>
+            <dl>
+            {linha('Em andamento', admissoes)}
+            </dl>
+          </div>
+        )}
+        {planos !== null && (
+          <div>
+            <p className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Plano de cuidados (PAIS)</p>
+            <dl>
+            {linha('Vigentes', planos.vigentes)}
+            {linha('Em revisão', planos.em_revisao, true)}
+            {linha('Em elaboração', planos.em_elaboracao)}
+            {linha('Aprovados, aguardando vigência', planos.aprovados_aguardando_vigencia, true)}
+            </dl>
+          </div>
+        )}
+        {equipe !== null && (
+          <div>
+            <p className="pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Equipe</p>
+            <dl>
+            {linha('Ativos', equipe.ativos)}
+            {linha('Afastados', equipe.afastados)}
+            </dl>
+            <Link to="/equipe" className={`${LINK} mt-1 text-sm font-semibold`}>Ver equipe</Link>
+          </div>
+        )}
+      </div>
+    </Painel>
   )
 }
