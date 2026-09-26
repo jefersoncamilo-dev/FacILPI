@@ -17,7 +17,8 @@ type Estado =
   | { status: 'indisponivel' }
 
 type PermissoesValue = {
-  status: Estado['status']
+  /** `sem_provider`: tela montada fora do shell (ex.: testes isolados). */
+  status: Estado['status'] | 'sem_provider'
   /** Sem chave, sempre pode. Com chave, depende do estado (ver acima). */
   pode: (chave?: string) => boolean
 }
@@ -66,4 +67,16 @@ export function usePermissoes(): PermissoesValue {
   const value = useContext(PermissoesContext)
   if (!value) throw new Error('usePermissoes precisa estar dentro de PermissoesProvider')
   return value
+}
+
+const SEM_PROVIDER: PermissoesValue = { status: 'sem_provider', pode: () => true }
+
+/**
+ * Para telas que também são montadas fora do shell (testes, telas isoladas):
+ * sem provider, `pode` libera tudo (o backend decide cada rota, igual ao
+ * fallback do shell) e `status` é `sem_provider`, para quem só enriquece a
+ * tela (contexto do residente, leitos) não consultar fontes extras.
+ */
+export function usePermissoesOuPadrao(): PermissoesValue {
+  return useContext(PermissoesContext) ?? SEM_PROVIDER
 }

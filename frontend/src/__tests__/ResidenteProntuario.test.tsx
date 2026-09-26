@@ -573,7 +573,8 @@ describe('ResidenteProntuario', () => {
     const decorativos = [...document.querySelectorAll('[aria-hidden="true"]')].map(e => e.textContent?.trim())
     expect(decorativos).toContain('M')        // avatar
     expect(decorativos).toContain('• F')      // sexo
-    expect(decorativos).toContain('⚠️')        // icone de alerta
+    // UX-04 (#89): o ícone de alerta deixou de ser emoji e virou SVG — continua decorativo.
+    expect(document.querySelector('[data-icone="alerta"]')?.getAttribute('aria-hidden')).toBe('true')
   })
 
   // Os tres testes abaixo travam a area clicavel do card. jsdom nao faz layout, entao nenhum
