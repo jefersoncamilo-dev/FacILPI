@@ -50,7 +50,7 @@ export const NAVEGACAO: GrupoNav[] = [
       { to: '/plantao', label: 'Meu Plantão', icon: ClipboardList, permissao: 'plantao:ler' },
       { to: '/sinais', label: 'Sinais Vitais', icon: HeartPulse, permissao: 'sinais_vitais:ler' },
       { to: '/intercorrencias', label: 'Intercorrências', icon: TriangleAlert, permissao: 'intercorrencias:ler' },
-      { to: '/passagem', label: 'Passagem de Plantão', icon: ArrowLeftRight, permissao: 'plantao:ler', emBreve: { issue: 82 } },
+      { to: '/passagem', label: 'Passagem de Plantão', icon: ArrowLeftRight, permissao: 'plantao:ler' },
     ],
   },
   {

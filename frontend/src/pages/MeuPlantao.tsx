@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { AlarmClock, BellRing, Clock, Pill, TriangleAlert, type LucideIcon } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
@@ -73,6 +74,18 @@ const FORM_VAZIO: FormAcao = {
   desfecho: '',
 }
 
+/**
+ * `?desde=` (ISO) amplia o início da projeção para trás — vem da Passagem de
+ * Plantão, para que cuidados e doses previstos antes da abertura da tela e
+ * ainda sem registro apareçam em "Atrasadas" com as ações de sempre. Sem o
+ * parâmetro, a projeção é a padrão do backend (agora → +24 h).
+ */
+export function lerDesde(valor: string | null, agora = Date.now()): string | null {
+  if (!valor) return null
+  const t = Date.parse(valor)
+  return Number.isFinite(t) && t < agora ? new Date(t).toISOString() : null
+}
+
 function atrasado(item: PlantaoItem, agora: number): boolean {
   if (!item.previsto_em) return false
   return new Date(item.previsto_em).getTime() < agora
@@ -80,6 +93,8 @@ function atrasado(item: PlantaoItem, agora: number): boolean {
 
 export function MeuPlantao() {
   const { pode } = usePermissoesOuPadrao()
+  const [params] = useSearchParams()
+  const desde = lerDesde(params.get('desde'))
   const [sucesso, setSucesso] = useState('')
   const [itens, setItens] = useState<PlantaoItem[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -97,7 +112,7 @@ export function MeuPlantao() {
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
-      const data = await getPlantao()
+      const data = await getPlantao(desde ? { a_partir_de: desde } : {})
       setItens(data)
       setErro('')
     } catch (e) {
@@ -108,7 +123,7 @@ export function MeuPlantao() {
     } finally {
       setCarregando(false)
     }
-  }, [])
+  }, [desde])
 
   useEffect(() => { carregar() }, [carregar])
 
@@ -216,7 +231,11 @@ export function MeuPlantao() {
     <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Meu Plantão</h1>
-        <p className="text-sm text-muted-foreground">Pendências das próximas 24 horas — cuidados, doses e intercorrências abertas</p>
+        <p className="text-sm text-muted-foreground">
+          {desde
+            ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">ver só a partir de agora</Link></>
+            : 'Pendências das próximas 24 horas — cuidados, doses e intercorrências abertas'}
+        </p>
       </div>
 
       <div className="flex gap-2 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Filtrar por origem">
