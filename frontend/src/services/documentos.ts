@@ -1,16 +1,18 @@
 import { api, mensagemDeErro } from './api'
 
 // Espelha DocumentoCreate/DocumentoResponse (backend/src/application/schemas.py:926-971),
-// o roteador da factory (backend/src/main.py:463-485), o anexo da A3 (main.py:635)
-// e o download autenticado (main.py:755).
+// o roteador da factory (backend/src/main.py:463-485), o anexo da A3 (main.py:635),
+// o download autenticado (main.py:755) e o ato de validação (main.py:586).
 //
 // Contrato do módulo neste ciclo: listar, filtrar por residente, criar
-// metadados, anexar arquivo e baixar. Edição (PUT), validação
-// (POST /{id}/validar) e inativação ficam fora do D2 por decisão da Control
-// Tower — o backend continua oferecendo os três.
+// metadados, anexar arquivo, baixar e validar (#105 — a Documentação da
+// admissão só avança com os obrigatórios validados). Edição (PUT) e inativação
+// seguem fora do D2 por decisão da Control Tower — o backend continua
+// oferecendo as duas.
 //
 // Tenant (`instituicao_id`), `situacao` inicial e a autoria do anexo
-// (`anexado_por`/`anexado_em`) são resolvidos pelo backend. O cliente nunca envia.
+// (`anexado_por`/`anexado_em`) e da validação (`validado_por`/`validado_em`)
+// são resolvidos pelo backend. O cliente nunca envia.
 
 export interface DocumentoPayload {
   residente_id: string
@@ -69,6 +71,19 @@ export async function getDocumentos(
 
 export async function criarDocumento(payload: DocumentoPayload): Promise<Documento> {
   const { data } = await api.post<Documento>('/documentos/', payload)
+  return data
+}
+
+// ---- Validação ----
+
+/**
+ * Ato dedicado, sem volta pela tela: o backend não oferece invalidar nem
+ * revalidar (409 `DOCUMENTO_JA_VALIDADO`). O corpo vai vazio porque
+ * `DocumentoValidar` é `extra="forbid"` — autoria e horário vêm da sessão —, mas
+ * precisa existir: sem corpo o FastAPI responde 422.
+ */
+export async function validarDocumento(documentoId: string): Promise<Documento> {
+  const { data } = await api.post<Documento>(`/documentos/${documentoId}/validar`, {})
   return data
 }
 

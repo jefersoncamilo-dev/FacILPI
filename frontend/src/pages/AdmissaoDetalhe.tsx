@@ -298,9 +298,15 @@ function Stepper({ admissao: a, verificacao }: { admissao: Admissao; verificacao
   )
 }
 
-/** Avaliação requerida casa por tipo/instrumento exatos: o link já leva o formulário preenchido. */
+/**
+ * Documentação pendente abre Documentos já filtrado pelo residente, onde o
+ * obrigatório é validado. Avaliação requerida casa por tipo/instrumento exatos:
+ * o link já leva o formulário preenchido.
+ */
 function destino(p: Pendencia, to: string, residenteId?: string) {
-  if (p.codigo !== 'avaliacao_requerida_pendente' || !residenteId) return to
+  if (!residenteId) return to
+  if (p.codigo === 'documentacao_pendente') return `${to}?${new URLSearchParams({ residente: residenteId })}`
+  if (p.codigo !== 'avaliacao_requerida_pendente') return to
   const q = new URLSearchParams({ residente: residenteId, novo: '1', tipo: p.tipo || '' })
   if (p.instrumento) q.set('instrumento', p.instrumento)
   return `${to}?${q}`
