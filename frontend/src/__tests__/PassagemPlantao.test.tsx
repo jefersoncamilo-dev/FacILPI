@@ -103,6 +103,17 @@ describe('Passagem de plantão — leitura do período', () => {
     expect(screen.queryByText('Antiga')).toBeNull()
   })
 
+  it('intercorrência legada sem gravidade aparece como não informada, sem inventar valor', async () => {
+    // Antes da C.4 a gravidade podia ficar vazia; a API devolve null como gravado.
+    const { intercorrencias } = fixtures()
+    responde({ intercorrencias: [{ ...intercorrencias[0], gravidade: null }, ...intercorrencias.slice(1)] })
+    renderTela()
+    const residentes = within(await screen.findByRole('region', { name: 'Residentes com pontos de atenção' }))
+    expect(await residentes.findByText(/Queda · Gravidade não informada/)).toBeTruthy()
+    expect(residentes.queryByText(/Queda · (Leve|Moderada|Grave)/)).toBeNull()
+    expect(numero('Intercorrências abertas')).toBe('1')
+  })
+
   it('consulta a janela escolhida e leva ao Meu Plantão a partir do início do período', async () => {
     const user = userEvent.setup()
     renderTela()

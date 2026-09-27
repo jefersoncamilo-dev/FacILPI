@@ -13,6 +13,7 @@ import {
   type Intercorrencia,
 } from '../services/intercorrencias'
 import { RegistrarIntercorrenciaModal } from '../components/intercorrencias/RegistrarIntercorrenciaModal'
+import { Badge } from '../components/ui/feedback'
 
 const TODOS = ''
 
@@ -27,6 +28,11 @@ const ROTULO_GRAVIDADE: Record<Gravidade, string> = {
   moderada: 'Moderada',
   grave: 'Grave',
 }
+
+// Registro legado sem gravidade (ou com texto fora do conjunto atual) recebe
+// selo neutro: nenhuma cor de gravidade é atribuída a valor não registrado.
+const ehGravidade = (valor: string | null): valor is Gravidade =>
+  valor !== null && Object.prototype.hasOwnProperty.call(ROTULO_GRAVIDADE, valor)
 
 export function Intercorrencias() {
   const { pode } = usePermissoesOuPadrao()
@@ -199,9 +205,15 @@ export function Intercorrencias() {
                   <div className="font-semibold truncate">{nomes[registro.residente_id] || registro.residente_id}</div>
                   <div className="text-xs text-textMuted">{formatDateTime(registro.ocorrido_em)}</div>
                 </div>
-                <span className={BADGE_GRAVIDADE[registro.gravidade] ?? 'badge-success'}>
-                  {ROTULO_GRAVIDADE[registro.gravidade] ?? registro.gravidade}
-                </span>
+                {ehGravidade(registro.gravidade) ? (
+                  <span className={BADGE_GRAVIDADE[registro.gravidade]}>
+                    {ROTULO_GRAVIDADE[registro.gravidade]}
+                  </span>
+                ) : (
+                  <Badge variant="neutral">
+                    {registro.gravidade?.trim() || 'Gravidade não informada'}
+                  </Badge>
+                )}
               </div>
 
               <p className="mt-3 font-medium break-words">{registro.tipo}</p>
