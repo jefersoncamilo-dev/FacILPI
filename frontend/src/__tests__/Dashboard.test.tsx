@@ -293,6 +293,25 @@ describe('Dashboard — design system (UX-11 / #101)', () => {
     expect(linhas[0].getAttribute('href')).toBe('/residentes/res-1')
   })
 
+  it('atividade recente: situação legada não parece aberta nem encerrada; tipo vazio não fica em branco (#110)', async () => {
+    comAtividade({
+      intercorrencias: [
+        { id: 'i-maiuscula', residente_id: 'res-1', tipo: 'Queda', gravidade: 'leve', situacao: 'Aberta', ocorrido_em: iso(0.5) },
+        { id: 'i-nula', residente_id: 'res-1', tipo: 'Febre', gravidade: 'leve', situacao: null, ocorrido_em: iso(1) },
+        { id: 'i-vazio', residente_id: 'res-1', tipo: '', gravidade: 'leve', situacao: 'aberta', ocorrido_em: iso(2) },
+      ],
+    })
+    renderDashboard(COM_ATIVIDADE)
+    const bloco = within(await screen.findByRole('region', { name: 'Atividade recente no turno' }))
+    const textos = (await bloco.findAllByRole('link')).map(l => l.textContent ?? '')
+    expect(textos).toEqual([
+      expect.stringContaining('Intercorrência: Queda (leve) · situação “Aberta” (fora do padrão)'),
+      expect.stringContaining('Intercorrência: Febre (leve) · situação não informada'),
+      expect.stringContaining('Intercorrência: Tipo não informado (leve)'),
+    ])
+    for (const texto of textos) expect(texto).not.toContain('· encerrada')
+  })
+
   it('atividade recente: fonte que falha vira aviso, não "nenhum registro"; sem permissão, não consulta', async () => {
     comAtividade({ sinais: [{ id: 's1', residente_id: 'res-1', data: iso(1) }], intercorrencias: new Error('rede') })
     const parcial = renderDashboard(COM_ATIVIDADE)

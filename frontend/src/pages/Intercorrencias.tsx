@@ -9,6 +9,9 @@ import { getResidentesResumo, type ResidenteResumo } from '../services/plantao'
 import {
   INTERCORRENCIAS_LIMIT_PADRAO,
   getIntercorrencias,
+  rotuloSituacao,
+  rotuloTipo,
+  situacaoForaDoContrato,
   type Gravidade,
   type Intercorrencia,
 } from '../services/intercorrencias'
@@ -195,10 +198,16 @@ export function Intercorrencias() {
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {registros.map(registro => (
+          {registros.map(registro => {
+            // Registro legado com situação fora do contrato: nunca aparece como
+            // encerrado, nem conta como aberto (#110).
+            const foraDoContrato = situacaoForaDoContrato(registro.situacao)
+            return (
             <article
               key={registro.id}
-              className={`card min-w-0 border-l-4 ${registro.situacao === 'aberta' ? 'border-l-warning' : 'border-l-success'}`}
+              className={`card min-w-0 border-l-4 ${
+                registro.situacao === 'aberta' ? 'border-l-warning' : foraDoContrato ? 'border-l-border' : 'border-l-success'
+              }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
@@ -216,7 +225,7 @@ export function Intercorrencias() {
                 )}
               </div>
 
-              <p className="mt-3 font-medium break-words">{registro.tipo}</p>
+              <p className="mt-3 font-medium break-words">{rotuloTipo(registro.tipo)}</p>
 
               {registro.sbar_situacao && (
                 <p className="mt-2 text-sm text-textMuted break-words">{registro.sbar_situacao}</p>
@@ -233,13 +242,23 @@ export function Intercorrencias() {
               )}
 
               <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-textMuted">
-                <span className={registro.situacao === 'aberta' ? 'badge-warning' : 'badge-success'}>
-                  {registro.situacao === 'aberta' ? 'Aberta' : 'Encerrada'}
-                </span>
+                {foraDoContrato ? (
+                  <Badge variant="neutral">{rotuloSituacao(registro.situacao)}</Badge>
+                ) : (
+                  <span className={registro.situacao === 'aberta' ? 'badge-warning' : 'badge-success'}>
+                    {rotuloSituacao(registro.situacao)}
+                  </span>
+                )}
                 <span>Registrado por {registro.responsavel || '—'}</span>
               </div>
+              {foraDoContrato && (
+                <p className="mt-2 text-xs text-textMuted">
+                  Registro antigo com situação fora do padrão atual: não entra no plantão nem nos alertas.
+                </p>
+              )}
             </article>
-          ))}
+            )
+          })}
         </div>
       )}
 

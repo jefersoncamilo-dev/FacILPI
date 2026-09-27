@@ -44,6 +44,8 @@ Leito representa ocupação estrutural. Ausência/hospitalização representa pr
 
 Intercorrência é evento relevante com histórico, gravidade/situação e providências/desfecho conforme contrato. Não transforme automaticamente todo cuidado, sinal vital ou ocorrência em Intercorrência e não gere tarefas/avisos fora de regra aprovada.
 
+A leitura devolve o registro como gravado, inclusive valores anteriores ao contrato atual (situação `"Aberta"`/nula, tipo vazio, gravidade ausente). Só `aberta` entra em plantão, alertas e contagem de abertas; situação fora de `aberta`/`encerrada` não é tratada como aberta nem apresentada como encerrada, e não é normalizada sem decisão registrada.
+
 ## Medicação
 
 O sistema registra a prescrição informada; não emite decisão clínica automaticamente. Prescritor clínico e autoria técnica são conceitos distintos.

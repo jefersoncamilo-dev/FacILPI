@@ -114,6 +114,26 @@ describe('Passagem de plantão — leitura do período', () => {
     expect(numero('Intercorrências abertas')).toBe('1')
   })
 
+  it('situação legada não conta como aberta nem como encerrada; tipo vazio aparece como não informado (#110)', async () => {
+    const { intercorrencias } = fixtures()
+    responde({
+      intercorrencias: [
+        { ...intercorrencias[0], tipo: '' },
+        ...intercorrencias.slice(1),
+        { id: 'leg-1', residente_id: 'r3', tipo: 'Legada maiúscula', gravidade: 'leve', situacao: 'Encerrada', ocorrido_em: em(-4 * H), desfecho: 'y' },
+        { id: 'leg-2', residente_id: 'r3', tipo: 'Legada nula', gravidade: 'leve', situacao: null, ocorrido_em: em(-4 * H) },
+      ],
+    })
+    renderTela()
+    const residentes = within(await screen.findByRole('region', { name: 'Residentes com pontos de atenção' }))
+    expect(await residentes.findByText(/Tipo não informado · Moderada/)).toBeTruthy()
+    // Só a "encerrada" oficial aparece como encerrada no período.
+    expect(residentes.getByText('Febre')).toBeTruthy()
+    expect(residentes.queryByText('Legada maiúscula')).toBeNull()
+    expect(residentes.queryByText('Legada nula')).toBeNull()
+    expect(numero('Intercorrências abertas')).toBe('1')
+  })
+
   it('consulta a janela escolhida e leva ao Meu Plantão a partir do início do período', async () => {
     const user = userEvent.setup()
     renderTela()

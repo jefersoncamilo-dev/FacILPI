@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, BedDouble, ClipboardList, Pill, RefreshCw, TriangleAlert } from 'lucide-react'
 import { formatDateTime } from '../services/api'
 import { getPlantao, getResidentesResumo, rotuloDoItem, type PlantaoItem } from '../services/plantao'
-import { GRAVIDADES, getIntercorrencias, INTERCORRENCIAS_LIMIT_PADRAO, type Intercorrencia } from '../services/intercorrencias'
+import { GRAVIDADES, getIntercorrencias, INTERCORRENCIAS_LIMIT_PADRAO, rotuloTipo, type Intercorrencia } from '../services/intercorrencias'
 import { ausenciasApi, ROTULO_AUSENCIA, type Ausencia } from '../services/leitos'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { Button } from '../components/ui/button'
@@ -236,7 +236,7 @@ function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; j
       {r.abertas.map(({ item, detalhe }) => (
         <div key={item.registro_id} className="rounded-lg border border-orange-200 bg-orange-50/60 px-3 py-2 text-sm">
           <p className="flex items-center gap-2 font-medium text-orange-900"><TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-            {detalhe ? <>{detalhe.tipo} · {detalhe.gravidade?.trim() ? ROTULO_GRAVIDADE[detalhe.gravidade] || detalhe.gravidade : 'Gravidade não informada'}</> : rotuloDoItem(item)}
+            {detalhe ? <>{rotuloTipo(detalhe.tipo)} · {detalhe.gravidade?.trim() ? ROTULO_GRAVIDADE[detalhe.gravidade] || detalhe.gravidade : 'Gravidade não informada'}</> : rotuloDoItem(item)}
           </p>
           {detalhe?.ocorrido_em && <p className="text-xs text-orange-900/80">Aberta desde {formatDateTime(detalhe.ocorrido_em)}{detalhe.responsavel ? ` · ${detalhe.responsavel}` : ''}</p>}
           {detalhe?.sbar_recomendacao && <p className="mt-1 text-foreground"><strong className="font-semibold">Recomendação:</strong> {detalhe.sbar_recomendacao}</p>}
@@ -246,7 +246,7 @@ function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; j
 
       {r.encerradasNoPeriodo.map(i => (
         <p key={i.id} className="text-sm text-muted-foreground">
-          Intercorrência encerrada no período: <span className="text-foreground">{i.tipo}</span>{i.desfecho ? ` — ${i.desfecho}` : ''}
+          Intercorrência encerrada no período: <span className="text-foreground">{rotuloTipo(i.tipo)}</span>{i.desfecho ? ` — ${i.desfecho}` : ''}
         </p>
       ))}
 
