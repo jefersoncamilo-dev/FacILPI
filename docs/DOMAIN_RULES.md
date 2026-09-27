@@ -40,6 +40,8 @@ Obrigatoriedade documental é uma regra institucional/processual. Validade tempo
 
 Leito representa ocupação estrutural. Ausência/hospitalização representa presença física temporariamente alterada. Não libere leito automaticamente apenas porque existe ausência.
 
+Ocupação é derivada do residente atual; a edição do leito não a contorna. Leito com residente ocupante só aceita a situação `livre` na edição, e a inativação acontece somente pela ação própria de inativar, que exige a permissão dela e recusa leito ocupado.
+
 ## Intercorrências
 
 Intercorrência é evento relevante com histórico, gravidade/situação e providências/desfecho conforme contrato. Não transforme automaticamente todo cuidado, sinal vital ou ocorrência em Intercorrência e não gere tarefas/avisos fora de regra aprovada.

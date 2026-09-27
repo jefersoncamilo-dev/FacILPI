@@ -23,6 +23,7 @@ Official decisions encoded:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import pathlib
 import subprocess
@@ -1987,5 +1988,150 @@ def test_64_inativar_com_residente_bloqueado(f5a2d_db):
 
         r = await client.post(f"/api/quartos_leitos/{leito_id}/inativar", headers=headers)
         assert r.status_code == 409
+
+    asyncio.run(_with_client(f5a2d_db, scenario))
+
+
+# ---- Issue #94: situação pelo PUT não contorna ocupação nem a ação de inativar ----
+# Leito ocupado só aceita `livre` (ocupado é derivado de residente_atual_id) e
+# `inativo` só pela ação própria, que exige `quartos_leitos:inativar`.
+
+_ATUALIZAR = "quartos_leitos.atualizar"
+
+
+async def _leito_94(client, db, *, permissions, ocupado: bool):
+    ilpi = _new_institution()
+    db.add(ilpi)
+    await db.flush()
+    res = await _create_residente(db, ilpi.id)
+    user = await _create_ilpi_user(db, ilpi, permissions=permissions)
+    await db.commit()
+    headers = _auth_headers(user, scope="ilpi", ilpi_id=ilpi.id)
+    r = await client.post("/api/quartos_leitos/", json={"quarto": "01", "leito": "A"}, headers=headers)
+    assert r.status_code in (200, 201), r.text
+    leito_id = r.json()["id"]
+    if ocupado:
+        r = await client.post(f"/api/quartos_leitos/{leito_id}/alocar", json={"residente_id": res.id}, headers=headers)
+        assert r.status_code == 200, r.text
+    return leito_id, res, headers
+
+
+async def _estado_leito(db, leito_id):
+    row = (await db.execute(
+        select(m.QuartoLeito.situacao, m.QuartoLeito.residente_atual_id, m.QuartoLeito.acessibilidade)
+        .where(m.QuartoLeito.id == leito_id)
+    )).one()
+    return tuple(row)
+
+
+async def _auditorias_atualizar(db, leito_id):
+    return (await db.execute(
+        select(m.Auditoria).where(m.Auditoria.acao == _ATUALIZAR, m.Auditoria.registro_id == leito_id)
+    )).scalars().all()
+
+
+def _situacoes(auditoria):
+    return (
+        json.loads(auditoria.valores_anteriores)["situacao"],
+        json.loads(auditoria.valores_posteriores)["situacao"],
+    )
+
+
+_PERMS_94 = {"quartos_leitos:criar", "quartos_leitos:atualizar", "quartos_leitos:ler"}
+
+
+def test_65_ocupado_nao_muda_situacao_pelo_put(f5a2d_db):
+    async def scenario(client, db):
+        leito_id, res, headers = await _leito_94(client, db, permissions=_PERMS_94, ocupado=True)
+        antes = await _estado_leito(db, leito_id)
+        assert antes[:2] == ("livre", res.id)
+        for situacao in ("reservado", "bloqueado", "manutencao"):
+            r = await client.put(f"/api/quartos_leitos/{leito_id}", json={"situacao": situacao}, headers=headers)
+            assert r.status_code == 409, (situacao, r.text)
+            assert "residente ocupante" in r.json()["detail"]
+        assert await _estado_leito(db, leito_id) == antes
+        assert await _auditorias_atualizar(db, leito_id) == []
+
+    asyncio.run(_with_client(f5a2d_db, scenario))
+
+
+def test_66_ocupado_nao_inativa_pelo_put(f5a2d_db):
+    async def scenario(client, db):
+        leito_id, res, headers = await _leito_94(
+            client, db, permissions=_PERMS_94 | {"quartos_leitos:inativar"}, ocupado=True,
+        )
+        r = await client.put(f"/api/quartos_leitos/{leito_id}", json={"situacao": "inativo"}, headers=headers)
+        assert r.status_code == 409, r.text
+        assert await _estado_leito(db, leito_id) == ("livre", res.id, None)
+        assert await _auditorias_atualizar(db, leito_id) == []
+
+    asyncio.run(_with_client(f5a2d_db, scenario))
+
+
+def test_67_put_nao_substitui_acao_de_inativar(f5a2d_db):
+    """Perfil com `atualizar` e sem `inativar` não inativa leito vazio pelo PUT."""
+    async def scenario(client, db):
+        leito_id, _, headers = await _leito_94(client, db, permissions=_PERMS_94, ocupado=False)
+        r = await client.put(f"/api/quartos_leitos/{leito_id}", json={"situacao": "inativo"}, headers=headers)
+        assert r.status_code == 409, r.text
+        assert "ação de inativar" in r.json()["detail"]
+        assert await _estado_leito(db, leito_id) == ("livre", None, None)
+        assert await _auditorias_atualizar(db, leito_id) == []
+        # A ação própria continua exigindo a permissão dela.
+        r = await client.post(f"/api/quartos_leitos/{leito_id}/inativar", headers=headers)
+        assert r.status_code == 403
+
+    asyncio.run(_with_client(f5a2d_db, scenario))
+
+
+def test_68_ocupado_edita_estrutura_reenviando_livre(f5a2d_db):
+    async def scenario(client, db):
+        leito_id, res, headers = await _leito_94(client, db, permissions=_PERMS_94, ocupado=True)
+        r = await client.put(
+            f"/api/quartos_leitos/{leito_id}",
+            json={"acessibilidade": "Barras de apoio", "situacao": "livre"},
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+        assert await _estado_leito(db, leito_id) == ("livre", res.id, "Barras de apoio")
+        auditorias = await _auditorias_atualizar(db, leito_id)
+        assert len(auditorias) == 1
+
+    asyncio.run(_with_client(f5a2d_db, scenario))
+
+
+def test_69_vazio_percorre_situacoes_editaveis(f5a2d_db):
+    async def scenario(client, db):
+        leito_id, _, headers = await _leito_94(client, db, permissions=_PERMS_94, ocupado=False)
+        caminho = ["reservado", "bloqueado", "manutencao", "livre"]
+        for situacao in caminho:
+            r = await client.put(f"/api/quartos_leitos/{leito_id}", json={"situacao": situacao}, headers=headers)
+            assert r.status_code == 200, (situacao, r.text)
+            assert r.json()["situacao"] == situacao
+        auditorias = await _auditorias_atualizar(db, leito_id)
+        assert len(auditorias) == len(caminho)
+        # created_at pode empatar no SQLite: compara as transições sem depender da ordem.
+        transicoes = sorted(_situacoes(a) for a in auditorias)
+        assert transicoes == sorted(zip(["livre", *caminho[:-1]], caminho))
+
+    asyncio.run(_with_client(f5a2d_db, scenario))
+
+
+def test_70_ocupado_inconsistente_normaliza_para_livre(f5a2d_db):
+    """Estado gravado antes da regra (ocupado + reservado) é corrigido pelo PUT para `livre`."""
+    async def scenario(client, db):
+        leito_id, res, headers = await _leito_94(client, db, permissions=_PERMS_94, ocupado=True)
+        # A API atual recusa esse estado; a gravação é direta no banco descartável.
+        await db.execute(
+            m.QuartoLeito.__table__.update().where(m.QuartoLeito.id == leito_id).values(situacao="reservado")
+        )
+        await db.commit()
+        r = await client.put(f"/api/quartos_leitos/{leito_id}", json={"situacao": "bloqueado"}, headers=headers)
+        assert r.status_code == 409, r.text
+        r = await client.put(f"/api/quartos_leitos/{leito_id}", json={"situacao": "livre"}, headers=headers)
+        assert r.status_code == 200, r.text
+        assert await _estado_leito(db, leito_id) == ("livre", res.id, None)
+        (auditoria,) = await _auditorias_atualizar(db, leito_id)
+        assert _situacoes(auditoria) == ("reservado", "livre")
 
     asyncio.run(_with_client(f5a2d_db, scenario))
