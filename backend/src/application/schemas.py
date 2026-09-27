@@ -1016,6 +1016,10 @@ class IntercorrenciaEncerrar(BaseModel):
         return value.strip()
 
 class IntercorrenciaResponse(IntercorrenciaCreate):
+    # Leitura sem a restricao da entrada: a coluna e nullable desde a 001 e,
+    # antes da C.4, a entrada aceitava gravidade ausente ou texto livre. Registro
+    # legado nao pode derrubar a listagem; o valor volta como gravado.
+    gravidade: Optional[str] = None
     id: str
     situacao: Literal["aberta", "encerrada"]
     desfecho: Optional[str] = None

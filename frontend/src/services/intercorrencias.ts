@@ -35,7 +35,11 @@ export interface Intercorrencia {
   id: string
   residente_id: string
   tipo: string
-  gravidade: Gravidade
+  /**
+   * Leitura sem a restrição da entrada (IntercorrenciaResponse): registro
+   * anterior à C.4 pode vir sem gravidade (null) ou com texto fora de `Gravidade`.
+   */
+  gravidade: string | null
   situacao: 'aberta' | 'encerrada'
   ocorrido_em?: string | null
   /** Timestamp técnico de criação do registro (registrado_em). */

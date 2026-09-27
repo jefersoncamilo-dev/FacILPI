@@ -28,6 +28,13 @@ const ROTULO_GRAVIDADE: Record<Gravidade, string> = {
   grave: 'Grave',
 }
 
+// Registro legado sem gravidade (ou com texto fora do conjunto atual) recebe
+// selo neutro: nenhuma cor de gravidade é atribuída a valor não registrado.
+const BADGE_NEUTRO = 'bg-slate-100 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1'
+
+const ehGravidade = (valor: string | null): valor is Gravidade =>
+  valor !== null && Object.prototype.hasOwnProperty.call(ROTULO_GRAVIDADE, valor)
+
 export function Intercorrencias() {
   const { pode } = usePermissoesOuPadrao()
   const [registros, setRegistros] = useState<Intercorrencia[]>([])
@@ -199,9 +206,15 @@ export function Intercorrencias() {
                   <div className="font-semibold truncate">{nomes[registro.residente_id] || registro.residente_id}</div>
                   <div className="text-xs text-textMuted">{formatDateTime(registro.ocorrido_em)}</div>
                 </div>
-                <span className={BADGE_GRAVIDADE[registro.gravidade] ?? 'badge-success'}>
-                  {ROTULO_GRAVIDADE[registro.gravidade] ?? registro.gravidade}
-                </span>
+                {ehGravidade(registro.gravidade) ? (
+                  <span className={BADGE_GRAVIDADE[registro.gravidade]}>
+                    {ROTULO_GRAVIDADE[registro.gravidade]}
+                  </span>
+                ) : (
+                  <span className={BADGE_NEUTRO}>
+                    {registro.gravidade?.trim() || 'Gravidade não informada'}
+                  </span>
+                )}
               </div>
 
               <p className="mt-3 font-medium break-words">{registro.tipo}</p>

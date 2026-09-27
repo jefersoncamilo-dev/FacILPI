@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from sqlalchemy import func, select, text
@@ -374,3 +375,79 @@ def test_migration_refuses_external_grant_downgrade(c4_db):
         assert (await db.execute(select(func.count()).select_from(m.Permissao))).scalar_one() == 59
         assert (await db.execute(text("SELECT version_num FROM alembic_version"))).scalar_one() == REV_011
     asyncio.run(_with_client(c4_db, intact))
+
+
+# ---- Leitura de registro legado: gravidade NULL ----
+# `intercorrencias.gravidade` nasceu nullable na 001 e nenhuma migration a
+# tornou NOT NULL nem fez backfill; antes da C.4 a entrada aceitava gravidade
+# ausente ou texto livre. A insercao e direta no banco descartavel porque a API
+# atual recusa esses valores. A leitura devolve o que esta gravado, sem inferir.
+
+async def _insert_legacy(db, ilpi, resident, gravidade):
+    row = m.Intercorrencia(
+        residente_id=resident.id, ilpi_id=ilpi.id, tipo="queda legada",
+        gravidade=gravidade, situacao="aberta",
+        ocorrido_em=datetime.now(timezone.utc) - timedelta(days=30),
+    )
+    db.add(row)
+    await db.commit()
+    return row.id
+
+
+def test_legacy_severity_does_not_break_reads(c4_db):
+    async def scenario(client, db):
+        ilpi, _, resident, headers = await _setup(db)
+        current = await _create(client, resident, headers)
+        null_id = await _insert_legacy(db, ilpi, resident, None)
+        free_text_id = await _insert_legacy(db, ilpi, resident, "Alta")
+        listed = await client.get(BASE, headers=headers)
+        assert listed.status_code == 200, listed.text
+        by_id = {row["id"]: row for row in listed.json()}
+        assert set(by_id) == {current["id"], null_id, free_text_id}
+        assert by_id[null_id]["gravidade"] is None
+        assert by_id[free_text_id]["gravidade"] == "Alta"
+        assert by_id[current["id"]]["gravidade"] == "leve"
+        filtered = await client.get(BASE, headers=headers, params={"residente_id": resident.id})
+        assert filtered.status_code == 200, filtered.text
+        assert {row["id"] for row in filtered.json()} == set(by_id)
+        for row_id in (null_id, free_text_id):
+            single = await client.get(BASE + row_id, headers=headers)
+            assert single.status_code == 200, single.text
+            assert single.json() == by_id[row_id]
+        stored = (await db.execute(select(m.Intercorrencia.gravidade).where(m.Intercorrencia.id == null_id))).scalar_one()
+        assert stored is None
+    asyncio.run(_with_client(c4_db, scenario))
+
+
+def test_legacy_null_severity_correction_and_close_respond(c4_db):
+    # Encerrar pelo Meu Plantao comitava e so depois a resposta quebrava em 500:
+    # o registro fechava e a tela mostrava erro.
+    async def scenario(client, db):
+        ilpi, _, resident, headers = await _setup(db)
+        legacy_id = await _insert_legacy(db, ilpi, resident, None)
+        corrected = await client.patch(BASE + legacy_id, headers=headers, json={"providencia": "Observacao"})
+        assert corrected.status_code == 200, corrected.text
+        assert corrected.json()["gravidade"] is None and corrected.json()["providencia"] == "Observacao"
+        closed = await client.post(BASE + legacy_id + "/encerrar", headers=headers, json={"desfecho": "Registro concluido"})
+        assert closed.status_code == 200, closed.text
+        assert closed.json()["situacao"] == "encerrada" and closed.json()["gravidade"] is None
+        stored = (await db.execute(select(m.Intercorrencia).where(m.Intercorrencia.id == legacy_id))).scalar_one()
+        await db.refresh(stored)
+        assert stored.gravidade is None and stored.situacao == "encerrada"
+    asyncio.run(_with_client(c4_db, scenario))
+
+
+def test_input_still_requires_severity(c4_db):
+    # A leitura tolerante nao abre a entrada: gravidade segue obrigatoria na
+    # criacao e nao pode ser apagada na correcao, nem de registro legado.
+    async def scenario(client, db):
+        ilpi, _, resident, headers = await _setup(db)
+        missing = await client.post(BASE, headers=headers, json={"residente_id": resident.id, "tipo": "queda"})
+        assert missing.status_code == 422
+        assert (await db.execute(select(func.count()).select_from(m.Intercorrencia))).scalar_one() == 0
+        legacy_id = await _insert_legacy(db, ilpi, resident, None)
+        for fields in ({"gravidade": None}, {"gravidade": "Alta"}):
+            response = await client.patch(BASE + legacy_id, headers=headers, json=fields)
+            assert response.status_code == 422
+        assert (await client.get(BASE + legacy_id, headers=headers)).json()["gravidade"] is None
+    asyncio.run(_with_client(c4_db, scenario))

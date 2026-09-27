@@ -443,6 +443,42 @@ describe('Intercorrências — respostas de erro do backend', () => {
   })
 })
 
+describe('Intercorrências — registro legado', () => {
+  // Antes da C.4 a gravidade podia ficar vazia ou em texto livre; a API devolve
+  // como gravado (IntercorrenciaResponse). A tela não pode inventar uma gravidade.
+  const CORES_GRAVIDADE = ['badge-success', 'badge-warning', 'badge-danger']
+
+  it('31. gravidade nula aparece como não informada, sem cor de gravidade', async () => {
+    respondeCom({ registros: [{ ...REGISTRO, gravidade: null }] })
+    renderPagina()
+    const cartao = await screen.findByRole('article')
+    const selo = within(cartao).getByText('Gravidade não informada')
+    for (const cor of CORES_GRAVIDADE) expect(selo.className).not.toContain(cor)
+    expect(within(cartao).queryByText(/^(Leve|Moderada|Grave)$/)).toBeNull()
+    // O restante do cartão continua legível.
+    expect(within(cartao).getByText('Queda no banheiro')).toBeTruthy()
+    expect(within(cartao).getByText('Aberta')).toBeTruthy()
+  })
+
+  it('32. texto legado fora do conjunto aparece como gravado, em selo neutro', async () => {
+    respondeCom({ registros: [{ ...REGISTRO, gravidade: 'Alta' }] })
+    renderPagina()
+    const cartao = await screen.findByRole('article')
+    const selo = within(cartao).getByText('Alta')
+    for (const cor of CORES_GRAVIDADE) expect(selo.className).not.toContain(cor)
+  })
+
+  it('33. registro legado convive com os atuais na mesma listagem', async () => {
+    respondeCom({ registros: [REGISTRO, { ...REGISTRO, id: 'int-legado', gravidade: null }] })
+    renderPagina()
+    const cartoes = await screen.findAllByRole('article')
+    expect(cartoes).toHaveLength(2)
+    expect(within(cartoes[0]).getByText('Moderada').className).toContain('badge-warning')
+    expect(within(cartoes[1]).getByText('Gravidade não informada')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
 describe('Intercorrências — layout responsivo', () => {
   it('26. listagem escala de uma para três colunas', async () => {
     respondeCom({ registros: [REGISTRO] })
