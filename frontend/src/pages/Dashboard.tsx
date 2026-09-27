@@ -23,7 +23,7 @@ import { getResumoDashboard, type DashboardResumo } from '../services/dashboard'
 import { GRAVIDADES as GRAVIDADES_ALERTA, listarAlertas, ROTULO_GRAVIDADE as ROTULO_ALERTA, type CentralAlertas } from '../services/alertas'
 import { ItemAlerta } from '../components/alertas/ItemAlerta'
 import { getSinaisVitais, type SinalVital } from '../services/sinaisVitais'
-import { getIntercorrencias, GRAVIDADES, type Intercorrencia } from '../services/intercorrencias'
+import { getIntercorrencias, GRAVIDADES, rotuloTipo, situacaoForaDoContrato, type Intercorrencia } from '../services/intercorrencias'
 import { useAuth } from '../context/AuthContext'
 import { usePermissoes } from '../context/PermissoesContext'
 import { MetricCard } from '../components/ui/metric-card'
@@ -427,6 +427,10 @@ function AcoesRapidas({ acoes }: { acoes: AcaoRapida[] }) {
 
 const JANELA_ATIVIDADE_H = 12
 const ROTULO_GRAVIDADE = Object.fromEntries(GRAVIDADES.map(g => [g.value, g.label])) as Record<string, string>
+// Registro legado (#110): a situação aparece como gravada, marcada como fora do
+// padrão, para não ser lida como aberta (sem sufixo) nem como encerrada.
+const situacaoLegada = (situacao: string | null) =>
+  situacao?.trim() ? `situação “${situacao}” (fora do padrão)` : 'situação não informada'
 
 type Registro = { id: string; residenteId: string; quando: number; texto: string; tipo: 'sinal' | 'intercorrencia'; grave?: boolean }
 
@@ -460,7 +464,7 @@ function AtividadeRecente({ nomes }: { nomes: Map<string, string> }) {
         for (const i of intercorrencias.value) {
           registros.push({
             id: `i:${i.id}`, residenteId: i.residente_id, quando: quando(i.ocorrido_em), tipo: 'intercorrencia', grave: i.gravidade === 'grave',
-            texto: `Intercorrência: ${i.tipo}${i.gravidade ? ` (${(ROTULO_GRAVIDADE[i.gravidade] || i.gravidade).toLowerCase()})` : ''}${i.situacao === 'encerrada' ? ' · encerrada' : ''}`,
+            texto: `Intercorrência: ${rotuloTipo(i.tipo)}${i.gravidade ? ` (${(ROTULO_GRAVIDADE[i.gravidade] || i.gravidade).toLowerCase()})` : ''}${i.situacao === 'encerrada' ? ' · encerrada' : ''}${situacaoForaDoContrato(i.situacao) ? ` · ${situacaoLegada(i.situacao)}` : ''}`,
           })
         }
       }

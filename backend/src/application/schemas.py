@@ -1015,17 +1015,27 @@ class IntercorrenciaEncerrar(BaseModel):
             raise ValueError("Desfecho obrigatorio")
         return value.strip()
 
-class IntercorrenciaResponse(IntercorrenciaCreate):
-    # Leitura sem a restricao da entrada: a coluna e nullable desde a 001 e,
-    # antes da C.4, a entrada aceitava gravidade ausente ou texto livre. Registro
-    # legado nao pode derrubar a listagem; o valor volta como gravado.
+class IntercorrenciaResponse(BaseModel):
+    # Schema de leitura proprio, sem herdar da entrada (#110): redeclarar campo
+    # nao desliga validador herdado. Antes da C.4 a entrada aceitava gravidade
+    # ausente ou texto livre, situacao "Aberta"/NULL e tipo vazio; registro
+    # legado nao pode derrubar a listagem. Tudo volta como gravado, sem strip,
+    # sem normalizar e sem inferir. Mesmas chaves, na mesma ordem, da resposta
+    # anterior.
+    residente_id: str
+    tipo: str
     gravidade: Optional[str] = None
-    id: str
-    situacao: Literal["aberta", "encerrada"]
+    situacao: Optional[str] = None
+    sbar_situacao: Optional[str] = None
+    sbar_contexto: Optional[str] = None
+    sbar_avaliacao: Optional[str] = None
+    sbar_recomendacao: Optional[str] = None
+    providencia: Optional[str] = None
     desfecho: Optional[str] = None
-    responsavel: Optional[str] = None
     # Persistido NOT NULL; o Optional aqui so acompanha o estilo do modulo.
     ocorrido_em: Optional[datetime] = None
+    id: str
+    responsavel: Optional[str] = None
     # Timestamp tecnico de criacao do registro.
     data: Optional[datetime] = None
     class Config:

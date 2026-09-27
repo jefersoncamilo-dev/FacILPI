@@ -479,6 +479,49 @@ describe('Intercorrências — registro legado', () => {
   })
 })
 
+describe('Intercorrências — situação e tipo legados (#110)', () => {
+  // Antes da C.4 a situação podia ser "Aberta", nula ou texto livre, e o tipo
+  // vazio. A API devolve como gravado; só `aberta`/`encerrada` têm efeito.
+  const LEGADOS = [
+    { ...REGISTRO, id: 'leg-maiuscula', situacao: 'Aberta' },
+    { ...REGISTRO, id: 'leg-nula', situacao: null },
+    { ...REGISTRO, id: 'leg-texto', situacao: 'Encerrada' },
+  ]
+
+  it('34. situação fora do contrato aparece como gravada, nunca como "Encerrada"', async () => {
+    respondeCom({ registros: LEGADOS })
+    renderPagina()
+    const cartoes = await screen.findAllByRole('article')
+    expect(cartoes).toHaveLength(3)
+    const esperados = ['Aberta', 'Situação não informada', 'Encerrada']
+    cartoes.forEach((cartao, i) => {
+      const selo = within(cartao).getByText(esperados[i])
+      expect(selo.className).not.toContain('badge-success')
+      expect(selo.className).not.toContain('badge-warning')
+      expect(within(cartao).getByText(/não entra no plantão nem nos alertas/)).toBeTruthy()
+      expect(cartao.className).not.toContain('border-l-success')
+    })
+    // Nenhuma conta como aberta: o aviso de abertas não aparece.
+    expect(screen.queryByText(/intercorrências? abertas?/)).toBeNull()
+  })
+
+  it('35. registro legado não entra na contagem de abertas ao lado de um atual', async () => {
+    respondeCom({ registros: [REGISTRO, LEGADOS[0]] })
+    renderPagina()
+    await screen.findAllByRole('article')
+    expect(await screen.findByText(/1 intercorrência aberta/)).toBeTruthy()
+  })
+
+  it('36. tipo vazio aparece como "Tipo não informado"', async () => {
+    respondeCom({ registros: [{ ...REGISTRO, tipo: '   ' }] })
+    renderPagina()
+    const cartao = await screen.findByRole('article')
+    expect(within(cartao).getByText('Tipo não informado')).toBeTruthy()
+    // Registro atual com tipo vazio continua aberto normalmente.
+    expect(within(cartao).getByText('Aberta').className).toContain('badge-warning')
+  })
+})
+
 describe('Intercorrências — layout responsivo', () => {
   it('26. listagem escala de uma para três colunas', async () => {
     respondeCom({ registros: [REGISTRO] })

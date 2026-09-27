@@ -451,3 +451,161 @@ def test_input_still_requires_severity(c4_db):
             assert response.status_code == 422
         assert (await client.get(BASE + legacy_id, headers=headers)).json()["gravidade"] is None
     asyncio.run(_with_client(c4_db, scenario))
+
+
+# ---- #110: situacao e tipo legados na leitura ----
+# Antes da C.4 a entrada aceitava situacao "Aberta"/NULL (default "Aberta") e
+# tipo vazio. A leitura devolve o gravado; as regras operacionais continuam
+# considerando so `aberta`/`encerrada`. Linhas inseridas direto no banco
+# descartavel, porque a API atual recusa esses valores.
+
+RESPONSE_KEYS = {
+    "residente_id", "tipo", "gravidade", "situacao", "sbar_situacao", "sbar_contexto",
+    "sbar_avaliacao", "sbar_recomendacao", "providencia", "desfecho", "ocorrido_em",
+    "id", "responsavel", "data",
+}
+LEGACY_SITUACOES = ["Aberta", None, "Encerrada"]
+LEGACY_TIPOS = ["", "   "]
+
+
+async def _insert_raw(db, ilpi, resident, *, tipo="queda legada", situacao="aberta", gravidade="grave"):
+    row = m.Intercorrencia(
+        residente_id=resident.id, ilpi_id=ilpi.id, tipo=tipo, gravidade=gravidade, situacao=situacao,
+        ocorrido_em=datetime.now(timezone.utc) - timedelta(days=30),
+    )
+    db.add(row)
+    await db.commit()
+    if situacao is None:
+        # O ORM aplica o default do modelo a None explicito; NULL real so por UPDATE.
+        await db.execute(
+            m.Intercorrencia.__table__.update().where(m.Intercorrencia.id == row.id).values(situacao=None)
+        )
+        await db.commit()
+    stored = (await db.execute(select(m.Intercorrencia.situacao).where(m.Intercorrencia.id == row.id))).scalar_one()
+    assert stored == situacao
+    return row.id
+
+
+async def _audits_for(db, row_id):
+    return (await db.execute(
+        select(func.count()).select_from(m.Auditoria).where(m.Auditoria.registro_id == row_id)
+    )).scalar_one()
+
+
+async def _assert_reads_as_stored(client, headers, resident, row_id, current_id, **stored):
+    listed = await client.get(BASE, headers=headers)
+    assert listed.status_code == 200, listed.text
+    by_id = {row["id"]: row for row in listed.json()}
+    assert set(by_id) == {current_id, row_id}
+    filtered = await client.get(BASE, headers=headers, params={"residente_id": resident.id})
+    assert filtered.status_code == 200, filtered.text
+    assert {row["id"] for row in filtered.json()} == set(by_id)
+    single = await client.get(BASE + row_id, headers=headers)
+    assert single.status_code == 200, single.text
+    assert single.json() == by_id[row_id]
+    for key, value in stored.items():
+        assert by_id[row_id][key] == value, key
+
+
+@pytest.mark.parametrize("situacao", LEGACY_SITUACOES)
+def test_legacy_situacao_reads_as_stored_and_stays_locked(c4_db, situacao):
+    async def scenario(client, db):
+        ilpi, _, resident, headers = await _setup(db)
+        current = await _create(client, resident, headers)
+        legacy_id = await _insert_raw(db, ilpi, resident, situacao=situacao)
+        await _assert_reads_as_stored(client, headers, resident, legacy_id, current["id"], situacao=situacao)
+        # A regra operacional nao muda: fora de `aberta`, correcao e encerramento seguem 409.
+        for response in (
+            await client.patch(BASE + legacy_id, headers=headers, json={"providencia": "Observacao"}),
+            await client.post(BASE + legacy_id + "/encerrar", headers=headers, json={"desfecho": "Concluido"}),
+        ):
+            assert response.status_code == 409, response.text
+            assert _detail_code(response) == "INTERCORRENCIA_NAO_ABERTA"
+        stored = (await db.execute(
+            select(m.Intercorrencia.situacao, m.Intercorrencia.providencia, m.Intercorrencia.desfecho)
+            .where(m.Intercorrencia.id == legacy_id)
+        )).one()
+        assert tuple(stored) == (situacao, None, None)
+        assert await _audits_for(db, legacy_id) == 0
+    asyncio.run(_with_client(c4_db, scenario))
+
+
+@pytest.mark.parametrize("tipo", LEGACY_TIPOS)
+def test_legacy_blank_tipo_reads_corrects_and_closes(c4_db, tipo):
+    # Antes: PATCH e /encerrar comitavam, auditavam e so depois respondiam 500.
+    async def scenario(client, db):
+        ilpi, _, resident, headers = await _setup(db)
+        current = await _create(client, resident, headers)
+        legacy_id = await _insert_raw(db, ilpi, resident, tipo=tipo)
+        await _assert_reads_as_stored(client, headers, resident, legacy_id, current["id"], tipo=tipo)
+        corrected = await client.patch(BASE + legacy_id, headers=headers, json={"providencia": "Observacao"})
+        assert corrected.status_code == 200, corrected.text
+        assert corrected.json()["tipo"] == tipo and corrected.json()["providencia"] == "Observacao"
+        closed = await client.post(BASE + legacy_id + "/encerrar", headers=headers, json={"desfecho": "Concluido"})
+        assert closed.status_code == 200, closed.text
+        assert closed.json()["situacao"] == "encerrada" and closed.json()["tipo"] == tipo
+        stored = (await db.execute(select(m.Intercorrencia.tipo).where(m.Intercorrencia.id == legacy_id))).scalar_one()
+        assert stored == tipo
+    asyncio.run(_with_client(c4_db, scenario))
+
+
+def test_projections_ignore_out_of_contract_situacao(c4_db):
+    async def scenario(client, db):
+        ilpi, user, resident, headers = await _setup(db)
+        profile_id = (await db.execute(
+            select(m.UsuarioIlpiPerfil.perfil_id).where(m.UsuarioIlpiPerfil.usuario_id == user.id)
+        )).scalar_one()
+        await _grant_permissions(db, profile_id, {"plantao:ler", "alertas:ler"})
+        await db.commit()
+        valid = await _create(client, resident, headers, gravidade="grave")
+        legacy_ids = {
+            await _insert_raw(db, ilpi, resident, situacao=situacao) for situacao in LEGACY_SITUACOES
+        }
+
+        plantao = await client.get("/api/plantao/", headers=headers)
+        assert plantao.status_code == 200, plantao.text
+        ids = {item["registro_id"] for item in plantao.json() if item["origem"] == "intercorrencia"}
+        assert ids == {valid["id"]}
+
+        resumo = await client.get("/api/dashboard/resumo", headers=headers)
+        assert resumo.status_code == 200, resumo.text
+        assert resumo.json()["intercorrencias_abertas"] == 1
+
+        alertas = await client.get("/api/central-alertas/", headers=headers)
+        assert alertas.status_code == 200, alertas.text
+        texto = alertas.text
+        assert valid["id"] in texto
+        assert not any(legacy_id in texto for legacy_id in legacy_ids)
+    asyncio.run(_with_client(c4_db, scenario))
+
+
+def test_input_contract_unchanged_by_tolerant_read(c4_db):
+    async def scenario(client, db):
+        ilpi, _, resident, headers = await _setup(db)
+        base = {"residente_id": resident.id, "tipo": "queda", "gravidade": "leve"}
+        for payload in (
+            {**base, "situacao": "Aberta"},
+            {**base, "situacao": None},
+            {**base, "tipo": " "},
+            {"residente_id": resident.id, "tipo": "queda"},
+        ):
+            response = await client.post(BASE, headers=headers, json=payload)
+            assert response.status_code == 422, (payload, response.text)
+        assert (await db.execute(select(func.count()).select_from(m.Intercorrencia))).scalar_one() == 0
+        current = await _create(client, resident, headers)
+        for fields in ({"situacao": "encerrada"}, {"tipo": " "}):
+            response = await client.patch(BASE + current["id"], headers=headers, json=fields)
+            assert response.status_code == 422, (fields, response.text)
+    asyncio.run(_with_client(c4_db, scenario))
+
+
+def test_valid_record_response_shape_unchanged(c4_db):
+    async def scenario(client, db):
+        _, _, resident, headers = await _setup(db)
+        created = await _create(client, resident, headers, tipo="  queda  ")
+        assert set(created) == RESPONSE_KEYS
+        # A entrada continua normalizando `tipo`; a leitura so devolve o gravado.
+        assert (created["tipo"], created["gravidade"], created["situacao"]) == ("queda", "leve", "aberta")
+        single = await client.get(BASE + created["id"], headers=headers)
+        assert single.status_code == 200 and single.json() == created
+    asyncio.run(_with_client(c4_db, scenario))

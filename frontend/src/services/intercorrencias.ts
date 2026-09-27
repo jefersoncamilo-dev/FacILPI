@@ -40,7 +40,12 @@ export interface Intercorrencia {
    * anterior à C.4 pode vir sem gravidade (null) ou com texto fora de `Gravidade`.
    */
   gravidade: string | null
-  situacao: 'aberta' | 'encerrada'
+  /**
+   * Leitura devolve o gravado (#110): registro anterior à C.4 pode vir com
+   * "Aberta", null ou outro texto. Só `aberta`/`encerrada` têm significado
+   * operacional; ver `situacaoForaDoContrato`.
+   */
+  situacao: string | null
   ocorrido_em?: string | null
   /** Timestamp técnico de criação do registro (registrado_em). */
   data?: string | null
@@ -52,6 +57,25 @@ export interface Intercorrencia {
   sbar_recomendacao?: string | null
   providencia?: string | null
 }
+
+/**
+ * Situação fora de `aberta`/`encerrada` (registro legado): o backend não a
+ * trata como aberta — fica fora do plantão, dos alertas e da contagem — e a
+ * tela não pode apresentá-la como encerrada.
+ */
+export const situacaoForaDoContrato = (situacao: string | null): boolean =>
+  situacao !== 'aberta' && situacao !== 'encerrada'
+
+/** Rótulo da situação: fora do contrato aparece como gravada, sem normalizar. */
+export function rotuloSituacao(situacao: string | null): string {
+  if (situacao === 'aberta') return 'Aberta'
+  if (situacao === 'encerrada') return 'Encerrada'
+  return situacao?.trim() ? situacao : 'Situação não informada'
+}
+
+/** Tipo vazio ou só espaços (registro legado) não vira texto em branco. */
+export const rotuloTipo = (tipo: string | null | undefined): string =>
+  tipo?.trim() ? tipo : 'Tipo não informado'
 
 // Teto RÍGIDO do backend: `min(limit, 100)` em main.py:1223. Pedir mais não
 // devolve mais. Declarado aqui para que a tela avise truncamento em vez de
