@@ -128,6 +128,15 @@ async def update_quarto_leito(
     data.pop("instituicao_id", None)
     data.pop("residente_atual_id", None)
     data.pop("capacidade", None)
+    # Situação não muda por edição quando isso contornaria as ações próprias:
+    # inativar exige `quartos_leitos:inativar` e leito ocupado só aceita `livre`
+    # (ocupação é derivada de residente_atual_id; `livre` também normaliza
+    # registros gravados antes desta regra). Recusa antes de qualquer mutação.
+    nova = data.get("situacao")
+    if nova == "inativo" and obj.situacao != "inativo":
+        raise HTTPException(status_code=409, detail="Para inativar o leito, use a ação de inativar")
+    if obj.residente_atual_id is not None and nova is not None and nova != "livre":
+        raise HTTPException(status_code=409, detail="Não é possível alterar a situação de leito com residente ocupante")
     for k, v in data.items():
         setattr(obj, k, v)
     new_vals = {c: getattr(obj, c) for c in ("unidade", "quarto", "leito", "acessibilidade", "situacao")}
