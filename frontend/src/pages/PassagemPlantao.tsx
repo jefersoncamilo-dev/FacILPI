@@ -236,7 +236,7 @@ function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; j
       {r.abertas.map(({ item, detalhe }) => (
         <div key={item.registro_id} className="rounded-lg border border-orange-200 bg-orange-50/60 px-3 py-2 text-sm">
           <p className="flex items-center gap-2 font-medium text-orange-900"><TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-            {detalhe ? <>{detalhe.tipo}{detalhe.gravidade ? ` · ${ROTULO_GRAVIDADE[detalhe.gravidade] || detalhe.gravidade}` : ''}</> : rotuloDoItem(item)}
+            {detalhe ? <>{detalhe.tipo} · {detalhe.gravidade?.trim() ? ROTULO_GRAVIDADE[detalhe.gravidade] || detalhe.gravidade : 'Gravidade não informada'}</> : rotuloDoItem(item)}
           </p>
           {detalhe?.ocorrido_em && <p className="text-xs text-orange-900/80">Aberta desde {formatDateTime(detalhe.ocorrido_em)}{detalhe.responsavel ? ` · ${detalhe.responsavel}` : ''}</p>}
           {detalhe?.sbar_recomendacao && <p className="mt-1 text-foreground"><strong className="font-semibold">Recomendação:</strong> {detalhe.sbar_recomendacao}</p>}
