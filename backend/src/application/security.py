@@ -198,6 +198,10 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "plantao:ler",
         # #107: alertas derivados leem fatos clinicos da ILPI da sessao.
         "alertas:ler",
+        # #120: estrutura operacional da ILPI da sessao (areas, turnos, plantao real).
+        "escala:ler",
+        "escala:gerenciar",
+        "plantao:registrar",
         "medicamentos:ler",
         "medicamentos:criar",
         "medicamentos:atualizar",
