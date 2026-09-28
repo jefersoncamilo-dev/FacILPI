@@ -419,4 +419,4 @@ async def listar_alertas(
         contagem[item["gravidade"]] += 1
         contagem[item["natureza"]] += 1
     contagem["total"] = len(c.itens)
-    return {"gerado_em": agora, "contagem": contagem, "alertas": c.itens}
+    return {"gerado_em": agora, "fuso": cal.fuso.key, "contagem": contagem, "alertas": c.itens}
