@@ -63,6 +63,7 @@ from .application.dashboard import dashboard_router
 from .application.alertas import central_alertas_router
 from .application.operacao import escala_router, plantoes_router
 from .application.passagem import passagens_router
+from .application.meu_plantao import meu_plantao_router
 from .application.fase5a2d import (
     quartos_leitos_router,
     ausencias_router,
@@ -1520,6 +1521,8 @@ app.include_router(escala_router, prefix="/api")
 app.include_router(plantoes_router, prefix="/api")
 # #125: passagem de plantao persistida.
 app.include_router(passagens_router, prefix="/api")
+# #126: Meu Plantao como destino operacional (agregador de apresentacao).
+app.include_router(meu_plantao_router, prefix="/api")
 
 @app.get("/")
 async def root():
