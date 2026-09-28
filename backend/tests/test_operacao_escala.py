@@ -21,7 +21,7 @@ from .test_d3_admissao import _client
 from .test_d2_rotina import _create_ilpi_user, _headers, _new_id, _new_institution
 from src.infrastructure import models as m
 
-HEAD = "024_escala_estrutura"
+HEAD = "025_escala_planejada"
 GESTOR = {"escala:ler", "escala:gerenciar", "plantao:registrar", "residentes:ler",
           "quartos_leitos:ler", "quartos_leitos:criar", "quartos_leitos:atualizar"}
 
