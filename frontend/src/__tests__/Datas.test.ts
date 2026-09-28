@@ -62,4 +62,10 @@ describe('formatDateTime — nao pode regredir', () => {
   it('8. ausencia de valor vira travessao', () => {
     expect(formatDateTime(null)).toBe('—')
   })
+
+  it('9. formato exato devolvido pela API (#111): microssegundos com Z viram horario de Brasilia', () => {
+    // Pydantic serializa datetime UTC como `...524088Z`. Sem o `Z` (bug da #111), o
+    // navegador lia 04:32 como hora local e a tela mostrava 04:32 em vez de 01:32.
+    expect(formatDateTime('2026-09-26T04:32:57.524088Z')).toBe('26/09/2026, 01:32')
+  })
 })

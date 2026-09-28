@@ -18,6 +18,32 @@ def gen_uuid():
     return str(uuid_lib.uuid4())
 
 
+class UtcDateTime(sa.types.TypeDecorator):
+    """Data com hora sempre em UTC e sempre com fuso, em SQLite e PostgreSQL (#111).
+
+    O SQLite nao guarda fuso: `DateTime(timezone=True)` volta sem tzinfo e a
+    API devolvia o horario sem `Z`, que o navegador lia como hora local (+3 h
+    em Brasilia). Na gravacao, horario com fuso e convertido para UTC e horario
+    sem fuso e tratado como UTC; na leitura, o valor sem fuso e marcado como
+    UTC. No PostgreSQL (`timestamptz`) o comportamento ja era esse. A exibicao
+    no fuso da ILPI (America/Sao_Paulo) e feita pelo frontend. O tipo fisico
+    nao muda: migrations continuam usando `sa.DateTime(timezone=True)`.
+    """
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if isinstance(value, datetime):
+            return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return value
+
+    def process_result_value(self, value, dialect):
+        if isinstance(value, datetime) and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
@@ -27,8 +53,8 @@ class User(Base):
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_superuser: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     exige_troca_senha: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
 
 class Instituicao(Base):
@@ -57,8 +83,8 @@ class Instituicao(Base):
     validade_licenca: Mapped[date] = mapped_column(Date, nullable=True)
     fuso_horario: Mapped[str] = mapped_column(String(64), default="America/Sao_Paulo")
     situacao: Mapped[str] = mapped_column(String(50), default="ILPI_RASCUNHO", server_default="ILPI_RASCUNHO")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
 
 class Residente(Base):
@@ -84,8 +110,8 @@ class Residente(Base):
     alergias: Mapped[str] = mapped_column(Text, nullable=True)
     necessidades_especiais: Mapped[str] = mapped_column(Text, nullable=True)
     observacoes: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
 
 class Familiar(Base):
@@ -109,7 +135,7 @@ class Familiar(Base):
     endereco: Mapped[str] = mapped_column(Text, nullable=True)
     tipo_responsabilidade: Mapped[str] = mapped_column(String(50), nullable=True)
     autorizacao_acesso: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Documento(Base):
@@ -128,7 +154,7 @@ class Documento(Base):
     arquivo_tamanho: Mapped[int] = mapped_column(Integer, nullable=True)
     arquivo_hash: Mapped[str] = mapped_column(String(64), nullable=True, index=True)
     anexado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
-    anexado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    anexado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     validade: Mapped[date] = mapped_column(Date, nullable=True)
     obrigatorio: Mapped[bool] = mapped_column(Boolean, default=False)
     situacao: Mapped[str] = mapped_column(String(50), default="pendente")
@@ -137,8 +163,8 @@ class Documento(Base):
     # Nullable para compatibilidade com documentos legados já validados
     # antes desta coluna existir (grandfathered no gate de Admissão).
     validado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
-    validado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    validado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class QuartoLeito(Base):
@@ -183,8 +209,8 @@ class QuartoLeito(Base):
     acessibilidade: Mapped[str] = mapped_column(String(100), nullable=True)
     residente_atual_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=True)
     situacao: Mapped[str] = mapped_column(String(50), default="livre")
-    data_ocupacao: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    data_ocupacao: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class OcupacaoHistorico(Base):
@@ -207,12 +233,12 @@ class OcupacaoHistorico(Base):
     instituicao_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False)
     quarto_leito_id: Mapped[str] = mapped_column(String(36), ForeignKey("quartos_leitos.id"), nullable=False)
-    data_entrada: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    data_saida: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    data_entrada: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    data_saida: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     tipo_movimentacao: Mapped[str] = mapped_column(String(50), nullable=False)
     motivo: Mapped[str] = mapped_column(Text, nullable=True)
     usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Ausencia(Base):
@@ -241,12 +267,12 @@ class Ausencia(Base):
     residente_id: Mapped[str] = mapped_column(String(36), ForeignKey("residentes.id"), nullable=False)
     quarto_leito_id: Mapped[str] = mapped_column(String(36), ForeignKey("quartos_leitos.id"), nullable=True)
     tipo: Mapped[str] = mapped_column(String(50), nullable=False)
-    data_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    data_fim: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    data_inicio: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    data_fim: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     motivo: Mapped[str] = mapped_column(Text, nullable=False)
     observacoes: Mapped[str] = mapped_column(Text, nullable=True)
     usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Avaliacao(Base):
@@ -268,7 +294,7 @@ class Avaliacao(Base):
     respostas: Mapped[str] = mapped_column(Text, nullable=True)  # JSON string
     pontuacao: Mapped[float] = mapped_column(Float, nullable=True)
     classificacao: Mapped[str] = mapped_column(String(100), nullable=True)
-    data: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    data: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
     validade: Mapped[date] = mapped_column(Date, nullable=True)
     observacoes: Mapped[str] = mapped_column(Text, nullable=True)
 
@@ -325,12 +351,12 @@ class GrauDependencia(Base):
     avaliacao_id: Mapped[str] = mapped_column(String(36), ForeignKey("avaliacoes.id"), nullable=True, index=True)
     justificativa: Mapped[str] = mapped_column(Text, nullable=False)
     confirmado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
-    confirmado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    confirmado_em: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
     validade: Mapped[date] = mapped_column(Date, nullable=True)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
     superseded_by: Mapped[str] = mapped_column(String(36), ForeignKey("graus_dependencia.id"), nullable=True)
     motivo_revogacao: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class PlanoCuidados(Base):
@@ -373,22 +399,22 @@ class PlanoCuidados(Base):
     responsaveis: Mapped[str] = mapped_column(Text, nullable=True)
     revisor: Mapped[str] = mapped_column(String(255), nullable=True)
     aprovador: Mapped[str] = mapped_column(String(255), nullable=True)
-    data_aprovacao: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    data_aprovacao: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     revisor_funcionario_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
     aprovador_funcionario_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
-    revisado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    aprovado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    revisado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    aprovado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     motivo_encerramento: Mapped[str] = mapped_column(Text, nullable=True)
-    encerrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    encerrado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     anterior_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=True)
     motivo_versao: Mapped[str] = mapped_column(Text, nullable=True)
     superseded_by: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=True)
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
     # Python-side updated_at: server onupdate expiraria o atributo no flush
     # e quebraria o acesso assíncrono (MissingGreenlet).
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
 
 
 class PaisNecessidade(Base):
@@ -420,7 +446,7 @@ class PaisNecessidade(Base):
     evidencias: Mapped[str] = mapped_column(Text, nullable=True)
     origem: Mapped[str] = mapped_column(String(50), nullable=False)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class PaisMeta(Base):
@@ -447,7 +473,7 @@ class PaisMeta(Base):
     prazo: Mapped[date] = mapped_column(Date, nullable=True)
     responsavel_funcionario_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class PaisIntervencao(Base):
@@ -479,7 +505,7 @@ class PaisIntervencao(Base):
     prioridade: Mapped[str] = mapped_column(String(20), nullable=True)
     instrucoes: Mapped[str] = mapped_column(Text, nullable=True)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class ProgramacaoCuidado(Base):
@@ -519,16 +545,16 @@ class ProgramacaoCuidado(Base):
     autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     horarios: Mapped[list] = mapped_column(sa.JSON, nullable=False)
     timezone: Mapped[str] = mapped_column(String(100), nullable=False)
-    vigencia_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    vigencia_fim: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    cobertura_ate: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    vigencia_inicio: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    vigencia_fim: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    cobertura_ate: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     perfil_responsavel: Mapped[str] = mapped_column(String(100), nullable=True)
     funcionario_designado_id: Mapped[str] = mapped_column(String(36), ForeignKey("funcionarios.id"), nullable=True)
     prioridade: Mapped[str] = mapped_column(String(20), nullable=False, default="media")
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa")
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=True)
 
 
 class OcorrenciaCuidado(Base):
@@ -559,12 +585,12 @@ class OcorrenciaCuidado(Base):
     plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=False, index=True)
     intervencao_id: Mapped[str] = mapped_column(String(36), ForeignKey("pais_intervencoes.id"), nullable=False, index=True)
     programacao_id: Mapped[str] = mapped_column(String(36), ForeignKey("programacoes_cuidado.id"), nullable=False, index=True)
-    previsto_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    previsto_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="prevista")
-    cancelado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     cancelado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     motivo_cancelamento: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class ExecucaoCuidado(Base):
@@ -605,16 +631,16 @@ class ExecucaoCuidado(Base):
     programacao_id: Mapped[str] = mapped_column(String(36), ForeignKey("programacoes_cuidado.id"), nullable=False, index=True)
     ocorrencia_id: Mapped[str] = mapped_column(String(36), ForeignKey("ocorrencias_cuidado.id"), nullable=False, index=True)
     resultado: Mapped[str] = mapped_column(String(20), nullable=False)
-    ocorrido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    registrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    ocorrido_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    registrado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, server_default=func.now())
     executor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     observacao: Mapped[str] = mapped_column(Text, nullable=True)
     justificativa: Mapped[str] = mapped_column(Text, nullable=True)
-    estornado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    estornado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     estornado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     motivo_estorno: Mapped[str] = mapped_column(Text, nullable=True)
     substitui_id: Mapped[str] = mapped_column(String(36), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Tarefa(Base):
@@ -632,14 +658,14 @@ class Tarefa(Base):
     ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     plano_id: Mapped[str] = mapped_column(String(36), ForeignKey("planos_cuidados.id"), nullable=True)
     descricao: Mapped[str] = mapped_column(String(500), nullable=False)
-    horario_previsto: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    horario_realizado: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    horario_previsto: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    horario_realizado: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     prioridade: Mapped[str] = mapped_column(String(20), default="media")
     responsavel: Mapped[str] = mapped_column(String(255), nullable=True)
     executor: Mapped[str] = mapped_column(String(255), nullable=True)
     situacao: Mapped[str] = mapped_column(String(50), default="Pendente")  # Pendente, Concluída, etc
     justificativa: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Medicamento(Base):
@@ -657,7 +683,7 @@ class Medicamento(Base):
     validade: Mapped[date] = mapped_column(Date, nullable=True)
     fabricante: Mapped[str] = mapped_column(String(255), nullable=True)
     situacao: Mapped[str] = mapped_column(String(50), default="ativo")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Prescricao(Base):
@@ -701,16 +727,16 @@ class Prescricao(Base):
     anterior_id: Mapped[str] = mapped_column(String(36), nullable=True)
     motivo_versao: Mapped[str] = mapped_column(Text, nullable=True)
     ativado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
-    ativado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    ativado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     suspenso_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
-    suspenso_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspenso_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     motivo_suspensao: Mapped[str] = mapped_column(Text, nullable=True)
     encerrado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
-    encerrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    encerrado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     motivo_encerramento: Mapped[str] = mapped_column(Text, nullable=True)
-    substituido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    substituido_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class ProgramacaoMedicacao(Base):
@@ -728,12 +754,12 @@ class ProgramacaoMedicacao(Base):
     prescricao_id: Mapped[str] = mapped_column(String(36), nullable=False)
     horarios: Mapped[list] = mapped_column(sa.JSON, nullable=False)
     timezone: Mapped[str] = mapped_column(String(100), nullable=False)
-    vigencia_inicio: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    vigencia_fim: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    cobertura_ate: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    vigencia_inicio: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    vigencia_fim: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    cobertura_ate: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativa", server_default="ativa")
     autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, server_default=func.now())
 
 
 class DosePrevista(Base):
@@ -750,12 +776,12 @@ class DosePrevista(Base):
     residente_id: Mapped[str] = mapped_column(String(36), nullable=False)
     prescricao_id: Mapped[str] = mapped_column(String(36), nullable=False)
     programacao_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    previsto_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    previsto_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="prevista", server_default="prevista")
-    cancelado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancelado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     cancelado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
     motivo_cancelamento: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, server_default=func.now())
 
 
 class Administracao(Base):
@@ -779,13 +805,13 @@ class Administracao(Base):
     prescricao_id: Mapped[str] = mapped_column(String(36), nullable=False)
     dose_prevista_id: Mapped[str] = mapped_column(String(36), nullable=False)
     resultado: Mapped[str] = mapped_column(String(20), nullable=False)
-    ocorrido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    registrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    ocorrido_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    registrado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, server_default=func.now())
     executor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     quantidade_realizada: Mapped[Decimal] = mapped_column(sa.Numeric(14, 4), nullable=True)
     justificativa: Mapped[str] = mapped_column(Text, nullable=True)
     observacao: Mapped[str] = mapped_column(Text, nullable=True)
-    estornado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    estornado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     estornado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
     motivo_estorno: Mapped[str] = mapped_column(Text, nullable=True)
     substitui_id: Mapped[str] = mapped_column(String(36), nullable=True)
@@ -813,7 +839,7 @@ class SinalVital(Base):
     glicemia: Mapped[float] = mapped_column(Float, nullable=True)
     peso: Mapped[float] = mapped_column(Float, nullable=True)
     profissional: Mapped[str] = mapped_column(String(255), nullable=True)
-    data: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    data: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
     observacao: Mapped[str] = mapped_column(Text, nullable=True)
 
 
@@ -844,8 +870,8 @@ class Intercorrencia(Base):
     # Par ocorrido_em/registrado_em de D.2/C.5: `ocorrido_em` e quando o evento
     # aconteceu (pode ser retroativo) e `data` e quando o registro foi criado.
     # `data` nao foi renomeada para `registrado_em` neste BUILD.
-    ocorrido_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    data: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ocorrido_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    data: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Alerta(Base):
@@ -858,10 +884,10 @@ class Alerta(Base):
     gravidade: Mapped[str] = mapped_column(String(20), nullable=True)
     mensagem: Mapped[str] = mapped_column(Text, nullable=False)
     responsavel: Mapped[str] = mapped_column(String(255), nullable=True)
-    prazo: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    prazo: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     situacao: Mapped[str] = mapped_column(String(50), default="Ativo")
     resolucao: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 # ===== FASE 1 — Novos modelos multi-tenant / auditoria / tokens =====
@@ -876,14 +902,14 @@ class BootstrapState(Base):
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     estado: Mapped[str] = mapped_column(String(40), nullable=False, default="UNINITIALIZED")
-    platform_bootstrapped_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    first_password_changed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    ilpi_created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    onboarding_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    onboarding_completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    platform_bootstrapped_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    first_password_changed_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    ilpi_created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    onboarding_started_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    onboarding_completed_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     atualizado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
 
 class Perfil(Base):
@@ -902,8 +928,8 @@ class Perfil(Base):
     descricao: Mapped[str] = mapped_column(Text, nullable=True)
     escopo: Mapped[str] = mapped_column(String(10), nullable=False, default="ilpi")
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
 
 class Permissao(Base):
@@ -917,14 +943,14 @@ class Permissao(Base):
     acao: Mapped[str] = mapped_column(String(100), nullable=False)
     chave: Mapped[str] = mapped_column(String(200), nullable=False)
     descricao: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class PerfilPermissao(Base):
     __tablename__ = "perfil_permissoes"
     perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfis.id", ondelete="CASCADE"), primary_key=True)
     permissao_id: Mapped[str] = mapped_column(String(36), ForeignKey("permissoes.id", ondelete="CASCADE"), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
 class Funcionario(Base):
@@ -951,8 +977,8 @@ class Funcionario(Base):
     numero_conselho: Mapped[str] = mapped_column(String(50), nullable=True)
     uf_conselho: Mapped[str] = mapped_column(String(2), nullable=True)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
 
 class Admissao(Base):
@@ -980,18 +1006,18 @@ class Admissao(Base):
     situacao: Mapped[str] = mapped_column(String(30), nullable=False, default="pre_cadastro")
     autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     responsavel_funcionario_id: Mapped[str] = mapped_column(String(36), nullable=True)
-    iniciada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    concluida_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    cancelada_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    desistencia_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    iniciada_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    concluida_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    cancelada_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    desistencia_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     motivo_cancelamento: Mapped[str] = mapped_column(Text, nullable=True)
     motivo_desistencia: Mapped[str] = mapped_column(Text, nullable=True)
-    contrato_registrado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    contrato_registrado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     contrato_documento_id: Mapped[str] = mapped_column(String(36), nullable=True)
     avaliacoes_requeridas: Mapped[list] = mapped_column(sa.JSON, nullable=False, default=list)
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
 class AdmissaoHistorico(Base):
@@ -1011,7 +1037,7 @@ class AdmissaoHistorico(Base):
     motivo: Mapped[str] = mapped_column(Text, nullable=True)
     autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     lock_version: Mapped[int] = mapped_column(Integer, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, server_default=func.now())
 
 
 class UsuarioIlpiPerfil(Base):
@@ -1028,10 +1054,10 @@ class UsuarioIlpiPerfil(Base):
     ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="CASCADE"), nullable=True, index=True)
     perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfis.id", ondelete="CASCADE"), nullable=False, index=True)
     situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ativo")
-    data_inicial: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    data_final: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    data_inicial: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    data_final: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
 
 
 class Auditoria(Base):
@@ -1051,7 +1077,7 @@ class Auditoria(Base):
     valores_posteriores: Mapped[str] = mapped_column(Text, nullable=True)
     ip: Mapped[str] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[str] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
 
 
 class RefreshToken(Base):
@@ -1069,10 +1095,10 @@ class RefreshToken(Base):
     token_family: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=True, index=True)
     perfil_id: Mapped[str] = mapped_column(String(36), ForeignKey("perfis.id"), nullable=True)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    revoked_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     replaced_by: Mapped[str] = mapped_column(String(36), ForeignKey("refresh_tokens.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
     ip: Mapped[str] = mapped_column(String(45), nullable=True)
     user_agent: Mapped[str] = mapped_column(Text, nullable=True)
 
@@ -1087,7 +1113,7 @@ class PasswordResetToken(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    used_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    used_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     created_by: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
