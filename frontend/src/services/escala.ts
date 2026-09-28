@@ -15,7 +15,8 @@ export interface LeitoDaArea {
   unidade: string | null
   quarto: string
   leito: string
-  ocupado: boolean
+  /** null quando a sessão não lê leitos nem residentes. */
+  ocupado: boolean | null
   desde: string
 }
 

@@ -258,11 +258,11 @@ function Areas({ gerenciar, podeLeitos }: { gerenciar: boolean; podeLeitos: bool
                   <ul className="space-y-1">
                     {a.leitos.map(l => (
                       <li key={l.vinculo_id} className="flex items-center justify-between gap-2 text-sm text-slate-700">
-                        <span>{rotuloLeitoDaArea(l)}{l.ocupado ? '' : ' · livre'}</span>
+                        <span>{rotuloLeitoDaArea(l)}{l.ocupado === false ? ' · livre' : ''}</span>
                         {gerenciar && (
                           <button
                             type="button"
-                            className="min-h-[36px] text-xs font-medium text-red-700 hover:underline"
+                            className="min-h-[44px] px-2 text-xs font-medium text-red-700 hover:underline"
                             onClick={() => acao(() => escalaApi.removerLeito(a.id, l.quarto_leito_id), 'Não foi possível remover o leito.')}
                           >
                             Remover
@@ -273,20 +273,16 @@ function Areas({ gerenciar, podeLeitos }: { gerenciar: boolean; podeLeitos: bool
                   </ul>
                 )}
                 {gerenciar && a.situacao === 'ativa' && livres.length > 0 && (
-                  <select
-                    aria-label={`Adicionar leito à área ${a.nome}`}
-                    value=""
-                    onChange={e => e.target.value && acao(() => escalaApi.vincularLeito(a.id, e.target.value), 'Não foi possível adicionar o leito.')}
-                    className={CAMPO}
-                  >
-                    <option value="">Adicionar leito…</option>
-                    {livres.map(l => <option key={l.id} value={l.id}>{rotuloLeitoDaArea(l)}</option>)}
-                  </select>
+                  <AdicionarLeito
+                    area={a}
+                    livres={livres}
+                    onAdicionar={id => acao(() => escalaApi.vincularLeito(a.id, id), 'Não foi possível adicionar o leito.')}
+                  />
                 )}
                 {gerenciar && (
                   <button
                     type="button"
-                    className="min-h-[36px] text-xs font-medium text-primary hover:underline"
+                    className="min-h-[44px] text-xs font-medium text-primary hover:underline"
                     onClick={() => acao(() => escalaApi.atualizarArea(a.id, { situacao: a.situacao === 'ativa' ? 'inativa' : 'ativa' }), 'Não foi possível alterar a área.')}
                   >
                     {a.situacao === 'ativa' ? 'Inativar área' : 'Reativar área'}
@@ -297,6 +293,28 @@ function Areas({ gerenciar, podeLeitos }: { gerenciar: boolean; podeLeitos: bool
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+/** Escolher e confirmar: trocar de opção com o teclado não vincula nada sozinho (WCAG 3.2.2). */
+function AdicionarLeito({ area, livres, onAdicionar }: { area: Area; livres: LeitoOpcao[]; onAdicionar: (id: string) => void }) {
+  const [escolhido, setEscolhido] = useState('')
+  return (
+    <div className="flex gap-2">
+      <select aria-label={'Leito para a área ' + area.nome} value={escolhido} onChange={e => setEscolhido(e.target.value)} className={CAMPO}>
+        <option value="">Escolha um leito…</option>
+        {livres.map(l => <option key={l.id} value={l.id}>{rotuloLeitoDaArea(l)}</option>)}
+      </select>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={!escolhido}
+        className="min-h-[44px] shrink-0"
+        onClick={() => { onAdicionar(escolhido); setEscolhido('') }}
+      >
+        Adicionar
+      </Button>
     </div>
   )
 }
@@ -353,7 +371,7 @@ function Turnos({ gerenciar }: { gerenciar: boolean }) {
               {gerenciar && (
                 <button
                   type="button"
-                  className="min-h-[36px] text-xs font-medium text-primary hover:underline"
+                  className="min-h-[44px] text-xs font-medium text-primary hover:underline"
                   onClick={async () => {
                     setErro('')
                     try {

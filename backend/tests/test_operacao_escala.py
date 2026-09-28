@@ -128,8 +128,16 @@ def test_plantao_real_e_responsabilidade(escala_db):
         agora = await _ok(await client.get("/api/escala/agora", headers=hc))
         assert [(a["area"]["nome"], [r["funcionario_nome"] for r in a["responsaveis"]]) for a in agora["areas"]] == [("Ala B", ["Ana Sintetica"])]
 
-        # Cuidador nao gere a escala nem encerra plantao alheio.
+        # Cuidador nao gere a escala nem encerra plantao alheio; o gestor encerra o esquecido aberto.
         assert (await client.post("/api/escala/areas", headers=hc, json={"nome": "Ala C"})).status_code == 403
+        _, h_outra = await _usuario(db, ilpi, await _template(db, "cuidador"), "cuidador_2", "Bia Sintetica")
+        alheio = await _ok(await client.post("/api/plantoes/iniciar", headers=h_outra, json={"area_ids": [ala_b["id"]]}), 201)
+        assert (await client.post(f"/api/plantoes/{alheio['id']}/encerrar", headers=hc)).status_code == 403
+        pelo_gestor = await _ok(await client.post(f"/api/plantoes/{alheio['id']}/encerrar", headers=hg))
+        assert pelo_gestor["situacao"] == "encerrado" and pelo_gestor["responsabilidades"][0]["motivo_fim"] == "fim_plantao"
+        # Transferir para plantao encerrado nao abre responsabilidade.
+        assert (await client.post("/api/escala/responsabilidades/transferir", headers=hg, json={
+            "area_id": ala_b["id"], "para_plantao_id": alheio["id"]})).status_code == 409
         encerrado = await _ok(await client.post(f"/api/plantoes/{plantao['id']}/encerrar", headers=hc))
         assert encerrado["situacao"] == "encerrado" and encerrado["fim_em"]
         [resp] = encerrado["responsabilidades"]
@@ -179,12 +187,21 @@ def test_troca_de_responsavel_nao_reescreve_o_passado(escala_db):
         assert (await client.post(f"/api/escala/responsabilidades/{linha_ana.id}/encerrar", headers=hg)).status_code == 409
         # Area com responsavel nao inativa sem transferir antes.
         assert (await client.patch(f"/api/escala/areas/{ala_b['id']}", headers=hg, json={"situacao": "inativa"})).status_code == 409
+        # Nome em branco nao passa.
+        assert (await client.patch(f"/api/escala/areas/{ala_b['id']}", headers=hg, json={"nome": "   "})).status_code == 422
+        assert (await client.patch(f"/api/escala/areas/{ala_b['id']}", headers=hg, json={"tipo": None})).status_code == 422
+        assert (await client.post("/api/escala/turnos", headers=hg, json={"nome": "  ", "hora_inicio": "07:00", "hora_fim": "19:00"})).status_code == 422
         # Cobertura: um segundo profissional passa a responder junto.
         ana_ainda = await _ok(await client.post("/api/escala/responsabilidades/transferir", headers=hg, json={
             "area_id": ala_b["id"], "para_plantao_id": ana["id"]}))
         assert sorted(r["funcionario_nome"] for r in ana_ainda) == ["Ana Sintetica", "Juliana Sintetica"]
         assert (await client.post("/api/escala/responsabilidades/transferir", headers=hg, json={
             "area_id": ala_b["id"], "para_plantao_id": ana["id"]})).status_code == 409
+        # Destino que ja responde pela area: 409 e a origem continua aberta (nada pela metade).
+        falha = await client.post("/api/escala/responsabilidades/transferir", headers=hg, json={
+            "area_id": ala_b["id"], "para_plantao_id": ju["id"], "de_funcionario_id": ana_func})
+        assert falha.status_code == 409
+        assert sorted(await quem(_agora())) == ["Ana Sintetica", "Juliana Sintetica"]
     _run(escala_db, op)
 
 
@@ -199,6 +216,21 @@ def test_responsabilidade_nao_concede_acesso_e_rbac(escala_db):
         agora = await _ok(await client.get("/api/escala/agora", headers=h))
         assert agora["areas"][0]["residentes"] is None, "contagem de residentes exige residentes:ler"
         assert (await _ok(await client.get("/api/escala/agora", headers=hg)))["areas"][0]["residentes"] == 0
+
+        # Ocupacao de leito e dado de leitos/residentes: quem so le a escala nao a ve.
+        leito = await _ok(await client.post("/api/quartos_leitos/", headers=hg, json={"quarto": "3", "leito": "A"}), 201)
+        await _ok(await client.post(f"/api/escala/areas/{ala_b['id']}/leitos", headers=hg, json={"quarto_leito_id": leito["id"]}), 201)
+        residente = m.Residente(id=_new_id(), instituicao_id=ilpi.id, nome="Ocupante Sintetico", situacao="Ativo",
+                                data_nascimento=_agora().date().replace(year=1940))
+        db.add(residente)
+        await db.commit()
+        await _ok(await client.post(f"/api/quartos_leitos/{leito['id']}/alocar", headers=hg, json={"residente_id": residente.id}))
+        for rota in ("/api/escala/areas", "/api/escala/agora"):
+            corpo = await _ok(await client.get(rota, headers=h))
+            areas = corpo if isinstance(corpo, list) else [a["area"] for a in corpo["areas"]]
+            assert [l["ocupado"] for a in areas for l in a["leitos"]] == [None], rota
+        gestor_areas = await _ok(await client.get("/api/escala/areas", headers=hg))
+        assert [l["ocupado"] for a in gestor_areas for l in a["leitos"]] == [True]
 
         _, sem = await _usuario(db, ilpi, {"residentes:ler"}, "sem_escala", "Sem Escala")
         assert (await client.get("/api/escala/areas", headers=sem)).status_code == 403
@@ -226,10 +258,14 @@ def test_isolamento_entre_ilpis(escala_db):
         assert (await client.post(f"/api/plantoes/{plantao_b['id']}/encerrar", headers=h_a)).status_code == 404
         assert (await client.post("/api/escala/responsabilidades/transferir", headers=h_a, json={
             "area_id": ala_a["id"], "para_plantao_id": plantao_b["id"]})).status_code == 404
+        plantao_a = await _ok(await client.post("/api/plantoes/iniciar", headers=h_a, json={}), 201)
+        assert (await client.post("/api/escala/responsabilidades/transferir", headers=h_a, json={
+            "area_id": ala_a["id"], "para_plantao_id": plantao_a["id"],
+            "de_funcionario_id": plantao_b["funcionario_id"]})).status_code == 404
         assert (await client.post("/api/plantoes/iniciar", headers=h_a, json={"area_ids": [ala_b["id"]]})).status_code == 404
         agora_a = await _ok(await client.get("/api/escala/agora", headers=h_a))
         assert all(r["plantao_id"] != plantao_b["id"] for a in agora_a["areas"] for r in a["responsaveis"])
-        assert agora_a["plantoes_sem_area"] == []
+        assert all(p["id"] != plantao_b["id"] for p in agora_a["plantoes_sem_area"])
         # Header de outra ILPI nao abre a ILPI B.
         assert (await client.get("/api/escala/areas", headers=_headers(gestor_a, ilpi_id=ilpi_b.id))).status_code == 403
         assert (await client.get("/api/escala/areas", headers=_headers(gestor_a, scope="global"))).status_code == 403
