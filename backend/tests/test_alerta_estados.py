@@ -191,3 +191,31 @@ def test_026_concede_cria_e_reverte(pre026_db):
     asyncio.run(_client(pre026_db, depois))
     falha = _migrate(pre026_db, target="025_escala_planejada", command="downgrade", success=False)
     assert "alerta_estados tem historico" in falha.stdout + falha.stderr
+
+
+def test_concorrencia_assumir_e_reconciliacao_sem_corrida(alertas_db):
+    async def op(client, db):
+        ilpi, _, queda, rg = await _cenario(db)
+        _, h_ana, _ = await _institucional(db, ilpi, "cuidador")
+        _, h_bruno, _ = await _institucional(db, ilpi, "enfermagem")
+        alerta = f"intercorrencia_grave_aberta:{queda.id}"
+        # Duas pessoas ao mesmo tempo: uma assume, a outra recebe 409 (nunca 500).
+        respostas = await asyncio.gather(
+            client.post(f"{URL}/assumir", headers=h_ana, json={"alerta_id": alerta}),
+            client.post(f"{URL}/assumir", headers=h_bruno, json={"alerta_id": alerta}))
+        assert sorted(r.status_code for r in respostas) == [200, 409], [r.text for r in respostas]
+        perdedor = next(r for r in respostas if r.status_code == 409)
+        assert "Já assumido por" in perdedor.json()["detail"]["message"]
+
+        # Estado aberto criado DEPOIS do calculo da projecao nao e encerrado por ela.
+        dono = await db.scalar(select(m.AlertaEstado.assumido_por).where(m.AlertaEstado.alerta_id == alerta))
+        fantasma = f"documento_aguardando_validacao:{_new_id()}"
+        db.add(m.AlertaEstado(ilpi_id=ilpi.id, alerta_id=fantasma, regra="documento_aguardando_validacao",
+                              situacao="assumido", assumido_por=dono, assumido_em=_agora() + timedelta(minutes=5)))
+        await db.commit()
+        _, h_adm, _ = await _institucional(db, ilpi, "administrativo")
+        await _alertas(client, h_adm)
+        situacao = await db.scalar(select(m.AlertaEstado.situacao).where(m.AlertaEstado.alerta_id == fantasma)
+                                   .execution_options(populate_existing=True))
+        assert situacao == "assumido"
+    _run(alertas_db, op)
