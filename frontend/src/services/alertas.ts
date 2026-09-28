@@ -14,6 +14,16 @@ export type Categoria = 'admissao_documentos' | 'avaliacao_grau_pais' | 'plantao
 /** Independente da gravidade: alerta pede ação no plantão; pendência é algo a regularizar. */
 export type Natureza = 'alerta' | 'pendencia' | 'informativo' | 'atividade'
 
+/** #123: o que a equipe fez sobre o alerta (estado aberto do episódio atual). */
+export interface AlertaEstado {
+  id: string
+  situacao: 'assumido' | 'em_atendimento'
+  por_nome: string
+  por_mim: boolean
+  assumido_em: string
+  em_atendimento_em: string | null
+}
+
 export interface Alerta {
   /** Estável: regra:referência[:contexto] — a ordem e a chave de tela não mudam ao recalcular. */
   id: string
@@ -35,6 +45,8 @@ export interface Alerta {
   desde: string | null
   /** Quando vence/venceu — só quando o domínio tem vencimento real. */
   prazo: string | null
+  /** #123: null = novo (ninguém assumiu). A resolução vem sempre da fonte. */
+  estado?: AlertaEstado | null
 }
 
 export type ContagemAlertas = Record<Gravidade | Natureza | 'total', number>
@@ -51,6 +63,21 @@ export interface CentralAlertas {
 export async function listarAlertas(): Promise<CentralAlertas> {
   const { data } = await api.get<CentralAlertas>('/central-alertas/')
   return data
+}
+
+export type AcaoAlerta = 'assumir' | 'atender' | 'liberar'
+
+/** #123: assumir, iniciar atendimento ou liberar. Não existe "resolver" — isso é da fonte. */
+export async function agirNoAlerta(acao: AcaoAlerta, alertaId: string): Promise<AlertaEstado | null> {
+  const { data } = await api.post<{ alerta_id: string; estado: AlertaEstado | null }>(`/central-alertas/${acao}`, { alerta_id: alertaId })
+  return data.estado
+}
+
+/** "Em atendimento por Ana Paula" / "Assumido por você". */
+export function rotuloEstado(estado: AlertaEstado | null | undefined): string | null {
+  if (!estado) return null
+  const quem = estado.por_mim ? 'você' : estado.por_nome || 'outra pessoa'
+  return `${estado.situacao === 'em_atendimento' ? 'Em atendimento' : 'Assumido'} por ${quem}`
 }
 
 export const GRAVIDADES: Gravidade[] = ['critico', 'atencao', 'aviso']
