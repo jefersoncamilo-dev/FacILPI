@@ -26,7 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..infrastructure import models as m
 from ..infrastructure.database import get_db
-from .alertas import ORIGEM_DA_REGRA, projetar
+from .alertas import HORAS_JANELA_PLANTAO, ORIGEM_DA_REGRA, projetar
 from .audit import add_audit
 from .operacao import _encerrar_plantao, _responsabilidades, _travar_plantao, funcionario_da_sessao, residentes_das_areas
 from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc, meu_plantao
@@ -181,9 +181,10 @@ async def montar_previa(db: AsyncSession, context: SecurityContext, area: Option
             com_alerta.add(a["referencia_id"])
 
     if "plantao:ler" in chaves or "intercorrencias:ler" in chaves:
-        # Mesma projecao do Meu Plantao: pendencias da janela e intercorrencias abertas.
-        pendencias = await meu_plantao(a_partir_de=janela_inicio, ate=agora, residente_id=None, limit=1000,
-                                       db=db, context=context)
+        # Mesma projecao do Meu Plantao. Atividades: a janela de 24 h do alerta que elas substituem
+        # (o que o turno herdou e segue pendente tambem passa adiante), nunca menor que a do plantao.
+        pendencias = await meu_plantao(a_partir_de=min(janela_inicio, agora - timedelta(hours=HORAS_JANELA_PLANTAO)),
+                                       ate=agora, residente_id=None, limit=1000, db=db, context=context)
         for p in pendencias:
             if not no_escopo(p["residente_id"]):
                 continue

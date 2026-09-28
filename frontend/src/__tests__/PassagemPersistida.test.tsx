@@ -29,6 +29,7 @@ function passagem(parcial: Partial<Passagem>): Passagem {
     itens: [
       item({ id: 'i1' }),
       item({ id: 'i2', origem: 'atividade', titulo: 'Cuidado sem registro: Banho', situacao_atual: 'resolvido' }),
+      item({ id: 'i4', natureza: 'pendencia', titulo: 'Sem PAIS vigente' }),
       item({ id: 'i3', origem: 'observacao', categoria: 'comportamento', texto: 'Agitada no fim da tarde', titulo: 'Agitada no fim da tarde', situacao_atual: null }),
     ],
     ...parcial,
@@ -48,9 +49,11 @@ describe('Passagens a receber (#125)', () => {
     const cartao = await screen.findByRole('article', { name: 'Passagem de Ana Sintetica' })
     expect(within(cartao).getByText('Ala B · entregue por Ana Sintetica')).toBeTruthy()
     expect(within(cartao).getByText('sua área')).toBeTruthy()
-    expect(within(cartao).getByText('Ainda aberto')).toBeTruthy()
+    expect(within(cartao).getAllByText('Ainda aberto')).toHaveLength(2)
     expect(within(cartao).getByText('Resolvido desde então')).toBeTruthy()
     expect(within(cartao).getByText('Agitada no fim da tarde')).toBeTruthy()
+    // Item da central com natureza pendência não é rotulado como "Alerta".
+    expect(within(cartao).getByText('Sem PAIS vigente').nextElementSibling?.textContent).toBe('Pendência · Hilda Sintetica')
     await userEvent.click(within(cartao).getByRole('button', { name: /Confirmar recebimento/ }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/passagens/p1/receber', {}))
     expect(await screen.findByText(/Recebimento confirmado/)).toBeTruthy()
