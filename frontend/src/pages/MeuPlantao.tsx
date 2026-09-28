@@ -227,6 +227,8 @@ export function MeuPlantao() {
       const origem = itemAberto.origem
       fechar()
       await carregar()
+      // #126: a fonte mudou — o resumo da área (prioridades, atrasadas) também.
+      carregarResumo()
       setSucesso(SUCESSO_ACAO[origem])
     } catch (e) {
       // Conflito de concorrência (outro plantonista já registrou) chega aqui.

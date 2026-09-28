@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Inbox, UserRound } from 'lucide-react'
 import { formatDateTime } from '../../services/api'
 import type { MeuPlantaoResumo } from '../../services/meuPlantao'
+import { plantaoDesde } from '../../services/alertas'
 import { ItemAlerta } from '../alertas/ItemAlerta'
 
 /**
@@ -66,11 +67,32 @@ export function MinhaArea({ resumo, podeAssumir, onMudou }: { resumo: MeuPlantao
       )}
 
       {resumo.atividades !== null && (
-        <p className="text-sm text-slate-700">
-          Atividades da área: <span className="font-semibold">{atrasadas.length} atrasada{atrasadas.length === 1 ? '' : 's'}</span>
-          {' · '}{proximas.length} nas próximas horas
-          {proximas[0]?.previsto_em ? ` (a próxima às ${formatDateTime(proximas[0].previsto_em)})` : ''}. Registre na lista abaixo.
-        </p>
+        <div className="space-y-2">
+          <p className="text-sm text-slate-700">
+            Atividades da área: <span className="font-semibold">{atrasadas.length} atrasada{atrasadas.length === 1 ? '' : 's'}</span>
+            {' · '}{proximas.length} nas próximas horas
+            {proximas[0]?.previsto_em ? ` (a próxima às ${formatDateTime(proximas[0].previsto_em)})` : ''}.
+          </p>
+          {atrasadas.length > 0 && (
+            <>
+              <ul aria-label="Atividades atrasadas" className="space-y-1 text-sm">
+                {atrasadas.map(a => (
+                  <li key={a.registro_id}>
+                    <span className="font-medium">{a.residente_nome ?? 'Residente'}</span>
+                    {' · '}{a.origem === 'medicacao' ? 'Dose de medicação' : a.descricao}
+                    {a.previsto_em ? ` · previsto ${formatDateTime(a.previsto_em)}` : ''}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                to={plantaoDesde(atrasadas[0].previsto_em)}
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-md bg-brand-soft px-3 text-sm font-semibold text-primary hover:underline"
+              >
+                Registrar as atrasadas <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            </>
+          )}
+        </div>
       )}
     </section>
   )

@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
-from .alertas import _estado_item, _estados_abertos, _local, _nomes_de, projetar
+from .alertas import HORAS_JANELA_PLANTAO, _estado_item, _estados_abertos, _local, _nomes_de, projetar
 from .operacao import (
     EscalaResposta, PlantaoResposta, _escalas_resposta, _plantoes_resposta, _responsabilidades,
     funcionario_da_sessao, residentes_das_areas,
@@ -129,7 +129,9 @@ async def meu_plantao(db: AsyncSession = Depends(get_db), context: SecurityConte
             m.Residente.instituicao_id == ilpi, m.Residente.id.in_(escopo)))).all())
 
     if "plantao:ler" in chaves:
-        itens = await projecao_do_plantao(a_partir_de=_min(plantao.inicio_em, agora), ate=agora + timedelta(hours=HORAS_PROXIMAS),
+        # Atrasadas: a mesma janela de 24 h do alerta — inclui o que o turno herdou ainda pendente.
+        itens = await projecao_do_plantao(a_partir_de=agora - timedelta(hours=HORAS_JANELA_PLANTAO),
+                                          ate=agora + timedelta(hours=HORAS_PROXIMAS),
                                           residente_id=None, limit=1000, db=db, context=context)
         atrasadas, proximas = [], []
         for p in itens:
@@ -143,16 +145,18 @@ async def meu_plantao(db: AsyncSession = Depends(get_db), context: SecurityConte
 
     if "residentes:ler" in chaves:
         motivos: dict[str, list[str]] = {rid: [] for rid in escopo}
+        ja_em_alerta: set[str] = set()
         for p in resposta.prioridades or []:
             if p.gravidade == "critico" and p.residente_id in motivos:
                 motivos[p.residente_id].append(p.titulo)
+            if p.regra.startswith("intercorrencia_"):
+                ja_em_alerta.add(p.referencia_id)
         if "intercorrencias:ler" in chaves and escopo:
             for i in (await db.scalars(select(m.Intercorrencia).where(
                     m.Intercorrencia.ilpi_id == ilpi, m.Intercorrencia.situacao == "aberta",
                     m.Intercorrencia.residente_id.in_(escopo)))).all():
-                rotulo = f"Intercorrência aberta: {i.tipo}"
-                if not any(rotulo in t for t in motivos[i.residente_id]):
-                    motivos[i.residente_id].append(rotulo)
+                if i.id not in ja_em_alerta:
+                    motivos[i.residente_id].append(f"Intercorrência aberta: {i.tipo}")
         leitos = {r.residente_atual_id: (r.unidade, r.quarto, r.leito) for r in (await db.execute(
             select(m.QuartoLeito.residente_atual_id, m.QuartoLeito.unidade, m.QuartoLeito.quarto, m.QuartoLeito.leito)
             .where(m.QuartoLeito.instituicao_id == ilpi, m.QuartoLeito.residente_atual_id.in_(escopo)))).all()} if escopo else {}
@@ -168,9 +172,3 @@ async def meu_plantao(db: AsyncSession = Depends(get_db), context: SecurityConte
             m.PassagemPlantao.entregue_por != context.user.id,
             (m.PassagemPlantao.area_id.in_(area_ids)) | (m.PassagemPlantao.area_id.is_(None))))).all())
     return resposta
-
-
-def _min(inicio, agora):
-    inicio = inicio.replace(tzinfo=timezone.utc) if inicio.tzinfo is None else inicio
-    # A janela de atrasadas comeca no inicio do plantao (limitada a 24 h para tras).
-    return max(inicio, agora - timedelta(hours=24))

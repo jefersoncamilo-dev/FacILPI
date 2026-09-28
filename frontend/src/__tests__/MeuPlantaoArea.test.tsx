@@ -54,6 +54,10 @@ describe('Minha área agora (#126)', () => {
     expect(within(secao).getByRole('button', { name: 'Assumir' })).toBeTruthy()
     expect(within(secao).getByRole('link', { name: /1 passagem de plantão aguardando você/ }).getAttribute('href')).toBe('/passagem')
     expect(within(secao).getByText(/1 atrasada/)).toBeTruthy()
+    // Atrasadas listadas, com o caminho para registrá-las a partir do horário mais antigo.
+    expect(within(within(secao).getByRole('list', { name: 'Atividades atrasadas' })).getByText(/Rita Sintetica/)).toBeTruthy()
+    expect(within(secao).getByRole('link', { name: /Registrar as atrasadas/ }).getAttribute('href'))
+      .toBe('/plantao?desde=2026-09-28T11%3A45%3A00Z')
   })
 
   it('sem plantão ou sem área não aparece; blocos sem leitura ficam de fora', () => {

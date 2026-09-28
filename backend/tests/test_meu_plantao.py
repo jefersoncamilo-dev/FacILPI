@@ -4,9 +4,9 @@ Somente bancos descartaveis (SQLite em tmp_path; PostgreSQL via D3_TEST_POSTGRES
 """
 
 import asyncio
-from datetime import timedelta
 
-from sqlalchemy import update
+
+
 
 from .test_alertas_gestor import _agora
 from .test_alertas_operacionais import _institucional
@@ -42,10 +42,8 @@ def test_com_plantao_recorta_pela_area_e_pelo_rbac(passagem_db):
         ilpi, hg, ala_b, x = await _cenario(client, db)
         _, h_ana, _ = await _institucional(db, ilpi, "cuidador")
         _, h_bruno, _ = await _institucional(db, ilpi, "enfermagem")
+        # Plantao iniciado AGORA: o cuidado atrasado (15 min antes) foi herdado e tem de aparecer.
         plantao = await _ok(await client.post("/api/plantoes/iniciar", headers=h_ana, json={"area_ids": [ala_b["id"]]}), 201)
-        uma_hora = _agora() - timedelta(hours=1)
-        await db.execute(update(m.Plantao).where(m.Plantao.id == plantao["id"]).values(inicio_em=uma_hora))
-        await db.commit()
         # Passagem do turno anterior (Bruno, sem area) aguardando.
         await _ok(await client.post(PASSAGENS + "/", headers=h_bruno, json={"observacoes": [{"categoria": "outro", "texto": "Plantão tranquilo"}]}), 201)
 
@@ -54,6 +52,8 @@ def test_com_plantao_recorta_pela_area_e_pelo_rbac(passagem_db):
         residentes = {r["nome"]: r for r in visao["residentes"]}
         assert set(residentes) == {"Hilda Sintetica", "Rita Sintetica"}, "Joao nao esta na Ala B"
         assert residentes["Hilda Sintetica"]["em_atencao"] and residentes["Hilda Sintetica"]["local"] == "Ala B · Quarto 12 · Leito A"
+        # Motivo sem repeticao: a queda grave ja e alerta; nao volta como "intercorrencia aberta".
+        assert residentes["Hilda Sintetica"]["motivos"].count("Intercorrência aberta: Queda") == 0
         assert visao["residentes"][0]["nome"] == "Hilda Sintetica", "em atencao primeiro"
         assert {p["residente_id"] for p in visao["prioridades"]} <= {x["hilda"].id, x["rita"].id}
         assert f"intercorrencia_grave_aberta:{x['grave'].id}" in {p["id"] for p in visao["prioridades"]}
