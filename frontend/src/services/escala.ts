@@ -57,13 +57,58 @@ export interface Plantao {
   inicio_em: string
   fim_em: string | null
   situacao: 'em_andamento' | 'encerrado'
+  /** #122: escala planejada que este plantão cumpre (null = cobertura sem escala). */
+  escala_id?: string | null
   responsabilidades: Responsabilidade[]
+}
+
+export type EstadoEscala = 'prevista' | 'presente' | 'realizada' | 'nao_iniciada' | 'ausente' | 'substituida' | 'cancelada'
+
+/** Escala PLANEJADA (#122): quem deveria trabalhar. O plantão real continua em `Plantao`. */
+export interface Escala {
+  id: string
+  funcionario_id: string
+  funcionario_nome: string
+  turno_id: string | null
+  turno_nome: string | null
+  area_id: string | null
+  area_nome: string | null
+  inicio_previsto: string
+  fim_previsto: string
+  tipo: 'regular' | 'substituicao' | 'cobertura'
+  situacao: 'prevista' | 'ausente' | 'cancelada'
+  motivo: string | null
+  substitui_escala_id: string | null
+  substituta_id: string | null
+  substituto_nome: string | null
+  plantao_id: string | null
+  /** Previsto × efetivo, derivado agora pelo backend. */
+  estado: EstadoEscala
+}
+
+export interface EscalaDia {
+  dia: string
+  fuso: string
+  escalas: Escala[]
+  coberturas_sem_escala: Plantao[]
+}
+
+export const ROTULO_ESTADO_ESCALA: Record<EstadoEscala, string> = {
+  prevista: 'Prevista',
+  presente: 'Presente',
+  realizada: 'Realizada',
+  nao_iniciada: 'Não iniciada',
+  ausente: 'Ausente',
+  substituida: 'Substituída',
+  cancelada: 'Cancelada',
 }
 
 export interface PlantaoAtual {
   pode_registrar: boolean
   funcionario_id: string | null
   plantao: Plantao | null
+  /** #122: escalas previstas da própria pessoa ainda por cumprir. */
+  escalas_pendentes?: Escala[]
 }
 
 export interface AreaAgora {
@@ -106,10 +151,17 @@ export const escalaApi = {
   transferir: (dados: { area_id: string; para_plantao_id: string; de_funcionario_id?: string }) =>
     api.post<Responsabilidade[]>('/escala/responsabilidades/transferir', dados).then(r => r.data),
   encerrarResponsabilidade: (id: string) => api.post<Responsabilidade>(`/escala/responsabilidades/${id}/encerrar`, {}).then(r => r.data),
+  dia: (dia?: string) => api.get<EscalaDia>('/escala/previsto', { params: dia ? { dia } : {} }).then(r => r.data),
+  criarEscala: (dados: { funcionario_id: string; turno_id?: string; area_id?: string; data?: string; tipo?: 'regular' | 'cobertura' }) =>
+    api.post<Escala>('/escala/previsto', dados).then(r => r.data),
+  ausencia: (id: string, motivo: string) => api.post<Escala>(`/escala/previsto/${id}/ausencia`, { motivo }).then(r => r.data),
+  substituir: (id: string, funcionario_id: string, motivo: string) =>
+    api.post<Escala[]>(`/escala/previsto/${id}/substituir`, { funcionario_id, motivo }).then(r => r.data),
+  cancelar: (id: string, motivo: string) => api.post<Escala>(`/escala/previsto/${id}/cancelar`, { motivo }).then(r => r.data),
 }
 
 export const plantoesApi = {
   atual: () => api.get<PlantaoAtual>('/plantoes/atual').then(r => r.data),
-  iniciar: (dados: { area_ids: string[]; turno_id?: string }) => api.post<Plantao>('/plantoes/iniciar', dados).then(r => r.data),
+  iniciar: (dados: { area_ids: string[]; turno_id?: string; escala_id?: string }) => api.post<Plantao>('/plantoes/iniciar', dados).then(r => r.data),
   encerrar: (id: string) => api.post<Plantao>(`/plantoes/${id}/encerrar`, {}).then(r => r.data),
 }
