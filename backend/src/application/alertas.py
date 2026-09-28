@@ -1,23 +1,37 @@
-"""#107: central de alertas do Administrador da ILPI — PROJECAO, so leitura.
+"""Central de alertas e pendencias (#107, #117) — PROJECAO, so leitura.
 
-Cada alerta e um fato oficial que pede atencao AGORA, calculado a cada
+Cada item e um fato oficial que pede atencao AGORA, calculado a cada
 requisicao a partir da fonte que ja governa aquele dado. Nada e gravado:
-sem tabela, sem job, sem dual-write. O alerta some sozinho quando o problema
+sem tabela, sem job, sem dual-write. O item some sozinho quando o problema
 e resolvido na tela de origem. A tabela legada ``alertas`` (001) e o CRUD
 ``fail_closed`` de /api/alertas/ ficam intocados.
 
 Mesmo contrato do Dashboard (UX-02): a ILPI vem da sessao, nunca do cliente,
 e cada regra so e calculada se o contexto le o modulo de origem — sem essa
 leitura a regra nao existe para ele (nem contagem, para nao vazar fato
-clinico). Os limiares abaixo sao os da decisao do responsavel (26/09) e a tela
-os exibe; a janela do plantao e recorte de periodo, nao tolerancia de atraso
-(D.2 continua valendo: atrasado e so "passou do horario").
+clinico). ``alertas:ler`` sozinho nao abre nada (RBAC por origem). Os limiares
+abaixo sao os da decisao do responsavel (26/09) e a tela os exibe; a janela do
+plantao e recorte de periodo, nao tolerancia de atraso (D.2 continua valendo:
+atrasado e so "passou do horario").
+
+Contrato do item (#117, ROADMAP §16):
+- ``id`` estavel: ``regra:referencia[:contexto]``; texto livre entra como hash
+  curto; nunca horario atual nem posicao. Recalcular nao muda o id.
+- ``natureza`` (alerta | pendencia) e independente de ``gravidade``.
+- ``desde``: quando nasceu a situacao de origem (nulo quando a fonte nao tem
+  origem confiavel). ``prazo``: quando vence/venceu, so se o dominio fornece
+  um vencimento real; validade por data D vale ate o fim do dia D no fuso da
+  ILPI. "Agora" e referencia de apresentacao do cliente, nunca do item.
+- Localizacao operacional minima (``unidade``/``quarto``/``leito``/``local``):
+  atributo contextual do residente de um item ja autorizado; nao exige nem
+  concede ``quartos_leitos:ler``.
 """
 
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends
@@ -46,6 +60,28 @@ RESIDENTE_ATIVO = "Ativo"
 ADMISSAO_ENCERRADA = ("concluida", "cancelada", "desistencia")
 PAIS_EM_CICLO = ("rascunho", "em_elaboracao", "em_revisao", "aprovado")
 ORDEM_GRAVIDADE = {"critico": 0, "atencao": 1, "aviso": 2}
+ORDEM_NATUREZA = {"alerta": 0, "pendencia": 1, "informativo": 2, "atividade": 3}
+
+# Alerta: pede acao/atencao no plantao. Pendencia: algo a regularizar.
+NATUREZA = {
+    "doses_sem_registro": "alerta",
+    "cuidados_sem_registro": "alerta",
+    "intercorrencia_grave_aberta": "alerta",
+    "intercorrencia_aberta_prolongada": "alerta",
+    "ausencia_prolongada": "alerta",
+    "admissao_parada": "pendencia",
+    "documento_aguardando_validacao": "pendencia",
+    "documento_vencido": "pendencia",
+    "documento_vencendo": "pendencia",
+    "avaliacao_vencida": "pendencia",
+    "grau_ausente": "pendencia",
+    "grau_vencido": "pendencia",
+    "pais_ausente": "pendencia",
+    "pais_parado": "pendencia",
+    "pais_vencido": "pendencia",
+    "residente_sem_leito": "pendencia",
+    "acesso_nao_utilizado": "pendencia",
+}
 
 ETAPA = {
     "pre_cadastro": "Pré-cadastro", "triagem": "Triagem", "documentacao": "Documentação",
@@ -63,39 +99,70 @@ def _plural(n: int, um: str, varios: str) -> str:
     return f"{n} {um if n == 1 else varios}"
 
 
-class _Coletor:
-    """Junta os alertas de todas as regras, com teto por regra."""
+def _hash(*partes: str | None) -> str:
+    """Hash curto e deterministico para contexto em texto livre no id (nulo != vazio)."""
+    return hashlib.sha1("\x1f".join("\x00" if p is None else p for p in partes).encode("utf-8")).hexdigest()[:12]
 
-    def __init__(self, nomes: dict[str, str]):
+
+def _local(unidade: str | None, quarto: str | None, leito: str | None) -> str | None:
+    # Mesmo formato do rotuloLeito do frontend: "Ala B · Quarto 12 · Leito A".
+    partes = [unidade, f"Quarto {quarto}" if quarto else None, f"Leito {leito}" if leito else None]
+    return " · ".join(p for p in partes if p) or None
+
+
+class _Coletor:
+    """Junta os itens de todas as regras, com teto por regra."""
+
+    def __init__(self, nomes: dict[str, str], leitos: dict[str, tuple]):
         self.nomes = nomes
+        self.leitos = leitos
         self.itens: list[dict] = []
         self._por_regra: dict[str, int] = defaultdict(int)
 
-    def add(self, regra, categoria, gravidade, titulo, *, referencia, residente_id=None, detalhe=None, desde=None):
+    def add(self, regra, categoria, gravidade, titulo, *, referencia, chave=None, residente_id=None,
+            detalhe=None, desde=None, prazo=None):
         if self._por_regra[regra] >= LIMITE_POR_REGRA:
             return
         self._por_regra[regra] += 1
+        unidade, quarto, leito = self.leitos.get(residente_id, (None, None, None)) if residente_id else (None, None, None)
         self.itens.append({
-            "id": f"{regra}:{referencia}",
+            "id": f"{regra}:{chave or referencia}",
             "regra": regra,
             "categoria": categoria,
             "gravidade": gravidade,
+            "natureza": NATUREZA[regra],
             "titulo": titulo,
             "detalhe": detalhe,
             "residente_id": residente_id,
             "residente_nome": self.nomes.get(residente_id) if residente_id else None,
             "referencia_id": referencia,
+            "unidade": unidade,
+            "quarto": quarto,
+            "leito": leito,
+            "local": _local(unidade, quarto, leito),
             "desde": _utc(desde) if isinstance(desde, datetime) else None,
+            "prazo": _utc(prazo) if isinstance(prazo, datetime) else None,
         })
 
 
-async def _hoje(db: AsyncSession, ilpi_id: str, agora: datetime) -> date:
+async def _fuso(db: AsyncSession, ilpi_id: str) -> ZoneInfo:
     instituicao = await db.get(m.Instituicao, ilpi_id)
     try:
-        fuso = ZoneInfo((instituicao.fuso_horario if instituicao else None) or FUSO_PADRAO)
+        return ZoneInfo((instituicao.fuso_horario if instituicao else None) or FUSO_PADRAO)
     except ZoneInfoNotFoundError:
-        fuso = ZoneInfo(FUSO_PADRAO)
-    return agora.astimezone(fuso).date()
+        return ZoneInfo(FUSO_PADRAO)
+
+
+class _Calendario:
+    """Hoje e fim de validade no fuso da ILPI."""
+
+    def __init__(self, fuso: ZoneInfo, agora: datetime):
+        self.fuso = fuso
+        self.hoje = agora.astimezone(fuso).date()
+
+    def fim_do_dia(self, dia: date) -> datetime:
+        # Validade D vale ate o fim do dia D: vence as 00:00 de D+1 no fuso da ILPI.
+        return datetime.combine(dia + timedelta(days=1), time.min, tzinfo=self.fuso).astimezone(timezone.utc)
 
 
 async def _admissoes(db, ilpi, agora, c: _Coletor):
@@ -111,16 +178,18 @@ async def _admissoes(db, ilpi, agora, c: _Coletor):
         desde = _utc(transicao or admissao.iniciada_em)
         if desde is not None and desde < limite:
             dias = (agora - desde).days
+            # A etapa e contexto: parada em Triagem e parada em Contrato sao situacoes distintas.
             c.add("admissao_parada", "admissao_documentos", "atencao",
                   f"Admissão parada em {ETAPA.get(admissao.situacao, admissao.situacao)}",
-                  referencia=admissao.id, residente_id=admissao.residente_id,
+                  referencia=admissao.id, chave=f"{admissao.id}:{admissao.situacao}",
+                  residente_id=admissao.residente_id,
                   detalhe=f"Sem avanço há {_plural(dias, 'dia', 'dias')}.", desde=desde)
 
 
-async def _documentos(db, ilpi, hoje, c: _Coletor):
+async def _documentos(db, ilpi, cal: _Calendario, c: _Coletor):
     docs = (await db.scalars(select(m.Documento).where(m.Documento.instituicao_id == ilpi)
                              .order_by(m.Documento.created_at, m.Documento.id))).all()
-    horizonte = hoje + timedelta(days=DIAS_DOCUMENTO_VENCENDO)
+    horizonte = cal.hoje + timedelta(days=DIAS_DOCUMENTO_VENCENDO)
     for doc in docs:
         # Mesmo predicado da pendencia da admissao: so a validacao humana cumpre.
         if doc.obrigatorio and doc.situacao != "validado":
@@ -129,15 +198,18 @@ async def _documentos(db, ilpi, hoje, c: _Coletor):
                   referencia=doc.id, residente_id=doc.residente_id, desde=doc.created_at)
         if doc.validade is None:
             continue
-        if doc.validade < hoje:
+        prazo = cal.fim_do_dia(doc.validade)
+        if doc.validade < cal.hoje:
             c.add("documento_vencido", "admissao_documentos", "atencao", f"Documento vencido: {doc.tipo}",
-                  referencia=doc.id, residente_id=doc.residente_id, detalhe=f"Venceu em {_data_br(doc.validade)}.")
+                  referencia=doc.id, residente_id=doc.residente_id, detalhe=f"Venceu em {_data_br(doc.validade)}.",
+                  desde=prazo, prazo=prazo)
         elif doc.validade <= horizonte:
             c.add("documento_vencendo", "admissao_documentos", "aviso", f"Documento vence em breve: {doc.tipo}",
-                  referencia=doc.id, residente_id=doc.residente_id, detalhe=f"Vence em {_data_br(doc.validade)}.")
+                  referencia=doc.id, residente_id=doc.residente_id, detalhe=f"Vence em {_data_br(doc.validade)}.",
+                  prazo=prazo)
 
 
-async def _avaliacoes(db, ilpi, hoje, c: _Coletor):
+async def _avaliacoes(db, ilpi, cal: _Calendario, c: _Coletor):
     avaliacoes = (await db.scalars(select(m.Avaliacao).where(m.Avaliacao.ilpi_id == ilpi)
                                    .order_by(m.Avaliacao.data, m.Avaliacao.id))).all()
     grupos: dict[tuple, list] = defaultdict(list)
@@ -145,28 +217,36 @@ async def _avaliacoes(db, ilpi, hoje, c: _Coletor):
         grupos[(a.residente_id, a.tipo, a.instrumento)].append(a)
     for (residente_id, tipo, instrumento), lista in grupos.items():
         # Vale a regra da admissao: sem validade ou validade >= hoje cumpre.
-        if any(a.validade is None or a.validade >= hoje for a in lista):
+        if any(a.validade is None or a.validade >= cal.hoje for a in lista):
             continue
         recente = lista[-1]
+        # A cobertura do grupo acabou quando venceu a validade mais longa.
+        fim = max(a.validade for a in lista)
         nome = " · ".join(x for x in (tipo, instrumento) if x)
+        prazo = cal.fim_do_dia(fim)
+        # A situacao e do grupo (residente, tipo, instrumento), nao da ultima avaliacao.
         c.add("avaliacao_vencida", "avaliacao_grau_pais", "atencao", f"Avaliação vencida: {nome}",
-              referencia=recente.id, residente_id=residente_id, detalhe=f"Venceu em {_data_br(recente.validade)}.")
+              referencia=recente.id, chave=f"{residente_id}:{_hash(tipo, instrumento)}",
+              residente_id=residente_id, detalhe=f"Venceu em {_data_br(fim)}.", desde=prazo, prazo=prazo)
 
 
-async def _graus(db, ilpi, hoje, ativos, c: _Coletor):
+async def _graus(db, ilpi, cal: _Calendario, ativos, c: _Coletor):
     graus = {g.residente_id: g for g in (await db.scalars(select(m.GrauDependencia).where(
         m.GrauDependencia.ilpi_id == ilpi, m.GrauDependencia.situacao == "ativo"))).all()}
     for residente_id in ativos:
         grau = graus.get(residente_id)
         if grau is None:
+            # Sem origem confiavel (nunca teve, foi revogado...): desde fica nulo.
             c.add("grau_ausente", "avaliacao_grau_pais", "atencao", "Sem grau de dependência confirmado",
                   referencia=residente_id, residente_id=residente_id)
-        elif grau.validade is not None and grau.validade < hoje:
+        elif grau.validade is not None and grau.validade < cal.hoje:
+            prazo = cal.fim_do_dia(grau.validade)
             c.add("grau_vencido", "avaliacao_grau_pais", "atencao", "Grau de dependência vencido",
-                  referencia=grau.id, residente_id=residente_id, detalhe=f"Venceu em {_data_br(grau.validade)}.")
+                  referencia=grau.id, residente_id=residente_id, detalhe=f"Venceu em {_data_br(grau.validade)}.",
+                  desde=prazo, prazo=prazo)
 
 
-async def _planos(db, ilpi, agora, hoje, ativos, c: _Coletor):
+async def _planos(db, ilpi, agora, cal: _Calendario, ativos, c: _Coletor):
     planos = (await db.scalars(select(m.PlanoCuidados).where(m.PlanoCuidados.ilpi_id == ilpi)
                                .order_by(m.PlanoCuidados.created_at, m.PlanoCuidados.id))).all()
     com_vigente = {p.residente_id for p in planos if p.situacao == "vigente"}
@@ -182,12 +262,13 @@ async def _planos(db, ilpi, agora, hoje, ativos, c: _Coletor):
             if mudou is not None and mudou < limite:
                 c.add("pais_parado", "avaliacao_grau_pais", "aviso",
                       f"PAIS parado em {SITUACAO_PAIS[plano.situacao]}", referencia=plano.id,
-                      residente_id=plano.residente_id,
+                      chave=f"{plano.id}:{plano.situacao}", residente_id=plano.residente_id,
                       detalhe=f"Sem mudança há {_plural((agora - mudou).days, 'dia', 'dias')}.", desde=mudou)
-        elif plano.situacao == "vigente" and plano.data_final is not None and plano.data_final < hoje:
+        elif plano.situacao == "vigente" and plano.data_final is not None and plano.data_final < cal.hoje:
+            prazo = cal.fim_do_dia(plano.data_final)
             c.add("pais_vencido", "avaliacao_grau_pais", "atencao", "PAIS vigente com prazo encerrado",
                   referencia=plano.id, residente_id=plano.residente_id,
-                  detalhe=f"Data final: {_data_br(plano.data_final)}.")
+                  detalhe=f"Data final: {_data_br(plano.data_final)}.", desde=prazo, prazo=prazo)
 
 
 async def _plantao(db, ilpi, agora, c: _Coletor):
@@ -204,9 +285,11 @@ async def _plantao(db, ilpi, agora, c: _Coletor):
             .group_by(modelo.residente_id).order_by(func.min(modelo.previsto_em))
         )).all()
         for residente_id, total, mais_antigo in linhas:
+            # O horario previsto mais antigo sem registro e a origem e o prazo que passou.
             c.add(regra, "plantao", gravidade, f"{_plural(total, um, varios)} sem registro",
                   referencia=residente_id, residente_id=residente_id,
-                  detalhe=f"Horário previsto já passou nas últimas {HORAS_JANELA_PLANTAO} horas.", desde=mais_antigo)
+                  detalhe=f"Horário previsto já passou nas últimas {HORAS_JANELA_PLANTAO} horas.",
+                  desde=mais_antigo, prazo=mais_antigo)
 
 
 async def _intercorrencias(db, ilpi, agora, c: _Coletor):
@@ -225,9 +308,7 @@ async def _intercorrencias(db, ilpi, agora, c: _Coletor):
                   referencia=i.id, residente_id=i.residente_id, desde=ocorrido)
 
 
-async def _leitos(db, ilpi, ativos, c: _Coletor):
-    com_leito = set((await db.scalars(select(m.QuartoLeito.residente_atual_id).where(
-        m.QuartoLeito.instituicao_id == ilpi, m.QuartoLeito.residente_atual_id.is_not(None)))).all())
+def _leitos(ativos, com_leito, c: _Coletor):
     for residente_id in ativos:
         if residente_id not in com_leito:
             c.add("residente_sem_leito", "ocupacao_equipe", "atencao", "Residente ativo sem leito",
@@ -263,6 +344,27 @@ async def _acessos(db, ilpi, agora, c: _Coletor):
                   desde=gerada)
 
 
+_FIM_DOS_TEMPOS = datetime.max.replace(tzinfo=timezone.utc)
+
+
+def _ordem(item: dict, agora: datetime) -> tuple:
+    """Gravidade > alerta antes de pendencia > mais atrasado/antigo > id estavel.
+
+    Referencia temporal: prazo ja vencido; senao ``desde``. So com prazo futuro,
+    vem depois, o que vence primeiro antes. Sem tempo algum, por ultimo.
+    """
+    prazo, desde = item["prazo"], item["desde"]
+    if prazo is not None and prazo <= agora:
+        faixa, t = 0, prazo
+    elif desde is not None:
+        faixa, t = 0, desde
+    elif prazo is not None:
+        faixa, t = 1, prazo
+    else:
+        faixa, t = 2, _FIM_DOS_TEMPOS
+    return (ORDEM_GRAVIDADE[item["gravidade"]], ORDEM_NATUREZA[item["natureza"]], faixa, t, item["id"])
+
+
 @central_alertas_router.get("/", response_model=s.AlertaGestorResponse)
 async def listar_alertas(
     db: AsyncSession = Depends(get_db),
@@ -272,41 +374,49 @@ async def listar_alertas(
     chaves = set(await allowed_permission_keys(db, context))
     ilpi = context.ilpi_id
     agora = datetime.now(timezone.utc)
-    hoje = await _hoje(db, ilpi, agora)
+    cal = _Calendario(await _fuso(db, ilpi), agora)
 
     nomes: dict[str, str] = {}
+    leitos: dict[str, tuple] = {}
     ativos: list[str] | None = None
     if "residentes:ler" in chaves:
         residentes = (await db.execute(select(m.Residente.id, m.Residente.nome, m.Residente.situacao)
                                        .where(m.Residente.instituicao_id == ilpi).order_by(m.Residente.nome))).all()
         nomes = {r.id: r.nome for r in residentes}
         ativos = [r.id for r in residentes if r.situacao == RESIDENTE_ATIVO]
-    c = _Coletor(nomes)
+        # Localizacao minima: uma consulta, mesmo gate do nome; indice unico garante 1 leito por residente.
+        leitos = {r.residente_atual_id: (r.unidade, r.quarto, r.leito) for r in (await db.execute(
+            select(m.QuartoLeito.residente_atual_id, m.QuartoLeito.unidade, m.QuartoLeito.quarto, m.QuartoLeito.leito)
+            .where(m.QuartoLeito.instituicao_id == ilpi, m.QuartoLeito.residente_atual_id.is_not(None))
+        )).all()}
+    c = _Coletor(nomes, leitos)
 
     if "admissoes:ler" in chaves:
         await _admissoes(db, ilpi, agora, c)
     if "documentos:ler" in chaves:
-        await _documentos(db, ilpi, hoje, c)
+        await _documentos(db, ilpi, cal, c)
     if "avaliacoes:ler" in chaves:
-        await _avaliacoes(db, ilpi, hoje, c)
+        await _avaliacoes(db, ilpi, cal, c)
     if "grau_dependencia:ler" in chaves and ativos is not None:
-        await _graus(db, ilpi, hoje, ativos, c)
+        await _graus(db, ilpi, cal, ativos, c)
     if "planos_cuidados:ler" in chaves:
-        await _planos(db, ilpi, agora, hoje, ativos, c)
+        await _planos(db, ilpi, agora, cal, ativos, c)
     if "plantao:ler" in chaves:
+        # Mesma origem do Meu Plantao: plantao:ler projeta cuidados e doses pendentes.
         await _plantao(db, ilpi, agora, c)
     if "intercorrencias:ler" in chaves:
         await _intercorrencias(db, ilpi, agora, c)
     if "quartos_leitos:ler" in chaves and ativos is not None:
-        await _leitos(db, ilpi, ativos, c)
+        _leitos(ativos, set(leitos), c)
     if "ausencias:ler" in chaves:
         await _ausencias(db, ilpi, agora, c)
     if "funcionarios:ler" in chaves:
         await _acessos(db, ilpi, agora, c)
 
-    fim_dos_tempos = datetime.max.replace(tzinfo=timezone.utc)
-    c.itens.sort(key=lambda a: (ORDEM_GRAVIDADE[a["gravidade"]], a["desde"] or fim_dos_tempos, a["titulo"], a["id"]))
-    contagem = {g: 0 for g in ORDEM_GRAVIDADE}
+    c.itens.sort(key=lambda a: _ordem(a, agora))
+    contagem = {chave: 0 for chave in (*ORDEM_GRAVIDADE, *ORDEM_NATUREZA)}
     for item in c.itens:
         contagem[item["gravidade"]] += 1
+        contagem[item["natureza"]] += 1
+    contagem["total"] = len(c.itens)
     return {"gerado_em": agora, "contagem": contagem, "alertas": c.itens}

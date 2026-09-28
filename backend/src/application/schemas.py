@@ -99,28 +99,44 @@ class DashboardResumoResponse(BaseModel):
     planos: Optional[DashboardPlanos] = None
     equipe: Optional[DashboardEquipe] = None
 
-# ---- Central de alertas do gestor (#107): projecao, nunca persistida ----
+# ---- Central de alertas (#107, #117): projecao, nunca persistida ----
 AlertaGravidade = Literal["critico", "atencao", "aviso"]
 AlertaCategoria = Literal["admissao_documentos", "avaliacao_grau_pais", "plantao", "ocupacao_equipe"]
+# Dominio documentado (ROADMAP §16); nesta fase so "alerta" e "pendencia" sao emitidos.
+AlertaNatureza = Literal["alerta", "pendencia", "informativo", "atividade"]
 
 
 class AlertaGestorItem(BaseModel):
+    # id estavel: regra:referencia[:contexto] — nunca muda so porque a projecao foi recalculada.
     id: str
     regra: str
     categoria: AlertaCategoria
     gravidade: AlertaGravidade
+    natureza: AlertaNatureza
     titulo: str
     detalhe: Optional[str] = None
     residente_id: Optional[str] = None
     residente_nome: Optional[str] = None
     referencia_id: Optional[str] = None
+    # Localizacao operacional minima do residente (nao exige quartos_leitos:ler).
+    unidade: Optional[str] = None
+    quarto: Optional[str] = None
+    leito: Optional[str] = None
+    local: Optional[str] = None
+    # desde: quando nasceu a situacao de origem; prazo: quando vence/venceu (so se o dominio fornece).
     desde: Optional[datetime] = None
+    prazo: Optional[datetime] = None
 
 
 class AlertaGestorContagem(BaseModel):
     critico: int = 0
     atencao: int = 0
     aviso: int = 0
+    alerta: int = 0
+    pendencia: int = 0
+    informativo: int = 0
+    atividade: int = 0
+    total: int = 0
 
 
 class AlertaGestorResponse(BaseModel):

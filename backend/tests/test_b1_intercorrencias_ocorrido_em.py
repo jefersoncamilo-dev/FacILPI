@@ -275,7 +275,8 @@ def test_019_alcanca_clone_local_preexistente(c4_db):
             "SELECT p.chave FROM permissoes p JOIN perfil_permissoes pp ON pp.permissao_id = p.id "
             "WHERE pp.perfil_id = :p"
         ), {"p": perfil_id})).all()}
-        assert chaves == CUIDADOR_KEYS
+        # Em head a 023 (#117) tambem alcanca o clone preexistente com alertas:ler.
+        assert chaves == CUIDADOR_KEYS | {"alertas:ler"}
     asyncio.run(_with_client(c4_db, conferir))
 
 

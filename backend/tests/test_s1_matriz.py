@@ -326,7 +326,9 @@ def test_04_escalation_bloqueada(s1_db):
         await _grant(db, profile_chefe.id, {"usuarios:atribuir_perfil", "residentes:ler",
                      "planos_cuidados:ler", "programacoes:ler", "ocorrencias:ler",
                      "execucoes:ler", "execucoes:criar", "plantao:ler", "sinais_vitais:ler",
-                     "intercorrencias:ler", "intercorrencias:criar"})
+                     "intercorrencias:ler", "intercorrencias:criar",
+                     # 023 (#117): o cuidador passou a ter alertas:ler.
+                     "alertas:ler"})
         await db.commit()
         hc = _headers(chefe, ilpi_id=ilpi.id)
         r = await client.post("/api/matriz/atribuicoes",

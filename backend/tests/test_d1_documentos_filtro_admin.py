@@ -255,7 +255,8 @@ def test_clone_local_preexistente_recebe_anexar(d1_db):
         chaves = {row[0] for row in (await db.execute(text(
             "SELECT p.chave FROM permissoes p JOIN perfil_permissoes pp ON pp.permissao_id = p.id "
             "WHERE pp.perfil_id = :p"), {"p": perfil_id})).all()}
-        assert chaves == {"documentos:anexar"}
+        # Em head a 023 (#117) tambem alcanca o clone preexistente com alertas:ler.
+        assert chaves == {"documentos:anexar", "alertas:ler"}
     asyncio.run(_client(d1_db, conferir))
 
 
