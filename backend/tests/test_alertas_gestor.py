@@ -24,7 +24,7 @@ from .test_d3_admissao import ALL as ADMISSOES, _client
 from .test_d3_admissao_migration import _migrate, _ref
 from src.infrastructure import models as m
 
-HEAD = "022_alertas_gestor"
+HEAD = "023_alertas_operacionais"
 URL = "/api/central-alertas/"
 FONTES = {
     "residentes:ler", "documentos:ler", "documentos:validar", "avaliacoes:ler", "grau_dependencia:ler",
@@ -97,7 +97,9 @@ def test_sem_permissao_contexto_e_rota_legada(alertas_db):
         assert legado.status_code == 403
         assert legado.json()["detail"]["code"] == "PERMISSION_CATALOG_PENDING"
         vazio = await _alertas(client, h)
-        assert vazio["alertas"] == [] and vazio["contagem"] == {"critico": 0, "atencao": 0, "aviso": 0}
+        assert vazio["alertas"] == [] and vazio["contagem"] == {
+            "critico": 0, "atencao": 0, "aviso": 0, "alerta": 0, "pendencia": 0, "informativo": 0, "atividade": 0,
+            "total": 0}
     _run(alertas_db, op)
 
 

@@ -78,11 +78,20 @@ Prontuário deve consultar/agregar fatos oficiais já persistidos. Não criar um
 
 Deve sintetizar informações relevantes do turno sem virar nova fonte de fatos clínicos. Deve apontar para origens oficiais e permitir complemento humano quando necessário.
 
-## Alertas do gestor
+## Alertas e pendências
 
 Decisão do responsável (26/09, #107): alertas são **projeção derivada**, calculada a cada consulta (`GET /api/central-alertas/`) a partir das fontes oficiais. Não há tabela, job agendado, "ciente" ou dispensa: o alerta some quando o problema é resolvido na tela de origem. A tabela legada `alertas` (001) e o CRUD `/api/alertas/` continuam `fail_closed`.
 
-Destinatário: Administrador da ILPI (`alertas:ler`, migration 022, template `ilpi_admin` e clones). `alertas` é módulo clínico, fora do catálogo local. Cada regra só é calculada se a sessão também lê o módulo de origem; sem essa leitura a regra não existe para ela (nem contagem). Tenant sempre da sessão.
+Destinatários: Administrador da ILPI (`alertas:ler`, migration 022) e, desde a Camada Operacional (#117, migration 023), os perfis institucionais `cuidador`, `enfermagem`, `medico`, `responsavel_tecnico` e `administrativo` (templates e clones). `platform_superuser` não recebe. `alertas` é módulo clínico, fora do catálogo local. **RBAC por origem:** cada regra só é calculada se a sessão também lê o módulo de origem; sem essa leitura a regra não existe para ela (nem contagem). `alertas:ler` sozinho não mostra todos os alertas da ILPI. Tenant sempre da sessão.
+
+Origem de cada regra: admissão → `admissoes:ler`; documentos → `documentos:ler`; avaliação → `avaliacoes:ler`; grau → `grau_dependencia:ler`; PAIS → `planos_cuidados:ler`; cuidados sem registro → `plantao:ler`; **doses sem registro → `plantao:ler` e `administracoes:ler`** (fato de medicação; o cuidador, "sem medicação" na 015, não recebe); intercorrências → `intercorrencias:ler`; residente sem leito → `quartos_leitos:ler`; ausência → `ausencias:ler`; acesso não utilizado → `funcionarios:ler`. Regras por residente ativo exigem também `residentes:ler`.
+
+Contrato do item (#117):
+- **Natureza** (`alerta | pendencia | informativo | atividade`) é independente da gravidade. Hoje só `alerta` (pede ação/atenção no plantão: doses e cuidados sem registro, intercorrências, ausência prolongada) e `pendencia` (algo a regularizar: admissão, documentos, avaliação, grau, PAIS, residente sem leito, acesso não utilizado). A contagem traz totais por gravidade, por natureza e `total`.
+- **Tempo:** `desde` é quando nasceu a situação de origem; `prazo` é quando vence/venceu e só existe quando o domínio fornece vencimento real (validade de documento, avaliação e grau; data final do PAIS; horário previsto de cuidado/dose). Validade por data D vale até o fim do dia D no fuso da ILPI (vence às 00:00 de D+1). Situação vencida tem `desde = prazo`. Sem origem confiável (`grau_ausente`, `pais_ausente`, `residente_sem_leito`, documento só "vencendo"), `desde` é nulo — não se inventa horário. `gerado_em` é metadado da resposta; "agora" é referência de apresentação do cliente e nunca é persistido nem enviado por item.
+- **Ordem determinística:** gravidade (crítico, atenção, aviso) → alerta antes de pendência → mais atrasado/antigo (prazo vencido mais antigo; senão `desde` mais antigo) → itens só com prazo futuro, o que vence primeiro antes → sem tempo por último → desempate pelo id.
+- **Id estável:** `regra:referência[:contexto]` (ROADMAP §16). Contexto quando a mesma entidade origina situações distintas: etapa na admissão parada, situação no PAIS parado; avaliação vencida é do grupo residente + tipo/instrumento (hash curto do texto), não da última avaliação. Recalcular não muda o id.
+- **Localização operacional mínima:** `unidade`, `quarto`, `leito` e `local` ("Ala B · Quarto 12 · Leito A") do leito atualmente ocupado pelo residente do item, numa única consulta por requisição; nulos sem leito. A localização operacional mínima é atributo contextual do residente presente em um alerta já autorizado e não concede capacidade de consultar, listar ou gerenciar quartos e leitos. Não exige `quartos_leitos:ler`; por conservadorismo, segue o mesmo gate do nome do residente (`residentes:ler`).
 
 Regras v1 e limiares (constantes em `backend/src/application/alertas.py`, exibidos na tela):
 - Admissão e documentos: admissão sem transição há mais de 7 dias; documento obrigatório não validado (mesmo predicado da pendência de admissão); documento vencido ou que vence em até 30 dias.
