@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { ChevronRight, ClipboardList, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, Settings, Users } from 'lucide-react'
+import { Bell, ChevronRight, ClipboardList, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, Settings, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'
 import { mensagemDeErro } from '../services/api'
@@ -8,7 +8,7 @@ import { cn } from '../lib/utils'
 import { ContextSwitcher, contextTitle } from './ContextSwitcher'
 import { Logo } from './brand/Logo'
 import { NAVEGACAO, itemDaRota } from './shell/navegacao'
-import { SinoAlertas, useSinoAlertas } from './shell/SinoAlertas'
+import { SinoAlertas, totalDoSino, useSinoAlertas, type EstadoSino } from './shell/SinoAlertas'
 import { PasswordInput } from './auth/PasswordInput'
 import { Button } from './ui/button'
 import { Label } from './ui/input'
@@ -85,7 +85,7 @@ function Shell({ children }: { children: ReactNode }) {
           <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
         </main>
 
-        <NavegacaoInferior onMenu={() => setMenuAberto(true)} />
+        <NavegacaoInferior onMenu={() => setMenuAberto(true)} sino={sino} />
       </div>
 
       <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
@@ -233,15 +233,19 @@ function Trilha({ pathname }: { pathname: string }) {
   )
 }
 
-function NavegacaoInferior({ onMenu }: { onMenu: () => void }) {
+function NavegacaoInferior({ onMenu, sino }: { onMenu: () => void; sino: EstadoSino }) {
   const { pode } = usePermissoes()
+  // #117: Alertas entra só com alertas:ler confirmado (mesma regra do sino), com o mesmo número.
+  const totalAlertas = totalDoSino(sino.central)
   const destinos = [
     { to: '/', label: 'Início', icon: LayoutDashboard },
     { to: '/plantao', label: 'Plantão', icon: ClipboardList, permissao: 'plantao:ler' },
+    ...(sino.permitido ? [{ to: '/alertas', label: 'Alertas', icon: Bell, badge: totalAlertas }] : []),
     { to: '/residentes', label: 'Residentes', icon: Users, permissao: 'residentes:ler' },
-  ].filter(d => pode(d.permissao))
+  ].filter(d => !('permissao' in d) || pode(d.permissao))
 
-  const estilo = 'flex min-h-[52px] min-w-[64px] flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium'
+  // 56px: cinco destinos cabem em 320px sem cortar o Menu (#119).
+  const estilo = 'flex min-h-[52px] min-w-[56px] flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium'
   return (
     <nav
       aria-label="Navegação rápida"
@@ -257,8 +261,19 @@ function NavegacaoInferior({ onMenu }: { onMenu: () => void }) {
         >
           {({ isActive }) => (
             <>
-              <d.icon className={cn('size-5', isActive && 'stroke-[2.4]')} aria-hidden="true" />
+              <span className="relative">
+                <d.icon className={cn('size-5', isActive && 'stroke-[2.4]')} aria-hidden="true" />
+                {'badge' in d && d.badge ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-critico px-1 text-center text-[10px] font-semibold leading-4 text-white"
+                  >
+                    {d.badge > 99 ? '99+' : d.badge}
+                  </span>
+                ) : null}
+              </span>
               {d.label}
+              {'badge' in d && d.badge ? <span className="sr-only">: {d.badge} {d.badge === 1 ? 'pede' : 'pedem'} atenção</span> : null}
             </>
           )}
         </NavLink>
