@@ -41,12 +41,12 @@ def _permission_ids(bind):
 
 
 def _profile_ids(bind):
-    """Templates institucionais da 015 mais os clones locais, por chave."""
+    """Templates institucionais da 015 (ilpi_id nulo) mais os clones locais, por chave."""
     rows = bind.execute(
-        sa.text("SELECT id, chave FROM perfis WHERE chave IN :chaves").bindparams(sa.bindparam("chaves", expanding=True)),
+        sa.text("SELECT id, chave, ilpi_id FROM perfis WHERE chave IN :chaves").bindparams(sa.bindparam("chaves", expanding=True)),
         {"chaves": list(PERFIS)},
     ).all()
-    templates = {r[1] for r in rows}
+    templates = {r[1] for r in rows if r[2] is None}
     if templates != set(PERFIS):
         raise RuntimeError(f"023 exige os templates institucionais da 015; ausentes: {sorted(set(PERFIS) - templates)}")
     return [r[0] for r in rows]

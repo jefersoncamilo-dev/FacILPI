@@ -64,6 +64,11 @@ def test_023_concede_aos_perfis_operacionais_e_clones(pre023_db):
         await db.commit()
         perfis = {p.chave: p.id for p in (await db.scalars(select(m.Perfil).where(
             m.Perfil.ilpi_id == instituicao.id))).all()}
+        # Idempotencia real: um vinculo ja presente antes da 023 nao duplica nem falha.
+        template_cuidador = await db.scalar(select(m.Perfil.id).where(m.Perfil.chave == "cuidador", m.Perfil.ilpi_id.is_(None)))
+        permissao = await db.scalar(select(m.Permissao.id).where(m.Permissao.chave == CHAVE))
+        db.add(m.PerfilPermissao(perfil_id=template_cuidador, permissao_id=permissao))
+        await db.commit()
         semeado.update(ilpi=instituicao.id, usuarios=usuarios, perfis=perfis,
                        antes={chave: await _chaves_perfil(db, perfis[chave]) for chave in OPERACIONAIS})
         for chave in OPERACIONAIS:
@@ -72,7 +77,6 @@ def test_023_concede_aos_perfis_operacionais_e_clones(pre023_db):
     asyncio.run(_client(pre023_db, antes))
 
     _migrate(pre023_db, target=HEAD)
-    _migrate(pre023_db, target=HEAD)  # reaplicar a ponta nao duplica vinculo
 
     async def depois(client, db):
         assert await db.scalar(select(func.count()).select_from(m.Permissao).where(m.Permissao.chave == CHAVE)) == 1

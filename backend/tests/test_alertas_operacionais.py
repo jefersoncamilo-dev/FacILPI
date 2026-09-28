@@ -6,7 +6,9 @@ da 015 (com ``alertas:ler`` da 023), localizacao operacional minima sem
 deterministica, id estavel e isolamento entre ILPIs.
 
 Os perfis usam exatamente as permissoes que o template tem em head (lidas do
-banco), como um clone criado por atribuicao S.1.
+banco), como um clone criado por atribuicao S.1 — inclusive o ``ilpi_admin``
+real, para que um gestor sintetico com permissoes a mais nao esconda perda de
+regra do Administrador da ILPI.
 
 Somente bancos descartaveis (SQLite em tmp_path; PostgreSQL via D3_TEST_POSTGRES_URL).
 """
@@ -15,16 +17,19 @@ import hashlib
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from .test_alertas_gestor import (  # noqa: F401 - fixture alertas_db
     _agora, _alertas, _gestor, _hoje, _por_regra, _residente, _run, _um, alertas_db,
 )
-from .test_d2_rotina import _create_ilpi_user, _headers, _new_id, _new_institution
+from .test_d2_rotina import (
+    _create_funcionario, _create_ilpi_user, _headers, _new_id, _new_institution, _prog_payload, _setup_pais_vigente,
+)
 from src.infrastructure import models as m
 
 FUSO = ZoneInfo("America/Sao_Paulo")
 OPERACIONAIS = ("cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo")
+PERFIS_REAIS = ("ilpi_admin",) + OPERACIONAIS
 
 # Contrato de visibilidade: alertas:ler + leitura do modulo de origem.
 ORIGEM = {
@@ -34,8 +39,13 @@ ORIGEM = {
     "documento_vencendo": {"documentos:ler"},
     "avaliacao_vencida": {"avaliacoes:ler"},
     "grau_ausente": {"grau_dependencia:ler", "residentes:ler"},
+    "grau_vencido": {"grau_dependencia:ler", "residentes:ler"},
     "pais_ausente": {"planos_cuidados:ler", "residentes:ler"},
-    "doses_sem_registro": {"plantao:ler", "administracoes:ler"},
+    "pais_parado": {"planos_cuidados:ler"},
+    "pais_vencido": {"planos_cuidados:ler"},
+    # Mesma origem do Meu Plantao: plantao:ler projeta cuidados e doses pendentes.
+    "cuidados_sem_registro": {"plantao:ler"},
+    "doses_sem_registro": {"plantao:ler"},
     "intercorrencia_grave_aberta": {"intercorrencias:ler"},
     "intercorrencia_aberta_prolongada": {"intercorrencias:ler"},
     "residente_sem_leito": {"quartos_leitos:ler", "residentes:ler"},
@@ -125,7 +135,28 @@ async def _cenario(client, db):
     db.add_all(itens.values())
     await db.commit()
     await _dose_atrasada(client, db, h, hilda.id)
-    return ilpi, h, dict(itens, hilda=hilda, joao=joao, maria=maria)
+
+    # Grau vencido (Joao), PAIS parado (Maria, em admissao), PAIS vigente vencido com cuidado atrasado (Rita).
+    grau = m.GrauDependencia(id=_new_id(), ilpi_id=ilpi.id, residente_id=joao.id, classificacao="Grau II", origem="manual",
+                             justificativa="Confirmado em teste", confirmado_por=gestor.id,
+                             validade=_hoje() - timedelta(days=3))
+    parado = m.PlanoCuidados(id=_new_id(), residente_id=maria.id, ilpi_id=ilpi.id, versao=1, data_inicial=_hoje(),
+                             situacao="rascunho", created_at=_agora() - timedelta(days=12),
+                             updated_at=_agora() - timedelta(days=12))
+    rita = await _residente(db, ilpi.id, "Rita Sintetica")
+    revisor = await _create_funcionario(db, ilpi)
+    db.add_all([grau, parado])
+    await db.commit()
+    pais_id, intervencao_id = await _setup_pais_vigente(client, h, rita.id, revisor.id)
+    r = await client.post("/api/programacoes-cuidado/", headers=h, json=_prog_payload(pais_id, intervencao_id, inicio_horas=-3))
+    assert r.status_code == 201, r.text
+    ocorrencia = (await db.scalars(select(m.OcorrenciaCuidado).where(
+        m.OcorrenciaCuidado.programacao_id == r.json()["id"]).order_by(m.OcorrenciaCuidado.previsto_em))).first()
+    await db.execute(update(m.OcorrenciaCuidado).where(m.OcorrenciaCuidado.id == ocorrencia.id)
+                     .values(previsto_em=_agora() - timedelta(hours=2)))
+    await db.execute(update(m.PlanoCuidados).where(m.PlanoCuidados.id == pais_id).values(data_final=_hoje() - timedelta(days=1)))
+    await db.commit()
+    return ilpi, h, dict(itens, hilda=hilda, joao=joao, maria=maria, rita=rita, grau=grau, parado=parado, pais=pais_id)
 
 
 def test_perfis_operacionais_veem_so_origens_autorizadas(alertas_db):
@@ -135,7 +166,7 @@ def test_perfis_operacionais_veem_so_origens_autorizadas(alertas_db):
         assert set(ORIGEM) <= todas, set(ORIGEM) - todas
 
         vistas = {}
-        for chave in OPERACIONAIS:
+        for chave in PERFIS_REAIS:
             permissoes, h, _ = await _institucional(db, ilpi, chave)
             payload = await _alertas(client, h)
             regras = {a["regra"] for a in payload["alertas"]}
@@ -143,11 +174,13 @@ def test_perfis_operacionais_veem_so_origens_autorizadas(alertas_db):
             assert regras & set(ORIGEM) == esperadas, (chave, regras, esperadas)
             vistas[chave] = regras
 
-        # Cuidador: sem admissao, documentos, acessos e sem medicacao ("sem medicacao", 015).
+        # O Administrador da ILPI real continua recebendo o que recebia (inclusive doses, critico).
+        assert {"doses_sem_registro", "cuidados_sem_registro", "admissao_parada", "pais_ausente"} <= vistas["ilpi_admin"]
+        # Cuidador: sem admissao, documentos, acessos, leitos e ausencias.
         for proibida in ("admissao_parada", "documento_aguardando_validacao", "documento_vencido",
-                         "acesso_nao_utilizado", "doses_sem_registro", "residente_sem_leito", "ausencia_prolongada"):
+                         "acesso_nao_utilizado", "residente_sem_leito", "ausencia_prolongada", "avaliacao_vencida"):
             assert proibida not in vistas["cuidador"], proibida
-        assert {"pais_ausente", "intercorrencia_grave_aberta"} <= vistas["cuidador"]
+        assert {"pais_ausente", "cuidados_sem_registro", "intercorrencia_grave_aberta"} <= vistas["cuidador"]
         # Enfermagem: avaliacoes, intercorrencias, doses e PAIS conforme a matriz.
         assert {"avaliacao_vencida", "intercorrencia_grave_aberta", "doses_sem_registro", "pais_ausente"} <= vistas["enfermagem"]
         assert not vistas["enfermagem"] & {"admissao_parada", "documento_vencido", "acesso_nao_utilizado"}
@@ -252,6 +285,10 @@ def test_ordem_deterministica_e_id_estavel(alertas_db):
         prolongada = ids.index(_um(primeira, "intercorrencia_aberta_prolongada", x["antiga"].id)["id"])
         documento = ids.index(_um(primeira, "documento_aguardando_validacao", x["pendente"].id)["id"])
         assert prolongada < documento
+        # Com origem antes de so-prazo-futuro (mesma gravidade e natureza).
+        acesso = ids.index(_um(primeira, "acesso_nao_utilizado", x["acesso"].id)["id"])
+        vencendo = ids.index(_um(primeira, "documento_vencendo", x["vencendo"].id)["id"])
+        assert acesso < vencendo
 
         # Formato do id: regra:referencia[:contexto]; texto livre vira hash.
         assert _um(primeira, "admissao_parada", x["admissao"].id)["id"] == f"admissao_parada:{x['admissao'].id}:triagem"
