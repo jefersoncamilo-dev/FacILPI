@@ -9,7 +9,8 @@ import { Alertas } from '../pages/Alertas'
 import { Dashboard } from '../pages/Dashboard'
 import { api } from '../services/api'
 import { contextApi } from '../services/context'
-import { haQuantoTempo, type Alerta, type CentralAlertas } from '../services/alertas'
+import { quandoDoAlerta, type Alerta, type CentralAlertas } from '../services/alertas'
+import { limparCentralAlertas } from '../hooks/useCentralAlertas'
 import { TOKEN_KEY, USER_KEY, CONTEXT_KEY } from '../types/context'
 
 vi.mock('../services/api', async () => {
@@ -31,33 +32,43 @@ vi.mock('../services/context', () => ({
 const mockGet = vi.mocked(api.get)
 const mockPermissoes = vi.mocked(contextApi.permissoesDaSessao)
 
-function alerta(parcial: Partial<Alerta> & Pick<Alerta, 'regra' | 'categoria' | 'gravidade' | 'titulo'>): Alerta {
+type Base = Pick<Alerta, 'regra' | 'categoria' | 'gravidade' | 'natureza' | 'titulo'>
+function alerta(parcial: Partial<Alerta> & Base): Alerta {
   return {
     id: `${parcial.regra}:${parcial.referencia_id ?? 'x'}`,
-    detalhe: null, residente_id: 'res-1', residente_nome: 'Benedito Carvalho', referencia_id: 'ref-1', desde: null,
+    detalhe: null, residente_id: 'res-1', residente_nome: 'Benedito Carvalho', referencia_id: 'ref-1',
+    unidade: null, quarto: null, leito: null, local: null, desde: null, prazo: null,
     ...parcial,
   }
 }
 
+// Já na ordem do backend (#117): gravidade, alerta antes de pendência, mais atrasado primeiro.
 const ALERTAS: Alerta[] = [
-  alerta({ regra: 'doses_sem_registro', categoria: 'plantao', gravidade: 'critico', titulo: '2 doses de medicação sem registro', referencia_id: 'res-1' }),
-  alerta({ regra: 'admissao_parada', categoria: 'admissao_documentos', gravidade: 'atencao', titulo: 'Admissão parada em Avaliações', referencia_id: 'adm-9', detalhe: 'Sem avanço há 9 dias.' }),
-  alerta({ regra: 'documento_aguardando_validacao', categoria: 'admissao_documentos', gravidade: 'atencao', titulo: 'Documento obrigatório aguardando validação: RG', referencia_id: 'doc-1' }),
-  alerta({ regra: 'acesso_nao_utilizado', categoria: 'ocupacao_equipe', gravidade: 'aviso', titulo: 'Acesso ainda não utilizado: Tiago Ramos', residente_id: null, residente_nome: null, referencia_id: 'func-1' }),
+  alerta({
+    regra: 'doses_sem_registro', categoria: 'plantao', gravidade: 'critico', natureza: 'alerta', titulo: '2 doses de medicação sem registro',
+    referencia_id: 'res-1', unidade: 'Ala B', quarto: '12', leito: 'A', local: 'Ala B · Quarto 12 · Leito A',
+    desde: '2026-09-26T14:42:00Z', prazo: '2026-09-26T14:42:00Z',
+  }),
+  alerta({ regra: 'admissao_parada', categoria: 'admissao_documentos', gravidade: 'atencao', natureza: 'pendencia', titulo: 'Admissão parada em Avaliações', referencia_id: 'adm-9', detalhe: 'Sem avanço há 9 dias.' }),
+  alerta({ regra: 'documento_aguardando_validacao', categoria: 'admissao_documentos', gravidade: 'atencao', natureza: 'pendencia', titulo: 'Documento obrigatório aguardando validação: RG', referencia_id: 'doc-1' }),
+  alerta({ regra: 'acesso_nao_utilizado', categoria: 'ocupacao_equipe', gravidade: 'aviso', natureza: 'pendencia', titulo: 'Acesso ainda não utilizado: Tiago Ramos', residente_id: null, residente_nome: null, referencia_id: 'func-1' }),
 ]
 
 function central(alertas: Alerta[] = ALERTAS): CentralAlertas {
-  const contagem = { critico: 0, atencao: 0, aviso: 0 }
-  alertas.forEach(a => { contagem[a.gravidade] += 1 })
+  const contagem = { critico: 0, atencao: 0, aviso: 0, alerta: 0, pendencia: 0, informativo: 0, atividade: 0, total: alertas.length }
+  alertas.forEach(a => { contagem[a.gravidade] += 1; contagem[a.natureza] += 1 })
   return { gerado_em: '2026-09-26T15:00:00Z', contagem, alertas }
 }
 
 type Fonte = CentralAlertas | Error | { response: { status: number } }
+let fonteAtual: Fonte = central()
 function responde(fonte: Fonte = central()) {
+  fonteAtual = fonte
   mockGet.mockImplementation((url: string) => {
     if (url === '/central-alertas/') {
-      if (fonte instanceof Error || 'response' in fonte) return Promise.reject(fonte)
-      return Promise.resolve({ data: fonte } as any)
+      const f = fonteAtual
+      if (f instanceof Error || 'response' in f) return Promise.reject(f)
+      return Promise.resolve({ data: f } as any)
     }
     if (url === '/dashboard/resumo') {
       return Promise.resolve({ data: {
@@ -90,40 +101,72 @@ const chamouAlertas = () => mockGet.mock.calls.filter(c => c[0] === '/central-al
 beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
+  limparCentralAlertas()
 })
 
-describe('Central de alertas (#107) — página', () => {
-  it('agrupa por gravidade e cada alerta leva à tela onde é resolvido', async () => {
+describe('Alertas e Pendências (#107, #117) — página', () => {
+  it('prioridade agora com os críticos e cada cartão leva à ação na origem', async () => {
     responde()
     renderPagina()
-    const criticos = await screen.findByRole('region', { name: 'Crítico (1)' })
-    expect(within(criticos).getByText('2 doses de medicação sem registro')).toBeTruthy()
-    expect(within(criticos).getByRole('link', { name: /Resolver em Meu Plantão/ }).getAttribute('href')).toBe('/plantao')
+    expect(await screen.findByRole('heading', { name: 'Alertas e Pendências' })).toBeTruthy()
+    expect(screen.getByText('Situações que precisam da sua atenção, ação ou acompanhamento.')).toBeTruthy()
 
-    const atencao = screen.getByRole('region', { name: 'Atenção (2)' })
-    expect(within(atencao).getByRole('link', { name: /Resolver em Admissões/ }).getAttribute('href')).toBe('/admissoes/adm-9')
-    expect(within(atencao).getByText(/Sem avanço há 9 dias/)).toBeTruthy()
-    expect(within(atencao).getByRole('link', { name: /Resolver em Documentos/ }).getAttribute('href')).toBe('/documentos')
+    const prioridade = await screen.findByRole('region', { name: 'Prioridade agora (1)' })
+    expect(within(prioridade).getByText('2 doses de medicação sem registro')).toBeTruthy()
+    expect(within(prioridade).getByRole('link', { name: 'Registrar doses em Meu Plantão' }).getAttribute('href')).toBe('/plantao')
 
-    const avisos = screen.getByRole('region', { name: 'Aviso (1)' })
-    expect(within(avisos).getByRole('link', { name: /Resolver em Equipe/ }).getAttribute('href')).toBe('/equipe')
+    const demais = screen.getByRole('region', { name: 'Demais (3)' })
+    expect(within(demais).getByRole('link', { name: 'Continuar admissão em Admissões' }).getAttribute('href')).toBe('/admissoes/adm-9')
+    expect(within(demais).getByText(/Sem avanço há 9 dias/)).toBeTruthy()
+    expect(within(demais).getByRole('link', { name: 'Validar documento em Documentos' }).getAttribute('href')).toBe('/documentos')
+    expect(within(demais).getByRole('link', { name: 'Ver equipe em Equipe' }).getAttribute('href')).toBe('/equipe')
+    // A tela respeita a ordem do backend.
+    const titulos = within(demais).getAllByRole('listitem').map(li => li.querySelector('p')?.textContent)
+    expect(titulos).toEqual([
+      'Atenção: Admissão parada em Avaliações',
+      'Atenção: Documento obrigatório aguardando validação: RG',
+      'Aviso: Acesso ainda não utilizado: Tiago Ramos',
+    ])
 
-    const resumo = screen.getByRole('list', { name: 'Resumo por gravidade' })
-    expect(resumo.textContent).toContain('Crítico: 1')
+    const resumo = screen.getByRole('list', { name: 'Resumo' })
+    expect(resumo.textContent).toContain('Críticos: 1')
     expect(resumo.textContent).toContain('Atenção: 2')
-    expect(resumo.textContent).toContain('Aviso: 1')
+    expect(resumo.textContent).toContain('Pendências: 3')
   })
 
-  it('filtra por categoria', async () => {
+  it('o cartão responde com quem, onde e quando', async () => {
     responde()
     renderPagina()
+    const prioridade = await screen.findByRole('region', { name: 'Prioridade agora (1)' })
+    expect(within(prioridade).getByText('Benedito Carvalho')).toBeTruthy()
+    expect(within(prioridade).getByText('Ala B · Quarto 12 · Leito A')).toBeTruthy()
+    expect(within(prioridade).getByText(/^Alerta · atrasado há /)).toBeTruthy()
+  })
+
+  it('abas: Críticos e Atenção por gravidade; Pendências por natureza', async () => {
+    const itens = [
+      ...ALERTAS,
+      alerta({ regra: 'pais_ausente', categoria: 'avaliacao_grau_pais', gravidade: 'critico', natureza: 'pendencia', titulo: 'Sem PAIS vigente', referencia_id: 'res-2' }),
+      alerta({ regra: 'intercorrencia_aberta_prolongada', categoria: 'plantao', gravidade: 'atencao', natureza: 'alerta', titulo: 'Intercorrência aberta há mais de 24 horas: Febre', referencia_id: 'int-1' }),
+    ]
+    responde(central(itens))
+    renderPagina()
     await screen.findByText('2 doses de medicação sem registro')
-    await userEvent.click(screen.getByRole('tab', { name: /Admissão e documentos \(2\)/ }))
-    expect(screen.queryByText('2 doses de medicação sem registro')).toBeNull()
-    expect(screen.getByText('Admissão parada em Avaliações')).toBeTruthy()
-    await userEvent.click(screen.getByRole('tab', { name: /Ocupação e equipe/ }))
-    expect(screen.getByText('Acesso ainda não utilizado: Tiago Ramos')).toBeTruthy()
+
+    await userEvent.click(screen.getByRole('tab', { name: /Críticos \(2\)/ }))
+    expect(screen.getByText('Sem PAIS vigente')).toBeTruthy()
     expect(screen.queryByText('Admissão parada em Avaliações')).toBeNull()
+
+    await userEvent.click(screen.getByRole('tab', { name: /Atenção \(3\)/ }))
+    expect(screen.getByText('Intercorrência aberta há mais de 24 horas: Febre')).toBeTruthy()
+    expect(screen.queryByText('2 doses de medicação sem registro')).toBeNull()
+
+    // Pendência é natureza: entra o crítico "Sem PAIS vigente"; sai a intercorrência (alerta de atenção).
+    await userEvent.click(screen.getByRole('tab', { name: /Pendências \(4\)/ }))
+    expect(screen.getByText('Sem PAIS vigente')).toBeTruthy()
+    expect(screen.getByText('Acesso ainda não utilizado: Tiago Ramos')).toBeTruthy()
+    expect(screen.queryByText('Intercorrência aberta há mais de 24 horas: Febre')).toBeNull()
+    expect(screen.queryByText('2 doses de medicação sem registro')).toBeNull()
   })
 
   it('sem alertas mostra o estado vazio honesto', async () => {
@@ -140,52 +183,110 @@ describe('Central de alertas (#107) — página', () => {
     expect(screen.queryByText('Nada pedindo atenção agora')).toBeNull()
   })
 
-  it('403 explica o acesso', async () => {
+  it('403 explica o acesso sem dizer que é só do administrador', async () => {
     responde({ response: { status: 403 } })
     renderPagina()
     expect(await screen.findByText('Sem acesso aos alertas')).toBeTruthy()
-  })
-
-  it('tempo desde o início do problema em linguagem simples', () => {
-    const agora = new Date('2026-09-26T15:00:00Z')
-    expect(haQuantoTempo('2026-09-26T14:30:00Z', agora)).toBe('há poucos minutos')
-    expect(haQuantoTempo('2026-09-26T13:00:00Z', agora)).toBe('há 2 horas')
-    expect(haQuantoTempo('2026-09-25T14:00:00Z', agora)).toBe('há 1 dia')
-    expect(haQuantoTempo(null, agora)).toBeNull()
+    expect(screen.getByText(/Seu perfil não inclui a Central de Alertas/)).toBeTruthy()
   })
 })
 
-describe('Central de alertas (#107) — sino e Início', () => {
-  function renderShell() {
+describe('quandoDoAlerta (#117)', () => {
+  const agora = new Date('2026-09-26T15:00:00Z') // 12:00 em São Paulo
+  it('origem sem prazo: há …', () => {
+    expect(quandoDoAlerta({ natureza: 'alerta', desde: '2026-09-26T14:57:00Z', prazo: null }, agora)).toBe('há 3 min')
+    expect(quandoDoAlerta({ natureza: 'alerta', desde: '2026-09-26T13:00:00Z', prazo: null }, agora)).toBe('há 2 h')
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: '2026-09-25T14:00:00Z', prazo: null }, agora)).toBe('há 1 dia')
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo: null }, agora)).toBeNull()
+  })
+  it('prazo futuro em dias de calendário da ILPI (validade D vence às 00:00 de D+1)', () => {
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo: '2026-09-27T03:00:00Z' }, agora)).toBe('vence hoje')
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo: '2026-09-28T03:00:00Z' }, agora)).toBe('vence amanhã')
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo: '2026-09-30T03:00:00Z' }, agora)).toBe('vence em 3 dias')
+  })
+  it('prazo passado: atrasado (alerta) ou venceu (pendência)', () => {
+    const doze = '2026-09-26T14:42:00Z'
+    expect(quandoDoAlerta({ natureza: 'alerta', desde: doze, prazo: doze }, agora)).toBe('atrasado há 18 min')
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: '2026-09-24T03:00:00Z', prazo: '2026-09-24T03:00:00Z' }, agora)).toBe('venceu há 2 dias')
+  })
+})
+
+describe('Sino, navegação inferior e Início (#107, #117)', () => {
+  function renderShell(filho = <div>conteúdo</div>, rota = '/') {
     seedSessao()
     return render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/']}>
-          <Layout><div>conteúdo</div></Layout>
+        <MemoryRouter initialEntries={[rota]}>
+          <Layout>{filho}</Layout>
         </MemoryRouter>
       </AuthProvider>,
     )
   }
 
-  it('o sino mostra quantos pedem atenção (crítico + atenção) e leva a /alertas', async () => {
+  it('o sino é triagem rápida: totais, até 5 itens na ordem do backend e o caminho para a Central', async () => {
+    const muitos = [
+      ...ALERTAS,
+      ...[1, 2, 3].map(i => alerta({ regra: 'documento_vencendo', categoria: 'admissao_documentos', gravidade: 'aviso', natureza: 'pendencia', titulo: `Documento vence em breve: ${i}`, referencia_id: `doc-v${i}` })),
+    ]
     comPermissoes(['alertas:ler', 'residentes:ler'])
-    responde()
+    responde(central(muitos))
     renderShell()
-    const sinos = await screen.findAllByRole('link', { name: 'Alertas: 3 pedem atenção' })
-    expect(sinos.length).toBeGreaterThan(0)
-    expect(sinos[0].getAttribute('href')).toBe('/alertas')
+    const sinos = await screen.findAllByRole('button', { name: 'Alertas: 3 pedem atenção' })
     // Um cabeçalho por tamanho de tela, uma consulta só.
     expect(chamouAlertas()).toBe(1)
-    expect(within(screen.getByRole('navigation', { name: 'Navegação principal' })).getByRole('link', { name: /Alertas/ })).toBeTruthy()
+
+    await userEvent.click(sinos[0])
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByLabelText('Totais').textContent).toBe('Críticos: 1 · Atenção: 2 · Pendências: 6')
+    const itens = within(menu).getAllByRole('menuitem')
+    const titulos = itens.slice(0, -1).map(i => i.querySelector('span > span')?.textContent)
+    expect(titulos).toEqual([
+      '2 doses de medicação sem registro',
+      'Admissão parada em Avaliações',
+      'Documento obrigatório aguardando validação: RG',
+      'Acesso ainda não utilizado: Tiago Ramos',
+      'Documento vence em breve: 1',
+    ])
+    expect(itens[0].getAttribute('href')).toBe('/plantao')
+    const central_ = itens[itens.length - 1]
+    expect(central_.textContent).toContain('Ver Central de Alertas')
+    expect(central_.getAttribute('href')).toBe('/alertas')
+    expect(chamouAlertas()).toBe(1)
   })
 
-  it('sem alertas:ler não há sino, item de menu nem consulta', async () => {
+  it('sem alertas:ler não há sino, item de menu, navegação inferior nem consulta', async () => {
     comPermissoes(['residentes:ler'])
     responde()
     renderShell()
     await within(screen.getByRole('navigation', { name: 'Navegação principal' })).findByRole('link', { name: /Residentes/ })
+    expect(screen.queryByRole('button', { name: /^Alertas/ })).toBeNull()
     expect(screen.queryByRole('link', { name: /^Alertas/ })).toBeNull()
     expect(chamouAlertas()).toBe(0)
+  })
+
+  it('mobile: Alertas na navegação inferior com o mesmo número do sino', async () => {
+    comPermissoes(['alertas:ler', 'residentes:ler'])
+    responde()
+    renderShell()
+    const rapida = screen.getByRole('navigation', { name: 'Navegação rápida' })
+    const link = await within(rapida).findByRole('link', { name: 'Alertas: 3 pedem atenção' })
+    expect(link.getAttribute('href')).toBe('/alertas')
+    expect(chamouAlertas()).toBe(1)
+  })
+
+  it('sino e Central concordam: atualizar a Central atualiza o sino', async () => {
+    comPermissoes(['alertas:ler', 'residentes:ler'])
+    responde()
+    renderShell(<Alertas />, '/alertas')
+    await screen.findByRole('region', { name: 'Prioridade agora (1)' })
+    expect((await screen.findAllByRole('button', { name: 'Alertas: 3 pedem atenção' })).length).toBeGreaterThan(0)
+
+    // A fonte resolveu a dose e a admissão: o próximo retrato é o mesmo para os dois.
+    responde(central(ALERTAS.slice(2)))
+    await userEvent.click(screen.getByRole('button', { name: /Atualizar/ }))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Alertas: 1 pede atenção' }).length).toBeGreaterThan(0))
+    expect(screen.queryByRole('region', { name: /Prioridade agora/ })).toBeNull()
+    expect(screen.getByRole('list', { name: 'Resumo' }).textContent).toContain('Atenção: 1')
   })
 
   function renderInicio(permissoes: string[]) {

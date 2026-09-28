@@ -1,17 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Bell } from 'lucide-react'
+import { ArrowRight, Bell } from 'lucide-react'
 import { usePermissoes } from '../../context/PermissoesContext'
-import { listarAlertas } from '../../services/alertas'
+import { recarregarCentralAlertas, useCentralAlertas, type EstadoCentral } from '../../hooks/useCentralAlertas'
+import { destinoDoAlerta, quandoDoAlerta } from '../../services/alertas'
+import { cn } from '../../lib/utils'
 import { Button } from '../ui/button'
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '../ui/dropdown-menu'
+import { ESTILO_GRAVIDADE } from '../alertas/ItemAlerta'
 
-const INTERVALO_MINIMO = 60_000
+export const ITENS_NO_SINO = 5
 
-export type EstadoSino = { permitido: boolean; total: number | null }
+export type EstadoSino = { permitido: boolean; central: EstadoCentral }
 
 /**
- * Quantos alertas pedem atenção agora (crítico + atenção; aviso fica só na
- * página) — #107. Uma consulta por shell, não por cabeçalho.
+ * Estado do sino (#107, #117): o MESMO retrato de GET /central-alertas/ que a
+ * Central usa (useCentralAlertas) — uma consulta por shell, não por cabeçalho.
  *
  * Só consulta com `alertas:ler` confirmado pelo backend: permissões
  * indisponíveis não viram consulta às cegas. Recarrega ao navegar, no máximo
@@ -20,42 +26,95 @@ export type EstadoSino = { permitido: boolean; total: number | null }
 export function useSinoAlertas(): EstadoSino {
   const { status, pode } = usePermissoes()
   const { pathname } = useLocation()
-  const [total, setTotal] = useState<number | null>(null)
-  const ultimaConsulta = useRef(0)
   const permitido = status === 'ok' && pode('alertas:ler')
+  const central = useCentralAlertas()
 
   useEffect(() => {
-    if (!permitido) return
-    const agora = Date.now()
-    if (ultimaConsulta.current && agora - ultimaConsulta.current < INTERVALO_MINIMO) return
-    ultimaConsulta.current = agora
-    let ativo = true
-    listarAlertas()
-      .then(d => { if (ativo) setTotal(d.contagem.critico + d.contagem.atencao) })
-      .catch(() => { if (ativo) setTotal(null) })
-    return () => { ativo = false }
+    if (permitido) void recarregarCentralAlertas()
   }, [permitido, pathname])
 
-  return { permitido, total: permitido ? total : null }
+  return { permitido, central }
 }
 
-/** Sino do topo: leva à central de alertas. */
-export function SinoAlertas({ permitido, total }: EstadoSino) {
+/** Crítico + atenção: o que pede atenção agora (aviso fica na Central). */
+export function totalDoSino(central: EstadoCentral): number | null {
+  const dados = central.status === 'ok' || central.status === 'carregando' ? central.dados : null
+  return dados ? dados.contagem.critico + dados.contagem.atencao : null
+}
+
+/**
+ * Sino do topo como triagem rápida (#117): totais, até 5 itens na ordem do
+ * backend e o caminho para a Central. Não tem regra própria — só apresenta.
+ */
+export function SinoAlertas({ permitido, central }: EstadoSino) {
   if (!permitido) return null
+  const total = totalDoSino(central)
+  const dados = central.status === 'ok' || central.status === 'carregando' ? central.dados : null
   const rotulo = total ? `Alertas: ${total} ${total === 1 ? 'pede' : 'pedem'} atenção` : 'Alertas'
+  const agora = new Date()
+
   return (
-    <Button asChild variant="ghost" size="icon" className="relative shrink-0 text-muted-foreground">
-      <Link to="/alertas" aria-label={rotulo}>
-        <Bell className="!size-5" aria-hidden="true" />
-        {total ? (
-          <span
-            aria-hidden="true"
-            className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-critico px-1 text-center text-[11px] font-semibold leading-[18px] text-white"
-          >
-            {total > 99 ? '99+' : total}
-          </span>
-        ) : null}
-      </Link>
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label={rotulo} className="relative shrink-0 text-muted-foreground">
+          <Bell className="!size-5" aria-hidden="true" />
+          {total ? (
+            <span
+              aria-hidden="true"
+              className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-critico px-1 text-center text-[11px] font-semibold leading-[18px] text-white"
+            >
+              {total > 99 ? '99+' : total}
+            </span>
+          ) : null}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[min(92vw,380px)] p-0">
+        <DropdownMenuLabel className="px-4 pb-1 pt-3 text-sm font-semibold text-foreground">Alertas e Pendências</DropdownMenuLabel>
+        {dados ? (
+          <>
+            <p aria-label="Totais" className="px-4 pb-2 text-xs text-muted-foreground">
+              Críticos: <span className="font-semibold tabular-nums text-foreground">{dados.contagem.critico}</span>
+              {' · '}Atenção: <span className="font-semibold tabular-nums text-foreground">{dados.contagem.atencao}</span>
+              {' · '}Pendências: <span className="font-semibold tabular-nums text-foreground">{dados.contagem.pendencia}</span>
+            </p>
+            <DropdownMenuSeparator className="mx-0 my-0" />
+            {dados.alertas.length === 0 ? (
+              <p className="px-4 py-4 text-sm text-muted-foreground">Nada pedindo atenção agora.</p>
+            ) : (
+              <div className="p-1">
+                {dados.alertas.slice(0, ITENS_NO_SINO).map(a => {
+                  const destino = destinoDoAlerta(a)
+                  const meta = [a.residente_nome, a.local, quandoDoAlerta(a, agora)].filter(Boolean).join(' · ')
+                  return (
+                    <DropdownMenuItem key={a.id} asChild className="items-start py-2">
+                      <Link to={destino.to}>
+                        <span aria-hidden="true" className={cn('mt-1.5 size-2 shrink-0 rounded-full', ESTILO_GRAVIDADE[a.gravidade].ponto)} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-foreground">{a.titulo}</span>
+                          {meta && <span className="block truncate text-xs font-normal text-muted-foreground">{meta}</span>}
+                          <span className="block text-xs font-semibold text-primary">{destino.acao}</span>
+                        </span>
+                      </Link>
+                    </DropdownMenuItem>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="px-4 py-4 text-sm text-muted-foreground">
+            {central.status === 'erro' ? 'Não foi possível carregar os alertas.' : 'Carregando…'}
+          </p>
+        )}
+        <DropdownMenuSeparator className="mx-0 my-0" />
+        <div className="p-1">
+          <DropdownMenuItem asChild className="justify-center font-semibold text-primary">
+            <Link to="/alertas">
+              Ver Central de Alertas <ArrowRight aria-hidden="true" />
+            </Link>
+          </DropdownMenuItem>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

@@ -20,7 +20,8 @@ import {
 import { api } from '../services/api'
 import { getPlantao, PLANTAO_LIMIT_PADRAO, rotuloDoItem, type PlantaoItem } from '../services/plantao'
 import { getResumoDashboard, type DashboardResumo } from '../services/dashboard'
-import { GRAVIDADES as GRAVIDADES_ALERTA, listarAlertas, ROTULO_GRAVIDADE as ROTULO_ALERTA, type CentralAlertas } from '../services/alertas'
+import { GRAVIDADES as GRAVIDADES_ALERTA, ROTULO_GRAVIDADE as ROTULO_ALERTA, type CentralAlertas } from '../services/alertas'
+import { recarregarCentralAlertas, useCentralAlertas, type EstadoCentral } from '../hooks/useCentralAlertas'
 import { ItemAlerta } from '../components/alertas/ItemAlerta'
 import { getSinaisVitais, type SinalVital } from '../services/sinaisVitais'
 import { getIntercorrencias, GRAVIDADES, rotuloTipo, situacaoForaDoContrato, type Intercorrencia } from '../services/intercorrencias'
@@ -104,7 +105,7 @@ export function Dashboard() {
   const [resumo, setResumo] = useState<Carga<DashboardResumo>>({ status: 'carregando' })
   const [pendencias, setPendencias] = useState<Carga<PlantaoItem[]>>({ status: 'carregando' })
   const [residentes, setResidentes] = useState<Carga<ResidenteResumo[]>>({ status: 'carregando' })
-  const [alertas, setAlertas] = useState<Carga<CentralAlertas>>({ status: 'carregando' })
+  const central = useCentralAlertas()
 
   const podePlantao = pode('plantao:ler')
   const podeResidentes = pode('residentes:ler')
@@ -134,12 +135,11 @@ export function Dashboard() {
       .catch(() => setResidentes({ status: 'erro' }))
   }, [permissoes, podeResidentes])
 
+  // #117: o mesmo retrato do sino e da Central (uma consulta, mesma ordem).
   useEffect(() => {
-    if (!podeAlertas) return
-    listarAlertas()
-      .then(dados => setAlertas({ status: 'ok', dados }))
-      .catch(() => setAlertas({ status: 'erro' }))
+    if (podeAlertas) void recarregarCentralAlertas()
   }, [podeAlertas])
+  const alertas = cargaDaCentral(central)
 
   const nomes = new Map((residentes.status === 'ok' ? residentes.dados : []).map(r => [r.id, r.nome]))
   const cards = montarIndicadores({ resumo, pendencias, gestao, pode, podePlantao })
@@ -509,6 +509,13 @@ function AtividadeRecente({ nomes }: { nomes: Map<string, string> }) {
       )}
     </Painel>
   )
+}
+
+function cargaDaCentral(central: EstadoCentral): Carga<CentralAlertas> {
+  if (central.status === 'ok') return { status: 'ok', dados: central.dados }
+  if (central.status === 'carregando' && central.dados) return { status: 'ok', dados: central.dados }
+  if (central.status === 'erro' || central.status === 'proibido') return { status: 'erro' }
+  return { status: 'carregando' }
 }
 
 /** #107: os primeiros alertas da central (críticos antes), da mesma fonte oficial. */
