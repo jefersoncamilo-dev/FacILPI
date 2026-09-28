@@ -7,6 +7,12 @@ import { api } from '../services/api'
 import { limparCentralAlertas } from '../hooks/useCentralAlertas'
 import { rotuloEstado, type Alerta, type AlertaEstado, type CentralAlertas } from '../services/alertas'
 
+const permissoes = vi.hoisted(() => ({ atuais: new Set<string>() }))
+vi.mock('../context/PermissoesContext', async () => {
+  const actual = await vi.importActual<typeof import('../context/PermissoesContext')>('../context/PermissoesContext')
+  return { ...actual, usePermissoesOuPadrao: () => ({ status: 'ok', pode: (k: string) => permissoes.atuais.has(k) }) }
+})
+
 vi.mock('../services/api', async () => {
   const actual = await vi.importActual<typeof import('../services/api')>('../services/api')
   return { ...actual, api: { get: vi.fn(), post: vi.fn(), put: vi.fn() } }
@@ -38,6 +44,7 @@ function central(alertas: Alerta[]): CentralAlertas {
 beforeEach(() => {
   vi.clearAllMocks()
   limparCentralAlertas()
+  permissoes.atuais = new Set(['alertas:ler', 'alertas:assumir'])
 })
 
 describe('Estado do alerta na Central (#123)', () => {
@@ -51,7 +58,7 @@ describe('Estado do alerta na Central (#123)', () => {
     const [queda, engasgo] = within(prioridade).getAllByRole('listitem')
     expect(within(queda).getByText('Em atendimento por Ana Paula')).toBeTruthy()
     expect(within(queda).queryByRole('button')).toBeNull()
-    expect(within(engasgo).getByRole('button', { name: 'Assumir' })).toBeTruthy()
+    expect(within(engasgo).getByRole('button', { name: 'Assumir: Intercorrência grave aberta: Engasgo' })).toBeTruthy()
     // Não existe "resolver" manual: a resolução vem da fonte.
     expect(screen.queryByRole('button', { name: /Resolver/ })).toBeNull()
   })
@@ -64,18 +71,35 @@ describe('Estado do alerta na Central (#123)', () => {
       return { data: { alerta_id: 'intercorrencia_grave_aberta:b', estado: atual[0].estado } } as any
     })
     render(<MemoryRouter><Alertas /></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Assumir' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Assumir/ }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/central-alertas/assumir', { alerta_id: 'intercorrencia_grave_aberta:b' }))
     expect(await screen.findByText('Assumido por você')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Iniciar atendimento' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Liberar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Iniciar atendimento: Intercorrência grave aberta: Engasgo' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Liberar: Intercorrência grave aberta: Engasgo' })).toBeTruthy()
+  })
+
+  it('sem alertas:assumir não há botões; a coordenação (escala:gerenciar) libera o alerta de outra pessoa', async () => {
+    mockGet.mockResolvedValue({ data: central([
+      alerta('intercorrencia_grave_aberta:a', estado({}), 'Intercorrência grave aberta: Queda'),
+    ]) } as any)
+    permissoes.atuais = new Set(['alertas:ler'])
+    const { unmount } = render(<MemoryRouter><Alertas /></MemoryRouter>)
+    expect(await screen.findByText('Em atendimento por Ana Paula')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Liberar|Assumir/ })).toBeNull()
+    unmount()
+
+    permissoes.atuais = new Set(['alertas:ler', 'alertas:assumir', 'escala:gerenciar'])
+    mockPost.mockResolvedValue({ data: { alerta_id: 'intercorrencia_grave_aberta:a', estado: null } } as any)
+    render(<MemoryRouter><Alertas /></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Liberar: Intercorrência grave aberta: Queda' }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/central-alertas/liberar', { alerta_id: 'intercorrencia_grave_aberta:a' }))
   })
 
   it('409 mostra quem assumiu antes', async () => {
     mockGet.mockResolvedValue({ data: central([alerta('intercorrencia_grave_aberta:b', null, 'Intercorrência grave aberta: Engasgo')]) } as any)
     mockPost.mockRejectedValue({ response: { status: 409, data: { detail: { code: 'ALERTA_CONFLITO', message: 'Já assumido por Ana Paula' } } } })
     render(<MemoryRouter><Alertas /></MemoryRouter>)
-    await userEvent.click(await screen.findByRole('button', { name: 'Assumir' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Assumir/ }))
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText(/Já assumido por Ana Paula/)).toBeTruthy()
   })
