@@ -1359,9 +1359,9 @@ def test_48_catalogo_sem_novas_permissoes(sinais_db):
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):
         total = (await db.execute(select(func.count(m.Permissao.id)))).scalar_one()
         # 94 desde a 018 (documentos:anexar); 95 com a 022 (#107, alertas:ler);
-        # 98 com a 024 (#120, escala:ler/gerenciar e plantao:registrar).
+        # 98 com a 024 (#120, escala:ler/gerenciar e plantao:registrar); 99 com a 026 (#123, alertas:assumir).
         # Sinais vitais seguem sem permissoes novas (conferido abaixo).
-        assert total == 98
+        assert total == 99
         novas = (
             await db.execute(
                 select(m.Permissao).where(

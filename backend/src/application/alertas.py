@@ -34,15 +34,18 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
+from .audit import add_audit
 from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc
-from .security import SecurityContext, allowed_permission_keys, require_permission
+from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_permission
 
 central_alertas_router = APIRouter(prefix="/central-alertas", tags=["alertas"])
 
@@ -118,10 +121,18 @@ class _Coletor:
         self.leitos = leitos
         self.itens: list[dict] = []
         self._por_regra: dict[str, int] = defaultdict(int)
+        # #123: regras calculadas nesta consulta e as que bateram no teto — so as
+        # avaliadas por inteiro podem dar como resolvido pela fonte um estado aberto.
+        self.avaliadas: set[str] = set()
+        self.truncadas: set[str] = set()
+
+    def avaliou(self, *regras: str):
+        self.avaliadas.update(regras)
 
     def add(self, regra, categoria, gravidade, titulo, *, referencia, chave=None, residente_id=None,
             detalhe=None, desde=None, prazo=None):
         if self._por_regra[regra] >= LIMITE_POR_REGRA:
+            self.truncadas.add(regra)
             return
         self._por_regra[regra] += 1
         unidade, quarto, leito = self.leitos.get(residente_id, (None, None, None)) if residente_id else (None, None, None)
@@ -365,12 +376,17 @@ def _ordem(item: dict, agora: datetime) -> tuple:
     return (ORDEM_GRAVIDADE[item["gravidade"]], ORDEM_NATUREZA[item["natureza"]], faixa, t, item["id"])
 
 
-@central_alertas_router.get("/", response_model=s.AlertaGestorResponse)
-async def listar_alertas(
-    db: AsyncSession = Depends(get_db),
-    context: SecurityContext = Depends(require_permission("alertas:ler")),
-):
-    # PROJECAO: nenhuma linha e criada, alterada ou auditada aqui.
+class _Projecao:
+    def __init__(self, itens, avaliadas, truncadas, agora, fuso):
+        self.itens = itens
+        self.avaliadas = avaliadas
+        self.truncadas = truncadas
+        self.agora = agora
+        self.fuso = fuso
+
+
+async def projetar(db: AsyncSession, context: SecurityContext) -> _Projecao:
+    """A projecao da central para a sessao: RBAC por origem, tenant da sessao, nada gravado."""
     chaves = set(await allowed_permission_keys(db, context))
     ilpi = context.ilpi_id
     agora = datetime.now(timezone.utc)
@@ -393,30 +409,275 @@ async def listar_alertas(
 
     if "admissoes:ler" in chaves:
         await _admissoes(db, ilpi, agora, c)
+        c.avaliou("admissao_parada")
     if "documentos:ler" in chaves:
         await _documentos(db, ilpi, cal, c)
+        c.avaliou("documento_aguardando_validacao", "documento_vencido", "documento_vencendo")
     if "avaliacoes:ler" in chaves:
         await _avaliacoes(db, ilpi, cal, c)
+        c.avaliou("avaliacao_vencida")
     if "grau_dependencia:ler" in chaves and ativos is not None:
         await _graus(db, ilpi, cal, ativos, c)
+        c.avaliou("grau_ausente", "grau_vencido")
     if "planos_cuidados:ler" in chaves:
         await _planos(db, ilpi, agora, cal, ativos, c)
+        c.avaliou("pais_parado", "pais_vencido", *(("pais_ausente",) if ativos is not None else ()))
     if "plantao:ler" in chaves:
         # Mesma origem do Meu Plantao: plantao:ler projeta cuidados e doses pendentes.
         await _plantao(db, ilpi, agora, c)
+        c.avaliou("cuidados_sem_registro", "doses_sem_registro")
     if "intercorrencias:ler" in chaves:
         await _intercorrencias(db, ilpi, agora, c)
+        c.avaliou("intercorrencia_grave_aberta", "intercorrencia_aberta_prolongada")
     if "quartos_leitos:ler" in chaves and ativos is not None:
         _leitos(ativos, set(leitos), c)
+        c.avaliou("residente_sem_leito")
     if "ausencias:ler" in chaves:
         await _ausencias(db, ilpi, agora, c)
+        c.avaliou("ausencia_prolongada")
     if "funcionarios:ler" in chaves:
         await _acessos(db, ilpi, agora, c)
+        c.avaliou("acesso_nao_utilizado")
 
     c.itens.sort(key=lambda a: _ordem(a, agora))
+    return _Projecao(c.itens, c.avaliadas, c.truncadas, agora, cal.fuso.key)
+
+
+# ------------------------------------------------ estado persistente (#123) ----
+
+ABERTOS = ("assumido", "em_atendimento")
+ALERTA_CONFLITO = "ALERTA_CONFLITO"
+
+# Leitura de origem de cada regra — o mesmo gate de ``projetar`` (RBAC por origem).
+ORIGEM_DA_REGRA = {
+    "admissao_parada": {"admissoes:ler"},
+    "documento_aguardando_validacao": {"documentos:ler"},
+    "documento_vencido": {"documentos:ler"},
+    "documento_vencendo": {"documentos:ler"},
+    "avaliacao_vencida": {"avaliacoes:ler"},
+    "grau_ausente": {"grau_dependencia:ler", "residentes:ler"},
+    "grau_vencido": {"grau_dependencia:ler", "residentes:ler"},
+    "pais_ausente": {"planos_cuidados:ler", "residentes:ler"},
+    "pais_parado": {"planos_cuidados:ler"},
+    "pais_vencido": {"planos_cuidados:ler"},
+    "cuidados_sem_registro": {"plantao:ler"},
+    "doses_sem_registro": {"plantao:ler"},
+    "intercorrencia_grave_aberta": {"intercorrencias:ler"},
+    "intercorrencia_aberta_prolongada": {"intercorrencias:ler"},
+    "residente_sem_leito": {"quartos_leitos:ler", "residentes:ler"},
+    "ausencia_prolongada": {"ausencias:ler"},
+    "acesso_nao_utilizado": {"funcionarios:ler"},
+}
+
+
+async def _reconciliar(db: AsyncSession, context: SecurityContext, request: Request, proj: _Projecao) -> None:
+    """Resolucao pela fonte: estado aberto cujo alerta a projecao nao gera mais vira ``resolvido``.
+
+    So para regras avaliadas por inteiro nesta consulta (sem permissao de
+    origem ou com teto atingido, a ausencia do id nao prova nada). UPDATE
+    condicional e idempotente: com duas consultas simultaneas, so uma audita.
+    """
+    avaliaveis = proj.avaliadas - proj.truncadas
+    if not avaliaveis:
+        return
+    atuais = {i["id"] for i in proj.itens}
+    abertos = (await db.scalars(select(m.AlertaEstado).where(
+        m.AlertaEstado.ilpi_id == context.ilpi_id, m.AlertaEstado.situacao.in_(ABERTOS),
+        m.AlertaEstado.regra.in_(avaliaveis)))).all()
+    mudou = False
+    for estado in abertos:
+        if estado.alerta_id in atuais:
+            continue
+        antes = {"situacao": estado.situacao, "alerta_id": estado.alerta_id}
+        resultado = await db.execute(
+            update(m.AlertaEstado)
+            .where(m.AlertaEstado.id == estado.id, m.AlertaEstado.situacao.in_(ABERTOS))
+            .values(situacao="resolvido", encerramento="fonte", encerrado_em=proj.agora, updated_at=proj.agora)
+            .execution_options(synchronize_session=False))
+        if resultado.rowcount == 1:
+            mudou = True
+            # Quem encerrou foi a fonte; a consulta que detectou fica registrada.
+            add_audit(db, acao="alerta_estados.resolvido_pela_fonte", entidade="alerta_estados", registro_id=estado.id,
+                      usuario_id=None, ilpi_id=context.ilpi_id, valores_anteriores=antes,
+                      valores_posteriores={"situacao": "resolvido", "encerramento": "fonte",
+                                           "detectado_na_consulta_de": context.user.id},
+                      request=request)
+    if mudou:
+        await db.commit()
+
+
+async def _estados_abertos(db: AsyncSession, ilpi: str) -> dict[str, m.AlertaEstado]:
+    estados = (await db.scalars(select(m.AlertaEstado).where(
+        m.AlertaEstado.ilpi_id == ilpi, m.AlertaEstado.situacao.in_(ABERTOS))
+        .execution_options(populate_existing=True))).all()
+    return {e.alerta_id: e for e in estados}
+
+
+async def _nomes_de(db: AsyncSession, ilpi: str, estados) -> dict[str, str]:
+    """Nome de quem assumiu: o do funcionario na ILPI; senao, o do usuario."""
+    usuarios = {e.assumido_por for e in estados}
+    if not usuarios:
+        return {}
+    nomes = dict((await db.execute(select(m.User.id, m.User.nome).where(m.User.id.in_(usuarios)))).all())
+    nomes.update(dict((await db.execute(select(m.Funcionario.usuario_id, m.Funcionario.nome).where(
+        m.Funcionario.ilpi_id == ilpi, m.Funcionario.usuario_id.in_(usuarios)))).all()))
+    return nomes
+
+
+def _estado_item(e: m.AlertaEstado, nomes: dict[str, str], usuario_id: str) -> dict:
+    return {
+        "id": e.id,
+        "situacao": e.situacao,
+        "por_nome": nomes.get(e.assumido_por, ""),
+        "por_mim": e.assumido_por == usuario_id,
+        "assumido_em": _utc(e.assumido_em),
+        "em_atendimento_em": _utc(e.em_atendimento_em),
+    }
+
+
+@central_alertas_router.get("/", response_model=s.AlertaGestorResponse)
+async def listar_alertas(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_permission("alertas:ler")),
+):
+    # A projecao nao grava nada; a unica escrita possivel e encerrar, pela fonte,
+    # estado aberto de alerta que deixou de existir (#123).
+    proj = await projetar(db, context)
+    await _reconciliar(db, context, request, proj)
+    abertos = await _estados_abertos(db, context.ilpi_id)
+    nomes = await _nomes_de(db, context.ilpi_id, abertos.values())
     contagem = {chave: 0 for chave in (*ORDEM_GRAVIDADE, *ORDEM_NATUREZA)}
-    for item in c.itens:
+    for item in proj.itens:
         contagem[item["gravidade"]] += 1
         contagem[item["natureza"]] += 1
-    contagem["total"] = len(c.itens)
-    return {"gerado_em": agora, "fuso": cal.fuso.key, "contagem": contagem, "alertas": c.itens}
+        estado = abertos.get(item["id"])
+        item["estado"] = _estado_item(estado, nomes, context.user.id) if estado is not None else None
+    contagem["total"] = len(proj.itens)
+    return {"gerado_em": proj.agora, "fuso": proj.fuso, "contagem": contagem, "alertas": proj.itens}
+
+
+async def _alerta_da_sessao(db: AsyncSession, context: SecurityContext, request: Request, alerta_id: str) -> dict:
+    """So se age sobre alerta presente na projecao de quem pede (RBAC por origem + situacao existente)."""
+    proj = await projetar(db, context)
+    await _reconciliar(db, context, request, proj)
+    item = next((i for i in proj.itens if i["id"] == alerta_id), None)
+    if item is None:
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Alerta não encontrado"})
+    return item
+
+
+async def _responder_estado(db, context, alerta_id) -> dict:
+    abertos = await _estados_abertos(db, context.ilpi_id)
+    estado = abertos.get(alerta_id)
+    if estado is None:
+        return {"alerta_id": alerta_id, "estado": None}
+    nomes = await _nomes_de(db, context.ilpi_id, [estado])
+    return {"alerta_id": alerta_id, "estado": _estado_item(estado, nomes, context.user.id)}
+
+
+async def _funcionario_id(db, context) -> str | None:
+    return await db.scalar(select(m.Funcionario.id).where(
+        m.Funcionario.usuario_id == context.user.id, m.Funcionario.ilpi_id == context.ilpi_id,
+        m.Funcionario.situacao == "ativo"))
+
+
+def _auditar_estado(db, context, request, estado: m.AlertaEstado, acao: str, antes=None):
+    add_audit(db, acao=f"alerta_estados.{acao}", entidade="alerta_estados", registro_id=estado.id,
+              usuario_id=context.user.id, ilpi_id=context.ilpi_id, valores_anteriores=antes,
+              valores_posteriores={"alerta_id": estado.alerta_id, "situacao": estado.situacao}, request=request)
+
+
+async def _conflito_de(db, context, alerta_id):
+    atual = (await _responder_estado(db, context, alerta_id))["estado"]
+    quem = atual["por_nome"] if atual else "outra pessoa"
+    raise HTTPException(status_code=409, detail={"code": ALERTA_CONFLITO, "message": f"Já assumido por {quem}",
+                                                 "estado": jsonable_encoder(atual)})
+
+
+@central_alertas_router.post("/assumir", response_model=s.AlertaEstadoResposta)
+async def assumir_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSession = Depends(get_db),
+                         context: SecurityContext = Depends(require_permission("alertas:assumir"))):
+    return await _assumir(db, context, request, payload.alerta_id, iniciar=False)
+
+
+@central_alertas_router.post("/atender", response_model=s.AlertaEstadoResposta)
+async def atender_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSession = Depends(get_db),
+                         context: SecurityContext = Depends(require_permission("alertas:assumir"))):
+    """Inicia o atendimento; se o alerta ainda e novo, assume e inicia de uma vez."""
+    return await _assumir(db, context, request, payload.alerta_id, iniciar=True)
+
+
+async def _assumir(db, context, request, alerta_id: str, *, iniciar: bool) -> dict:
+    item = await _alerta_da_sessao(db, context, request, alerta_id)
+    agora = datetime.now(timezone.utc)
+    atual = (await _estados_abertos(db, context.ilpi_id)).get(alerta_id)
+    if atual is not None:
+        if atual.assumido_por != context.user.id:
+            await _conflito_de(db, context, alerta_id)
+        if iniciar and atual.situacao == "assumido":
+            antes = {"situacao": atual.situacao}
+            atual.situacao, atual.em_atendimento_em = "em_atendimento", agora
+            await db.flush()
+            _auditar_estado(db, context, request, atual, "atender", antes)
+            await db.commit()
+        return await _responder_estado(db, context, alerta_id)
+    estado = m.AlertaEstado(
+        ilpi_id=context.ilpi_id, alerta_id=alerta_id, regra=item["regra"], referencia_id=item["referencia_id"],
+        residente_id=item["residente_id"], situacao="em_atendimento" if iniciar else "assumido",
+        assumido_por=context.user.id, assumido_por_funcionario_id=await _funcionario_id(db, context),
+        assumido_em=agora, em_atendimento_em=agora if iniciar else None)
+    db.add(estado)
+    try:
+        await db.flush()
+    except IntegrityError:
+        # Duas pessoas ao mesmo tempo: o indice unico parcial garante um so estado aberto.
+        await db.rollback()
+        await _conflito_de(db, context, alerta_id)
+    _auditar_estado(db, context, request, estado, "atender" if iniciar else "assumir")
+    await db.commit()
+    return await _responder_estado(db, context, alerta_id)
+
+
+@central_alertas_router.post("/liberar", response_model=s.AlertaEstadoResposta)
+async def liberar_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSession = Depends(get_db),
+                         context: SecurityContext = Depends(require_permission("alertas:assumir"))):
+    """Devolve o alerta a equipe (o titular, ou quem gere a escala). Nao resolve: isso e da fonte."""
+    await _alerta_da_sessao(db, context, request, payload.alerta_id)
+    atual = (await _estados_abertos(db, context.ilpi_id)).get(payload.alerta_id)
+    if atual is None:
+        raise HTTPException(status_code=409, detail={"code": ALERTA_CONFLITO, "message": "Este alerta não está assumido"})
+    chaves = set(await allowed_permission_keys(db, context))
+    if atual.assumido_por != context.user.id and "escala:gerenciar" not in chaves:
+        raise HTTPException(status_code=403, detail={"code": "PERMISSION_DENIED",
+                                                     "message": "Só quem assumiu (ou a coordenação da escala) pode liberar"})
+    antes = {"situacao": atual.situacao}
+    agora = datetime.now(timezone.utc)
+    resultado = await db.execute(
+        update(m.AlertaEstado).where(m.AlertaEstado.id == atual.id, m.AlertaEstado.situacao.in_(ABERTOS))
+        .values(situacao="liberado", encerramento="liberado", encerrado_em=agora, encerrado_por=context.user.id,
+                updated_at=agora).execution_options(synchronize_session=False))
+    if resultado.rowcount == 1:
+        add_audit(db, acao="alerta_estados.liberar", entidade="alerta_estados", registro_id=atual.id,
+                  usuario_id=context.user.id, ilpi_id=context.ilpi_id, valores_anteriores=antes,
+                  valores_posteriores={"alerta_id": atual.alerta_id, "situacao": "liberado"}, request=request)
+        await db.commit()
+    return await _responder_estado(db, context, payload.alerta_id)
+
+
+@central_alertas_router.get("/historico", response_model=list[s.AlertaEstadoHistorico])
+async def historico_do_alerta(alerta_id: str, request: Request, db: AsyncSession = Depends(get_db),
+                              context: SecurityContext = Depends(require_permission("alertas:ler"))):
+    """Episodios de atendimento de um alerta (inclusive ja resolvido), se a sessao le a origem da regra."""
+    exige = ORIGEM_DA_REGRA.get(alerta_id.split(":", 1)[0])
+    if exige is None or not exige <= set(await allowed_permission_keys(db, context)):
+        raise HTTPException(status_code=404, detail={"code": RESOURCE_NOT_FOUND, "message": "Alerta não encontrado"})
+    estados = (await db.scalars(select(m.AlertaEstado).where(
+        m.AlertaEstado.ilpi_id == context.ilpi_id, m.AlertaEstado.alerta_id == alerta_id)
+        .order_by(m.AlertaEstado.assumido_em, m.AlertaEstado.id))).all()
+    nomes = await _nomes_de(db, context.ilpi_id, estados)
+    return [{
+        "id": e.id, "situacao": e.situacao, "por_nome": nomes.get(e.assumido_por, ""),
+        "assumido_em": _utc(e.assumido_em), "em_atendimento_em": _utc(e.em_atendimento_em),
+        "encerrado_em": _utc(e.encerrado_em), "encerramento": e.encerramento,
+    } for e in estados]

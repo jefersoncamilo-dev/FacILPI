@@ -344,6 +344,7 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
         # 181 + 5: a 023 (#117) concede alertas:ler aos 5 templates institucionais da 015.
         # 95 + 3 e 186 + 10: a 024 (#120) cria escala:ler, escala:gerenciar e plantao:registrar;
         # ilpi_admin +3, cuidador/enfermagem/responsavel_tecnico +2 cada, medico +1.
-        assert counts == {"permissoes": 98, "template_perfis": 7, "template_permissoes": 196}
+        # 98 + 1 e 196 + 6: a 026 (#123) cria alertas:assumir para ilpi_admin e os 5 institucionais.
+        assert counts == {"permissoes": 99, "template_perfis": 7, "template_permissoes": 202}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))
