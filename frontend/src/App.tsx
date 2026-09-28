@@ -14,6 +14,7 @@ import { Documentos } from './pages/Documentos'
 import { Placeholder } from './pages/Placeholder'
 import { Admissoes } from './pages/Admissoes'
 import { Alertas } from './pages/Alertas'
+import { Escala } from './pages/Escala'
 import { AdmissaoDetalhe } from './pages/AdmissaoDetalhe'
 import { QuartosLeitos } from './pages/QuartosLeitos'
 import { Avaliacoes } from './pages/Avaliacoes'
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/auditoria" element={<Protected><Placeholder title="Auditoria" /></Protected>} />
           <Route path="/config" element={<Protected><Placeholder title="Configurações" /></Protected>} />
           <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
+          <Route path="/escala" element={<Protected><Escala /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </ErrorBoundary>

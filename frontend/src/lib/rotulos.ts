@@ -34,8 +34,8 @@ export function rotuloSituacaoEvento(valor?: string | null): string {
 }
 
 const MODULO: Record<string, string> = {
-  admissoes: 'Admissões', administracoes: 'Administração de medicamentos', auditoria: 'Auditoria',
-  ausencias: 'Ausências', avaliacoes: 'Avaliações', configuracoes: 'Configurações', documentos: 'Documentos',
+  admissoes: 'Admissões', administracoes: 'Administração de medicamentos', alertas: 'Alertas', auditoria: 'Auditoria',
+  ausencias: 'Ausências', avaliacoes: 'Avaliações', configuracoes: 'Configurações', documentos: 'Documentos', escala: 'Escala',
   execucoes: 'Execução de cuidados', familiares: 'Familiares', funcionarios: 'Funcionários',
   grau_dependencia: 'Grau de dependência', ilpis: 'Instituições', intercorrencias: 'Intercorrências',
   medicamentos: 'Medicamentos', ocorrencias: 'Ocorrências de cuidado', perfis: 'Perfis', permissoes: 'Permissões',
@@ -49,7 +49,7 @@ const ACAO: Record<string, string> = {
   aprovar: 'Aprovar', revisar: 'Revisar', encerrar: 'Encerrar', cancelar: 'Cancelar', corrigir: 'Corrigir',
   validar: 'Validar', ativar: 'Ativar', suspender: 'Suspender', avancar: 'Avançar', concluir: 'Concluir',
   reabrir: 'Reabrir', atribuir_perfil: 'Atribuir perfil', atribuir_permissao: 'Atribuir permissões',
-  redefinir_senha: 'Redefinir senha', vincular_usuario: 'Vincular usuário',
+  redefinir_senha: 'Redefinir senha', vincular_usuario: 'Vincular usuário', gerenciar: 'Gerenciar', registrar: 'Registrar',
 }
 
 const semSublinhado = (valor: string) => valor.replace(/_/g, ' ')

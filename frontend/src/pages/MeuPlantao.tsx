@@ -5,6 +5,7 @@ import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { Alert } from '../components/ui/feedback'
+import { MeuTurno } from '../components/plantao/MeuTurno'
 import { cn } from '../lib/utils'
 import {
   PLANTAO_LIMIT_PADRAO,
@@ -238,6 +239,9 @@ export function MeuPlantao() {
             : 'Pendências das próximas 24 horas — cuidados, doses e intercorrências abertas'}
         </p>
       </div>
+
+      {/* #120: início/fim do próprio plantão e por quais áreas responde (só com plantao:registrar). */}
+      <MeuTurno />
 
       <div className="flex gap-2 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Filtrar por origem">
         {([{ value: 'todos' as Filtro, label: 'Todos' }, ...PLANTAO_ORIGENS]).map(opcao => (

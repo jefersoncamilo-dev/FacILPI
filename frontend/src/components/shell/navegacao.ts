@@ -2,6 +2,7 @@ import {
   ArrowLeftRight,
   BedDouble,
   BellRing,
+  CalendarClock,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -70,7 +71,11 @@ export const NAVEGACAO: GrupoNav[] = [
   },
   {
     titulo: 'Gestão',
-    itens: [{ to: '/equipe', label: 'Equipe', icon: UsersRound, permissao: 'funcionarios:ler' }],
+    itens: [
+      { to: '/equipe', label: 'Equipe', icon: UsersRound, permissao: 'funcionarios:ler' },
+      // #120: quem responde por qual área agora, áreas e turnos.
+      { to: '/escala', label: 'Escala', icon: CalendarClock, permissao: 'escala:ler' },
+    ],
   },
 ]
 
