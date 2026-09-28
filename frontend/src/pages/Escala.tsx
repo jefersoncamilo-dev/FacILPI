@@ -405,9 +405,13 @@ const ESTILO_ESTADO: Record<EstadoEscala, string> = {
   substituida: 'border-sky-200 bg-sky-50 text-sky-800',
   cancelada: 'border-border bg-muted text-slate-500',
 }
-const HORA_LOCAL = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
+// Horário no fuso da ILPI (vem da API); São Paulo só até a primeira resposta.
+const horaNoFuso = (fuso: string) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: fuso })
 const hojeLocal = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
-const horario = (e: EscalaPlanejada) => `${HORA_LOCAL.format(new Date(e.inicio_previsto))}–${HORA_LOCAL.format(new Date(e.fim_previsto))}`
+const horario = (e: EscalaPlanejada, fuso: string) => {
+  const hora = horaNoFuso(fuso)
+  return `${hora.format(new Date(e.inicio_previsto))}–${hora.format(new Date(e.fim_previsto))}`
+}
 
 interface FuncionarioOpcao { id: string; nome: string; situacao: string }
 type AcaoEscala = { escalaId: string; tipo: 'ausencia' | 'substituir' | 'cancelar' } | null
@@ -538,23 +542,23 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
                         </p>
                         <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-semibold', ESTILO_ESTADO[e.estado])}>{ROTULO_ESTADO_ESCALA[e.estado]}</span>
                       </div>
-                      <p className="text-sm text-slate-700">{[e.turno_nome, horario(e), e.area_nome].filter(Boolean).join(' · ')}</p>
+                      <p className="text-sm text-slate-700">{[e.turno_nome, horario(e, carga.dados.fuso), e.area_nome].filter(Boolean).join(' · ')}</p>
                       {e.motivo && <p className="text-xs text-muted-foreground">Motivo: {e.motivo}</p>}
                       {e.substituto_nome && <p className="text-xs text-muted-foreground">Substituído(a) por {e.substituto_nome}</p>}
                       {(editavel || substituivel) && acao?.escalaId !== e.id && (
                         <div className="flex flex-wrap gap-3">
                           {editavel && (
-                            <button type="button" className="min-h-[36px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'ausencia' })}>
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'ausencia' })}>
                               Registrar ausência
                             </button>
                           )}
                           {substituivel && (
-                            <button type="button" className="min-h-[36px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'substituir' })}>
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'substituir' })}>
                               Substituir
                             </button>
                           )}
                           {editavel && (
-                            <button type="button" className="min-h-[36px] text-xs font-medium text-red-700 hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'cancelar' })}>
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-red-700 hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'cancelar' })}>
                               Cancelar escala
                             </button>
                           )}

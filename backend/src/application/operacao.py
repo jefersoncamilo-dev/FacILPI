@@ -409,7 +409,8 @@ def _estado_escala(e: m.Escala, plantao: Optional[m.Plantao], substituta: Option
     return "prevista" if agora < _utc(e.inicio_previsto) else "nao_iniciada"
 
 
-async def _escalas_resposta(db, ilpi, escalas: list[m.Escala]) -> list[EscalaResposta]:
+async def _escalas_resposta(db, ilpi, escalas: list[m.Escala], *, mostrar_motivo: bool = True) -> list[EscalaResposta]:
+    """``mostrar_motivo``: motivo de ausencia pode ser dado de saude do funcionario (LGPD) — so para quem gere."""
     if not escalas:
         return []
     agora = _agora()
@@ -432,7 +433,8 @@ async def _escalas_resposta(db, ilpi, escalas: list[m.Escala]) -> list[EscalaRes
             id=e.id, funcionario_id=e.funcionario_id, funcionario_nome=nomes.get(e.funcionario_id, ""),
             turno_id=e.turno_id, turno_nome=turnos.get(e.turno_id), area_id=e.area_id, area_nome=areas.get(e.area_id),
             inicio_previsto=_utc(e.inicio_previsto), fim_previsto=_utc(e.fim_previsto), tipo=e.tipo, situacao=e.situacao,
-            motivo=e.motivo, substitui_escala_id=e.substitui_escala_id, substituta_id=sub.id if sub else None,
+            motivo=e.motivo if mostrar_motivo else None, substitui_escala_id=e.substitui_escala_id,
+            substituta_id=sub.id if sub else None,
             substituto_nome=nomes.get(sub.funcionario_id) if sub else None, plantao_id=e.plantao_id,
             estado=_estado_escala(e, plantoes.get(e.plantao_id), sub, agora)))
     return saida
@@ -448,7 +450,33 @@ async def _funcionario_ativo(db, ilpi, funcionario_id) -> m.Funcionario:
     return func
 
 
+async def _travar_funcionario(db, ilpi, funcionario_id) -> None:
+    """Serializa o planejamento da mesma pessoa (checar sobreposicao e inserir sem corrida)."""
+    resultado = await db.execute(
+        update(m.Funcionario).where(m.Funcionario.id == funcionario_id, m.Funcionario.ilpi_id == ilpi)
+        .values(situacao=m.Funcionario.situacao).execution_options(synchronize_session=False))
+    if resultado.rowcount != 1:
+        _nao_encontrado()
+
+
+async def _travar_escala(db, ilpi, escala_id) -> m.Escala:
+    """Primeiro DML da transicao da escala: ausencia, cancelamento, substituicao e inicio nao correm entre si."""
+    resultado = await db.execute(
+        update(m.Escala).where(m.Escala.id == escala_id, m.Escala.ilpi_id == ilpi)
+        .values(situacao=m.Escala.situacao).execution_options(synchronize_session=False))
+    if resultado.rowcount != 1:
+        _nao_encontrado()
+    return (await db.execute(select(m.Escala).where(m.Escala.id == escala_id, m.Escala.ilpi_id == ilpi)
+                             .execution_options(populate_existing=True))).scalar_one()
+
+
+async def _fim_de_hoje(db, ilpi, agora) -> datetime:
+    fuso = await _fuso(db, ilpi)
+    return datetime.combine(agora.astimezone(fuso).date() + timedelta(days=1), time.min, tzinfo=fuso).astimezone(timezone.utc)
+
+
 async def _sem_sobreposicao(db, ilpi, funcionario_id, inicio, fim, ignorar_id=None):
+    await _travar_funcionario(db, ilpi, funcionario_id)
     consulta = select(m.Escala.id).where(
         m.Escala.ilpi_id == ilpi, m.Escala.funcionario_id == funcionario_id, m.Escala.situacao == "prevista",
         m.Escala.inicio_previsto < fim, m.Escala.fim_previsto > inicio)
@@ -459,7 +487,7 @@ async def _sem_sobreposicao(db, ilpi, funcionario_id, inicio, fim, ignorar_id=No
 
 
 async def _escala_prevista_editavel(db, ilpi, escala_id) -> m.Escala:
-    escala = await _obter(db, m.Escala, escala_id, ilpi)
+    escala = await _travar_escala(db, ilpi, escala_id)
     if escala.situacao != "prevista":
         _conflito("Esta escala não está mais prevista")
     if escala.plantao_id is not None:
@@ -766,7 +794,8 @@ async def escala_do_dia(dia: Optional[date] = None, db: AsyncSession = Depends(g
     avulsos = (await db.scalars(select(m.Plantao).where(
         m.Plantao.ilpi_id == ilpi, m.Plantao.inicio_em < fim, or_(m.Plantao.fim_em.is_(None), m.Plantao.fim_em > inicio),
         m.Plantao.id.not_in(cumpridos)).order_by(m.Plantao.inicio_em, m.Plantao.id))).all()
-    return EscalaDia(dia=dia, fuso=fuso.key, escalas=await _escalas_resposta(db, ilpi, list(escalas)),
+    gere = "escala:gerenciar" in set(await allowed_permission_keys(db, context))
+    return EscalaDia(dia=dia, fuso=fuso.key, escalas=await _escalas_resposta(db, ilpi, list(escalas), mostrar_motivo=gere),
                      coberturas_sem_escala=await _plantoes_resposta(db, ilpi, list(avulsos)))
 
 
@@ -819,7 +848,7 @@ async def substituir(escala_id: str, payload: Substituir, request: Request, db: 
                      context: SecurityContext = Depends(require_permission("escala:gerenciar"))):
     """Substituicao simples: a original fica ausente e nasce uma escala de substituicao no mesmo periodo."""
     ilpi = context.ilpi_id
-    original = await _obter(db, m.Escala, escala_id, ilpi)
+    original = await _travar_escala(db, ilpi, escala_id)
     if original.situacao == "cancelada" or original.plantao_id is not None:
         _conflito("Só uma escala prevista ou ausente, ainda não cumprida, pode ser substituída")
     ja = (await db.execute(select(m.Escala.id).where(m.Escala.ilpi_id == ilpi, m.Escala.substitui_escala_id == original.id,
@@ -838,7 +867,11 @@ async def substituir(escala_id: str, payload: Substituir, request: Request, db: 
                     inicio_previsto=original.inicio_previsto, fim_previsto=original.fim_previsto, tipo="substituicao",
                     situacao="prevista", substitui_escala_id=original.id, motivo=None, criado_por=context.user.id)
     db.add(nova)
-    await _auditar(db, nova, context, request, "substituir")
+    try:
+        await _auditar(db, nova, context, request, "substituir")
+    except IntegrityError:
+        await db.rollback()
+        _conflito("Esta escala já tem substituto")
     await db.commit()
     return await _escalas_resposta(db, ilpi, [original, nova])
 
@@ -872,7 +905,8 @@ async def plantao_atual(db: AsyncSession = Depends(get_db), context: SecurityCon
     # Escalas previstas da propria pessoa ainda por cumprir (as proximas primeiro).
     pendentes = (await db.scalars(select(m.Escala).where(
         m.Escala.ilpi_id == context.ilpi_id, m.Escala.funcionario_id == funcionario.id, m.Escala.situacao == "prevista",
-        m.Escala.plantao_id.is_(None), m.Escala.fim_previsto > _agora())
+        m.Escala.plantao_id.is_(None), m.Escala.fim_previsto > _agora(),
+        m.Escala.inicio_previsto < await _fim_de_hoje(db, context.ilpi_id, _agora()))
         .order_by(m.Escala.inicio_previsto, m.Escala.id).limit(3))).all()
     return PlantaoAtual(pode_registrar="plantao:registrar" in chaves, funcionario_id=funcionario.id, plantao=resposta,
                         escalas_pendentes=await _escalas_resposta(db, context.ilpi_id, list(pendentes)))
@@ -888,20 +922,28 @@ async def iniciar_plantao(payload: IniciarPlantao, request: Request, db: AsyncSe
     instante = _agora()
     escala = None
     if payload.escala_id:
-        escala = await _escala_prevista_editavel(db, ilpi, payload.escala_id)
-        # So a propria escala; de outra pessoa e inexistente para quem pede.
-        if escala.funcionario_id != funcionario.id:
+        # Posse primeiro: escala de outra pessoa (ou ILPI) e inexistente para quem pede.
+        propria = await _obter(db, m.Escala, payload.escala_id, ilpi)
+        if propria.funcionario_id != funcionario.id:
             _nao_encontrado()
+        escala = await _escala_prevista_editavel(db, ilpi, propria.id)
         if _utc(escala.fim_previsto) <= instante:
             _conflito("O período desta escala já terminou")
+        # So escala que toca o dia de hoje (no fuso da ILPI): nao se cumpre hoje a escala de amanha.
+        if _utc(escala.inicio_previsto) >= await _fim_de_hoje(db, ilpi, instante):
+            _conflito("Esta escala é de outro dia")
     turno_id = payload.turno_id or (escala.turno_id if escala else None)
     turno = None
     if turno_id:
         turno = await _obter(db, m.Turno, turno_id, ilpi)
         if turno.situacao != "ativo" and payload.turno_id:
             _conflito("Este turno está inativo")
-    area_ids = payload.area_ids or ([escala.area_id] if escala is not None and escala.area_id else [])
-    areas = [await _area_ativa(db, ilpi, area_id) for area_id in dict.fromkeys(area_ids)]
+    if payload.area_ids:
+        areas = [await _area_ativa(db, ilpi, area_id) for area_id in dict.fromkeys(payload.area_ids)]
+    else:
+        # Area da escala inativada depois do planejamento: o plantao comeca sem area (a coordenacao atribui).
+        da_escala = await _obter(db, m.AreaOperacional, escala.area_id, ilpi) if escala is not None and escala.area_id else None
+        areas = [da_escala] if da_escala is not None and da_escala.situacao == "ativa" else []
     plantao = m.Plantao(ilpi_id=ilpi, funcionario_id=funcionario.id, turno_id=turno.id if turno else None,
                         inicio_em=instante, situacao="em_andamento", iniciado_por=context.user.id)
     db.add(plantao)
@@ -918,7 +960,7 @@ async def iniciar_plantao(payload: IniciarPlantao, request: Request, db: AsyncSe
             await _auditar(db, escala, context, request, "cumprir", antes)
         except IntegrityError:
             await db.rollback()
-            _conflito("Esta escala já foi cumprida por outro plantão")
+            _conflito("A escala mudou enquanto o plantão era iniciado; atualize e tente de novo")
     for area in areas:
         await _abrir_responsabilidade(db, context, request, plantao, area, instante)
     await db.commit()
