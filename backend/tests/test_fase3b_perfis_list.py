@@ -341,6 +341,7 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
         # administrativo (+1 vinculo de template).
         # 173 + 7: a 021 (#103) concede admissoes:* ao template ilpi_admin.
         # 94 + 1 e 180 + 1: a 022 (#107) cria alertas:ler e a concede ao template ilpi_admin.
-        assert counts == {"permissoes": 95, "template_perfis": 7, "template_permissoes": 181}
+        # 181 + 5: a 023 (#117) concede alertas:ler aos 5 templates institucionais da 015.
+        assert counts == {"permissoes": 95, "template_perfis": 7, "template_permissoes": 186}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))
