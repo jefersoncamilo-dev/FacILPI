@@ -21,8 +21,8 @@ from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import or_, select
+from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,6 +70,21 @@ class AreaAtualizar(BaseModel):
     descricao: Optional[str] = Field(None, max_length=500)
     situacao: Optional[Literal["ativa", "inativa"]] = None
 
+    @field_validator("nome")
+    @classmethod
+    def _nome(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("Informe o nome da área")
+        return v.strip() if v is not None else v
+
+    @model_validator(mode="after")
+    def _sem_nulo_obrigatorio(self):
+        # null explicito so vale para descricao; nome/tipo/situacao sao obrigatorios na area.
+        for campo in ("nome", "tipo", "situacao"):
+            if campo in self.model_fields_set and getattr(self, campo) is None:
+                raise ValueError(f"{campo} não pode ser vazio")
+        return self
+
 
 class LeitoDaArea(BaseModel):
     vinculo_id: str
@@ -77,7 +92,8 @@ class LeitoDaArea(BaseModel):
     unidade: Optional[str] = None
     quarto: str
     leito: str
-    ocupado: bool
+    # Ocupacao e dado de leitos/residentes: nula para quem so le a escala.
+    ocupado: Optional[bool] = None
     desde: datetime
 
 
@@ -99,6 +115,13 @@ class TurnoCriar(BaseModel):
     hora_inicio: str
     hora_fim: str
 
+    @field_validator("nome")
+    @classmethod
+    def _nome(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("Informe o nome do turno")
+        return v.strip()
+
     @field_validator("hora_inicio", "hora_fim")
     @classmethod
     def _horas(cls, v: str) -> str:
@@ -110,6 +133,20 @@ class TurnoAtualizar(BaseModel):
     hora_inicio: Optional[str] = None
     hora_fim: Optional[str] = None
     situacao: Optional[Literal["ativo", "inativo"]] = None
+
+    @field_validator("nome")
+    @classmethod
+    def _nome(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError("Informe o nome do turno")
+        return v.strip() if v is not None else v
+
+    @model_validator(mode="after")
+    def _sem_nulo(self):
+        for campo in self.model_fields_set:
+            if getattr(self, campo) is None:
+                raise ValueError(f"{campo} não pode ser vazio")
+        return self
 
     @field_validator("hora_inicio", "hora_fim")
     @classmethod
@@ -275,9 +312,12 @@ async def funcionario_da_sessao(db: AsyncSession, context: SecurityContext) -> O
         m.Funcionario.situacao == "ativo"))).scalar_one_or_none()
 
 
-async def _leitos_das_areas(db, ilpi, area_ids) -> dict[str, list[LeitoDaArea]]:
+async def _leitos_das_areas(db, context, area_ids) -> dict[str, list[LeitoDaArea]]:
     if not area_ids:
         return {}
+    ilpi = context.ilpi_id
+    # escala:ler (repassavel a perfil local nao clinico) nao revela ocupacao de leito.
+    mostrar_ocupacao = bool({"residentes:ler", "quartos_leitos:ler"} & set(await allowed_permission_keys(db, context)))
     linhas = (await db.execute(
         select(m.AreaLeito, m.QuartoLeito)
         .join(m.QuartoLeito, (m.QuartoLeito.id == m.AreaLeito.quarto_leito_id) & (m.QuartoLeito.instituicao_id == m.AreaLeito.ilpi_id))
@@ -288,7 +328,8 @@ async def _leitos_das_areas(db, ilpi, area_ids) -> dict[str, list[LeitoDaArea]]:
     for vinculo, leito in linhas:
         por_area[vinculo.area_id].append(LeitoDaArea(
             vinculo_id=vinculo.id, quarto_leito_id=leito.id, unidade=leito.unidade, quarto=leito.quarto,
-            leito=leito.leito, ocupado=leito.residente_atual_id is not None, desde=_utc(vinculo.inicio_em)))
+            leito=leito.leito, ocupado=(leito.residente_atual_id is not None) if mostrar_ocupacao else None,
+            desde=_utc(vinculo.inicio_em)))
     return por_area
 
 
@@ -440,9 +481,47 @@ async def _abrir_responsabilidade(db, context, request, plantao: m.Plantao, area
 
 
 async def _encerrar_responsabilidade(db, context, request, resp: m.Responsabilidade, instante, motivo):
+    """Append-only: grava fim_em uma unica vez (UPDATE condicional; corrida perde com 409)."""
     antes = _data(resp)
-    resp.fim_em, resp.motivo_fim, resp.encerrado_por = instante, motivo, context.user.id
+    resultado = await db.execute(
+        update(m.Responsabilidade)
+        .where(m.Responsabilidade.id == resp.id, m.Responsabilidade.ilpi_id == context.ilpi_id,
+               m.Responsabilidade.fim_em.is_(None))
+        .values(fim_em=instante, motivo_fim=motivo, encerrado_por=context.user.id)
+        .execution_options(synchronize_session=False))
+    if resultado.rowcount != 1:
+        await db.rollback()
+        _conflito("Esta responsabilidade já foi encerrada")
+    await db.refresh(resp)
     await _auditar(db, resp, context, request, "encerrar", antes)
+
+
+async def _travar_plantao(db, ilpi, plantao_id) -> m.Plantao:
+    """Primeiro DML da transicao: trava a linha do plantao (PostgreSQL) / a escrita (SQLite).
+
+    Encerrar o plantao e transferir para ele passam por aqui, entao nao ha como
+    abrir responsabilidade num plantao que acabou de ser encerrado.
+    """
+    resultado = await db.execute(
+        update(m.Plantao).where(m.Plantao.id == plantao_id, m.Plantao.ilpi_id == ilpi)
+        .values(situacao=m.Plantao.situacao).execution_options(synchronize_session=False))
+    if resultado.rowcount != 1:
+        _nao_encontrado()
+    return (await db.execute(select(m.Plantao).where(m.Plantao.id == plantao_id, m.Plantao.ilpi_id == ilpi)
+                             .execution_options(populate_existing=True))).scalar_one()
+
+
+async def _encerrar_plantao(db, context, request, plantao: m.Plantao) -> None:
+    """Encerra o plantao (ja travado) e as responsabilidades abertas dele, no mesmo instante. Sem commit."""
+    instante = _agora()
+    abertas = (await db.scalars(select(m.Responsabilidade).where(
+        m.Responsabilidade.ilpi_id == context.ilpi_id, m.Responsabilidade.plantao_id == plantao.id,
+        m.Responsabilidade.fim_em.is_(None)).execution_options(populate_existing=True))).all()
+    for resp in abertas:
+        await _encerrar_responsabilidade(db, context, request, resp, instante, "fim_plantao")
+    antes = _data(plantao)
+    plantao.fim_em, plantao.situacao, plantao.encerrado_por = instante, "encerrado", context.user.id
+    await _auditar(db, plantao, context, request, "encerrar", antes)
 
 
 async def _area_ativa(db, ilpi, area_id) -> m.AreaOperacional:
@@ -459,7 +538,7 @@ async def listar_areas(db: AsyncSession = Depends(get_db),
                        context: SecurityContext = Depends(require_permission("escala:ler"))):
     areas = (await db.scalars(select(m.AreaOperacional).where(m.AreaOperacional.ilpi_id == context.ilpi_id)
                               .order_by(m.AreaOperacional.situacao, m.AreaOperacional.nome))).all()
-    leitos = await _leitos_das_areas(db, context.ilpi_id, [a.id for a in areas])
+    leitos = await _leitos_das_areas(db, context, [a.id for a in areas])
     return [_area(a, leitos.get(a.id)) for a in areas]
 
 
@@ -498,7 +577,7 @@ async def atualizar_area(area_id: str, payload: AreaAtualizar, request: Request,
         _conflito("Já existe uma área com este nome")
     await _auditar(db, area, context, request, "atualizar", antes)
     await db.commit()
-    leitos = await _leitos_das_areas(db, context.ilpi_id, [area.id])
+    leitos = await _leitos_das_areas(db, context, [area.id])
     return _area(area, leitos.get(area.id))
 
 
@@ -520,7 +599,7 @@ async def vincular_leito(area_id: str, payload: VincularLeito, request: Request,
         _conflito("Este leito já pertence a uma área ativa; remova-o de lá antes")
     await _auditar(db, vinculo, context, request, "vincular")
     await db.commit()
-    leitos = await _leitos_das_areas(db, context.ilpi_id, [area.id])
+    leitos = await _leitos_das_areas(db, context, [area.id])
     return _area(area, leitos.get(area.id))
 
 
@@ -538,7 +617,7 @@ async def remover_leito(area_id: str, quarto_leito_id: str, request: Request, db
     vinculo.fim_em, vinculo.encerrado_por = _agora(), context.user.id
     await _auditar(db, vinculo, context, request, "desvincular", antes)
     await db.commit()
-    leitos = await _leitos_das_areas(db, context.ilpi_id, [area.id])
+    leitos = await _leitos_das_areas(db, context, [area.id])
     return _area(area, leitos.get(area.id))
 
 
@@ -606,7 +685,7 @@ async def escala_agora(db: AsyncSession = Depends(get_db),
     areas = (await db.scalars(select(m.AreaOperacional).where(
         m.AreaOperacional.ilpi_id == ilpi, m.AreaOperacional.situacao == "ativa").order_by(m.AreaOperacional.nome))).all()
     ids = [a.id for a in areas]
-    leitos = await _leitos_das_areas(db, ilpi, ids)
+    leitos = await _leitos_das_areas(db, context, ids)
     abertas = await _responsabilidades(db, ilpi, abertas=True)
     por_area: dict[str, list[ResponsabilidadeResposta]] = {a: [] for a in ids}
     for r in abertas:
@@ -639,7 +718,7 @@ async def transferir(payload: Transferir, request: Request, db: AsyncSession = D
                      context: SecurityContext = Depends(require_permission("escala:gerenciar"))):
     ilpi = context.ilpi_id
     area = await _area_ativa(db, ilpi, payload.area_id)
-    para = await _obter(db, m.Plantao, payload.para_plantao_id, ilpi)
+    para = await _travar_plantao(db, ilpi, payload.para_plantao_id)
     if para.situacao != "em_andamento":
         _conflito("O plantão de destino já foi encerrado")
     instante = _agora()
@@ -663,8 +742,7 @@ async def transferir(payload: Transferir, request: Request, db: AsyncSession = D
 async def encerrar_responsabilidade(responsabilidade_id: str, request: Request, db: AsyncSession = Depends(get_db),
                                     context: SecurityContext = Depends(require_permission("escala:gerenciar"))):
     resp = await _obter(db, m.Responsabilidade, responsabilidade_id, context.ilpi_id)
-    if resp.fim_em is not None:
-        _conflito("Esta responsabilidade já foi encerrada")
+    await _travar_plantao(db, context.ilpi_id, resp.plantao_id)
     await _encerrar_responsabilidade(db, context, request, resp, _agora(), "ajuste")
     await db.commit()
     return next(r for r in await _responsabilidades(db, context.ilpi_id, plantao_ids=[resp.plantao_id]) if r.id == resp.id)
@@ -858,17 +936,10 @@ async def encerrar_plantao(plantao_id: str, request: Request, db: AsyncSession =
     # O proprio profissional encerra o seu; o gestor da escala encerra o de outro (esquecido aberto).
     if not ((proprio and "plantao:registrar" in chaves) or "escala:gerenciar" in chaves):
         raise HTTPException(status_code=403, detail={"code": "PERMISSION_DENIED", "message": "Permissão negada"})
+    plantao = await _travar_plantao(db, ilpi, plantao.id)
     if plantao.situacao != "em_andamento":
         _conflito("Este plantão já foi encerrado")
-    instante = _agora()
-    abertas = (await db.scalars(select(m.Responsabilidade).where(
-        m.Responsabilidade.ilpi_id == ilpi, m.Responsabilidade.plantao_id == plantao.id,
-        m.Responsabilidade.fim_em.is_(None)))).all()
-    for resp in abertas:
-        await _encerrar_responsabilidade(db, context, request, resp, instante, "fim_plantao")
-    antes = _data(plantao)
-    plantao.fim_em, plantao.situacao, plantao.encerrado_por = instante, "encerrado", context.user.id
-    await _auditar(db, plantao, context, request, "encerrar", antes)
+    await _encerrar_plantao(db, context, request, plantao)
     await db.commit()
     return (await _plantoes_resposta(db, ilpi, [plantao]))[0]
 

@@ -20,10 +20,10 @@ const ABAS: { id: Aba; rotulo: string; filtro: (a: Alerta) => boolean; vazio: st
 
 const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
 
-function Lista({ itens, agora }: { itens: Alerta[]; agora: Date }) {
+function Lista({ itens, agora, fuso }: { itens: Alerta[]; agora: Date; fuso?: string }) {
   return (
     <ul className="space-y-2">
-      {itens.map(a => <li key={a.id}><ItemAlerta alerta={a} agora={agora} /></li>)}
+      {itens.map(a => <li key={a.id}><ItemAlerta alerta={a} agora={agora} fuso={fuso} /></li>)}
     </ul>
   )
 }
@@ -128,7 +128,7 @@ export function Alertas() {
                     <span aria-hidden="true" className={cn('size-2.5 rounded-full', ESTILO_GRAVIDADE.critico.ponto)} />
                     Prioridade agora <span className="text-sm font-medium text-muted-foreground">({prioridade.length})</span>
                   </h2>
-                  <Lista itens={prioridade} agora={agora} />
+                  <Lista itens={prioridade} agora={agora} fuso={dados.fuso} />
                 </section>
               )}
               {demais.length > 0 && (
@@ -138,7 +138,7 @@ export function Alertas() {
                       Demais <span className="text-sm font-medium text-muted-foreground">({demais.length})</span>
                     </h2>
                   )}
-                  <Lista itens={demais} agora={agora} />
+                  <Lista itens={demais} agora={agora} fuso={dados.fuso} />
                 </section>
               )}
             </div>

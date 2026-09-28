@@ -82,10 +82,19 @@ def test_024_concede_cria_tabelas_e_reverte(pre024_db):
     falha = _migrate(pre024_db, target=PRE_024, command="downgrade", success=False)
     assert "areas_operacionais tem historico" in falha.stdout + falha.stderr
 
-    async def sem_area(client, db):
+    # Vinculo externo (perfil local que recebeu escala:ler do gestor) tambem barra o downgrade.
+    async def externo(client, db):
         await db.execute(text("DELETE FROM areas_operacionais"))
+        await _create_ilpi_user(db, _new_institution("T024 externo"), permissions={"escala:ler"}, profile_key="coordenacao")
         await db.commit()
-    asyncio.run(_client(pre024_db, sem_area))
+    asyncio.run(_client(pre024_db, externo))
+    falha = _migrate(pre024_db, target=PRE_024, command="downgrade", success=False)
+    assert "vinculos externos" in falha.stdout + falha.stderr
+
+    async def sem_externo(client, db):
+        await db.execute(text("DELETE FROM perfil_permissoes WHERE perfil_id IN (SELECT id FROM perfis WHERE chave = 'coordenacao')"))
+        await db.commit()
+    asyncio.run(_client(pre024_db, sem_externo))
     _migrate(pre024_db, target=PRE_024, command="downgrade")
 
     async def apos(client, db):

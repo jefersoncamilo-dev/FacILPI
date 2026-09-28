@@ -244,7 +244,8 @@ function NavegacaoInferior({ onMenu, sino }: { onMenu: () => void; sino: EstadoS
     { to: '/residentes', label: 'Residentes', icon: Users, permissao: 'residentes:ler' },
   ].filter(d => !('permissao' in d) || pode(d.permissao))
 
-  const estilo = 'flex min-h-[52px] min-w-[64px] flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium'
+  // 56px: cinco destinos cabem em 320px sem cortar o Menu (#119).
+  const estilo = 'flex min-h-[52px] min-w-[56px] flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium'
   return (
     <nav
       aria-label="Navegação rápida"
@@ -272,7 +273,7 @@ function NavegacaoInferior({ onMenu, sino }: { onMenu: () => void; sino: EstadoS
                 ) : null}
               </span>
               {d.label}
-              {'badge' in d && d.badge ? <span className="sr-only">: {d.badge} pedem atenção</span> : null}
+              {'badge' in d && d.badge ? <span className="sr-only">: {d.badge} {d.badge === 1 ? 'pede' : 'pedem'} atenção</span> : null}
             </>
           )}
         </NavLink>

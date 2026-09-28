@@ -535,7 +535,7 @@ function PrecisaDeAtencao({ carga }: { carga: Carga<CentralAlertas> }) {
         {GRAVIDADES_ALERTA.map(g => `${ROTULO_ALERTA[g]}: ${contagem[g]}`).join(' · ')}
       </p>
       <ul className="space-y-2">
-        {alertas.slice(0, ALERTAS_NO_INICIO).map(a => <li key={a.id}><ItemAlerta alerta={a} compacto /></li>)}
+        {alertas.slice(0, ALERTAS_NO_INICIO).map(a => <li key={a.id}><ItemAlerta alerta={a} compacto fuso={carga.dados.fuso} /></li>)}
       </ul>
       {resto > 0 && <p className="text-xs text-muted-foreground">E mais {plural(resto, 'alerta', 'alertas')} na central.</p>}
     </div>
