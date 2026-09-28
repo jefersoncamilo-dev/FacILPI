@@ -100,8 +100,8 @@ def _plural(n: int, um: str, varios: str) -> str:
 
 
 def _hash(*partes: str | None) -> str:
-    """Hash curto e deterministico para contexto em texto livre no id."""
-    return hashlib.sha1("\x1f".join(p or "" for p in partes).encode("utf-8")).hexdigest()[:12]
+    """Hash curto e deterministico para contexto em texto livre no id (nulo != vazio)."""
+    return hashlib.sha1("\x1f".join("\x00" if p is None else p for p in partes).encode("utf-8")).hexdigest()[:12]
 
 
 def _local(unidade: str | None, quarto: str | None, leito: str | None) -> str | None:
@@ -271,12 +271,12 @@ async def _planos(db, ilpi, agora, cal: _Calendario, ativos, c: _Coletor):
                   detalhe=f"Data final: {_data_br(plano.data_final)}.", desde=prazo, prazo=prazo)
 
 
-async def _plantao(db, ilpi, agora, c: _Coletor, *, doses: bool):
+async def _plantao(db, ilpi, agora, c: _Coletor):
     inicio = agora - timedelta(hours=HORAS_JANELA_PLANTAO)
-    fontes = [("cuidados_sem_registro", "atencao", m.OcorrenciaCuidado, _has_execucao_vigente, ("cuidado", "cuidados"))]
-    if doses:
-        fontes.append(("doses_sem_registro", "critico", m.DosePrevista, _has_admin_vigente,
-                       ("dose de medicação", "doses de medicação")))
+    fontes = (
+        ("cuidados_sem_registro", "atencao", m.OcorrenciaCuidado, _has_execucao_vigente, ("cuidado", "cuidados")),
+        ("doses_sem_registro", "critico", m.DosePrevista, _has_admin_vigente, ("dose de medicação", "doses de medicação")),
+    )
     for regra, gravidade, modelo, registrado, (um, varios) in fontes:
         linhas = (await db.execute(
             select(modelo.residente_id, func.count(), func.min(modelo.previsto_em))
@@ -402,8 +402,8 @@ async def listar_alertas(
     if "planos_cuidados:ler" in chaves:
         await _planos(db, ilpi, agora, cal, ativos, c)
     if "plantao:ler" in chaves:
-        # Dose sem registro e fato de medicacao: exige tambem a leitura de administracoes.
-        await _plantao(db, ilpi, agora, c, doses="administracoes:ler" in chaves)
+        # Mesma origem do Meu Plantao: plantao:ler projeta cuidados e doses pendentes.
+        await _plantao(db, ilpi, agora, c)
     if "intercorrencias:ler" in chaves:
         await _intercorrencias(db, ilpi, agora, c)
     if "quartos_leitos:ler" in chaves and ativos is not None:
