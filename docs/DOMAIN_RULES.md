@@ -101,6 +101,17 @@ Regras v1 e limiares (constantes em `backend/src/application/alertas.py`, exibid
 
 A janela de 24 h do plantão é recorte de período, não tolerância de atraso (D.2). Regras clínicas de valor (ex.: sinais vitais fora de faixa) não entram sem decisão própria. Notificação externa (e-mail, WhatsApp) e limiares configuráveis ficam fora da v1.
 
+## Escala, plantão e responsabilidade operacional
+
+Camada Operacional, Fase 2A (#120). O FacILPI sabe **quem responde por qual área agora** e quem respondia em qualquer instante do passado. Não é RH: sem folha, ponto, banco de horas ou cálculo salarial.
+
+- **Área operacional** (`ala | setor | unidade | grupo`) é cadastrada por ILPI. `QuartoLeito.unidade` continua texto livre do leito e **não** é tratada como área. Leitos entram na área com vigência (`inicio_em`/`fim_em`); remover encerra a vigência, não apaga; um leito pertence a no máximo uma área ativa por vez. Os residentes de uma área derivam da ocupação atual dos seus leitos — fonte única, sem cópia.
+- **Turno** é rótulo operacional com horas locais (pode cruzar a meia-noite).
+- **Plantão real** é o que a pessoa efetivamente trabalha: ela inicia e encerra o próprio plantão (`plantao:registrar`); um em andamento por funcionário. O gestor (`escala:gerenciar`) pode encerrar um plantão esquecido aberto.
+- **Responsabilidade** liga plantão, funcionário e área com vigência semiaberta `[inicio_em, fim_em)`. É append-only: a única alteração é gravar `fim_em` uma vez, com motivo (`fim_plantao | transferencia | ajuste`). Transferir encerra uma vigência e abre outra no mesmo instante — sem buraco nem sobreposição do mesmo par. Mais de um profissional pode responder pela mesma área (reforço). "Quem respondia no instante T" é sempre consultado pela vigência; eventos não copiam o nome do responsável.
+- **Responsabilidade não é permissão.** Responder pela Ala B não abre nenhuma tela nem dado novo; RBAC continua sendo a única autorização. Contagem de residentes por área só aparece para quem lê residentes.
+- Permissões (migration 024): `escala:ler` e `escala:gerenciar` (módulo operacional, não clínico, ILPI-only — o gestor pode repassá-las a perfis locais) e `plantao:registrar` (módulo `plantao`). Grants: `ilpi_admin` as três; cuidador, enfermagem e responsável técnico `escala:ler` + `plantao:registrar`; médico `escala:ler`. Tenant sempre da sessão; recurso de outra ILPI responde 404. Toda mutação é auditada.
+
 ## IA e voz
 
 IA pode apoiar entrada, organização e consulta, mas não deve tomar decisão clínica automaticamente. Entrada por voz futura deve preencher texto/estruturas sob confirmação humana, não executar conduta clínica por conta própria.

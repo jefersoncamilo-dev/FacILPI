@@ -226,8 +226,8 @@ async def _user_keys(db, user_id):
 def test_01_templates_e_baseline(s1_db):
     async def op(client, db):
         # 85 (S.1) -> 92 (D.3) -> 93 (documentos:validar/017) -> 94 (documentos:anexar/018)
-        # -> 95 (alertas:ler/022, #107)
-        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 95
+        # -> 95 (alertas:ler/022, #107) -> 98 (escala:ler/gerenciar, plantao:registrar/024, #120)
+        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 98
         templates = (await db.execute(select(m.Perfil).where(
             m.Perfil.ilpi_id.is_(None), m.Perfil.chave.in_(
                 ["cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"])))).scalars().all()
@@ -328,7 +328,9 @@ def test_04_escalation_bloqueada(s1_db):
                      "execucoes:ler", "execucoes:criar", "plantao:ler", "sinais_vitais:ler",
                      "intercorrencias:ler", "intercorrencias:criar",
                      # 023 (#117): o cuidador passou a ter alertas:ler.
-                     "alertas:ler"})
+                     "alertas:ler",
+                     # 024 (#120): e escala:ler e plantao:registrar.
+                     "escala:ler", "plantao:registrar"})
         await db.commit()
         hc = _headers(chefe, ilpi_id=ilpi.id)
         r = await client.post("/api/matriz/atribuicoes",
