@@ -141,6 +141,8 @@ class AlertaGestorContagem(BaseModel):
 
 class AlertaGestorResponse(BaseModel):
     gerado_em: datetime
+    # Fuso da ILPI em que os prazos por data foram calculados (apresentacao de "vence hoje").
+    fuso: str = "America/Sao_Paulo"
     contagem: AlertaGestorContagem
     alertas: list[AlertaGestorItem]
 

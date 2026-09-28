@@ -68,15 +68,15 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[min(92vw,380px)] p-0">
+      <DropdownMenuContent align="end" className="max-h-[min(80vh,560px)] w-[min(92vw,380px)] overflow-y-auto p-0">
         <DropdownMenuLabel className="px-4 pb-1 pt-3 text-sm font-semibold text-foreground">Alertas e Pendências</DropdownMenuLabel>
         {dados ? (
           <>
-            <p aria-label="Totais" className="px-4 pb-2 text-xs text-muted-foreground">
+            <div role="group" aria-label="Totais" className="px-4 pb-2 text-xs text-muted-foreground">
               Críticos: <span className="font-semibold tabular-nums text-foreground">{dados.contagem.critico}</span>
               {' · '}Atenção: <span className="font-semibold tabular-nums text-foreground">{dados.contagem.atencao}</span>
               {' · '}Pendências: <span className="font-semibold tabular-nums text-foreground">{dados.contagem.pendencia}</span>
-            </p>
+            </div>
             <DropdownMenuSeparator className="mx-0 my-0" />
             {dados.alertas.length === 0 ? (
               <p className="px-4 py-4 text-sm text-muted-foreground">Nada pedindo atenção agora.</p>
@@ -84,7 +84,7 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
               <div className="p-1">
                 {dados.alertas.slice(0, ITENS_NO_SINO).map(a => {
                   const destino = destinoDoAlerta(a)
-                  const meta = [a.residente_nome, a.local, quandoDoAlerta(a, agora)].filter(Boolean).join(' · ')
+                  const meta = [a.residente_nome, a.local, quandoDoAlerta(a, agora, dados.fuso)].filter(Boolean).join(' · ')
                   return (
                     <DropdownMenuItem key={a.id} asChild className="items-start py-2">
                       <Link to={destino.to}>
@@ -103,7 +103,8 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
           </>
         ) : (
           <p className="px-4 py-4 text-sm text-muted-foreground">
-            {central.status === 'erro' ? 'Não foi possível carregar os alertas.' : 'Carregando…'}
+            {central.status === 'erro' ? 'Não foi possível carregar os alertas.'
+              : central.status === 'proibido' ? 'Sem acesso aos alertas.' : 'Carregando…'}
           </p>
         )}
         <DropdownMenuSeparator className="mx-0 my-0" />

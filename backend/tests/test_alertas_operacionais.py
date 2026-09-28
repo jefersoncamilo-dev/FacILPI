@@ -244,6 +244,8 @@ def test_natureza_desde_prazo_e_contagem(alertas_db):
         dose = _um(payload, "doses_sem_registro", x["hilda"].id)
         assert dose["prazo"] is not None and dose["prazo"] == dose["desde"]
 
+        # O cliente recebe o fuso em que os prazos por data foram calculados.
+        assert payload["fuso"] == "America/Sao_Paulo"
         contagem, itens = payload["contagem"], payload["alertas"]
         assert contagem["total"] == len(itens)
         for chave in ("critico", "atencao", "aviso"):
@@ -329,4 +331,24 @@ def test_perfil_operacional_isolado_por_ilpi(alertas_db):
         # Header de outra ILPI nao abre a ILPI B: o contexto vem do vinculo da sessao.
         cruzado = await client.get("/api/central-alertas/", headers=_headers(enf_a, ilpi_id=ilpi_b.id))
         assert cruzado.status_code == 403 and grave_b.id not in cruzado.text
+    _run(alertas_db, op)
+
+
+def test_prazo_no_fuso_da_ilpi(alertas_db):
+    async def op(client, db):
+        ilpi, _, h = await _gestor(db, "ILPI Manaus")
+        ilpi.fuso_horario = "America/Manaus"
+        manaus = ZoneInfo("America/Manaus")
+        hoje_manaus = datetime.now(manaus).date()
+        res = await _residente(db, ilpi.id, "Iara Sintetica")
+        doc = m.Documento(id=_new_id(), residente_id=res.id, instituicao_id=ilpi.id, tipo="Vacina", obrigatorio=False,
+                          situacao="validado", validade=hoje_manaus + timedelta(days=2))
+        db.add(doc)
+        await db.commit()
+        payload = await _alertas(client, h)
+        assert payload["fuso"] == "America/Manaus"
+        item = _um(payload, "documento_vencendo", doc.id)
+        # Validade D vale ate o fim do dia D no fuso DA ILPI (nao no de Sao Paulo).
+        esperado = datetime.combine(doc.validade + timedelta(days=1), time.min, tzinfo=manaus).astimezone(timezone.utc)
+        assert _dt(item["prazo"]) == esperado
     _run(alertas_db, op)

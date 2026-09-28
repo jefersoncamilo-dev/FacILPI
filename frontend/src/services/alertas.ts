@@ -41,6 +41,8 @@ export type ContagemAlertas = Record<Gravidade | Natureza | 'total', number>
 
 export interface CentralAlertas {
   gerado_em: string
+  /** Fuso da ILPI em que os prazos por data foram calculados (#117). */
+  fuso?: string
   contagem: ContagemAlertas
   /** Já na ordem do backend (gravidade, alerta antes de pendência, mais atrasado primeiro). */
   alertas: Alerta[]
@@ -123,12 +125,26 @@ export function destinoDoAlerta(a: Alerta): Destino {
   }
 }
 
-const FUSO = 'America/Sao_Paulo'
-const DIA_CIVIL = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: FUSO })
+export const FUSO_PADRAO = 'America/Sao_Paulo'
+const formatosDoDia = new Map<string, Intl.DateTimeFormat>()
 
-/** Dias de calendário (no fuso da ILPI) entre dois instantes. */
-function diasCivis(de: Date, ate: Date): number {
-  const dia = (d: Date) => Date.parse(`${DIA_CIVIL.format(d)}T00:00:00Z`)
+function formatoDoDia(fuso: string): Intl.DateTimeFormat {
+  let formato = formatosDoDia.get(fuso)
+  if (!formato) {
+    try {
+      formato = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: fuso })
+    } catch {
+      formato = new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: FUSO_PADRAO })
+    }
+    formatosDoDia.set(fuso, formato)
+  }
+  return formato
+}
+
+/** Dias de calendário entre dois instantes no fuso da ILPI (o mesmo em que o backend calculou o prazo). */
+function diasCivis(de: Date, ate: Date, fuso: string): number {
+  const formato = formatoDoDia(fuso)
+  const dia = (d: Date) => Date.parse(`${formato.format(d)}T00:00:00Z`)
   return Math.round((dia(ate) - dia(de)) / 86_400_000)
 }
 
@@ -148,13 +164,15 @@ export function duracaoCurta(ms: number): string {
  * "vence hoje / amanhã / em N dias"; prazo passado → "atrasado há …" (alerta)
  * ou "venceu há …" (pendência); só origem → "há …". `agora` é do cliente.
  */
-export function quandoDoAlerta(a: Pick<Alerta, 'desde' | 'prazo' | 'natureza'>, agora: Date = new Date()): string | null {
+export function quandoDoAlerta(
+  a: Pick<Alerta, 'desde' | 'prazo' | 'natureza'>, agora: Date = new Date(), fuso: string = FUSO_PADRAO,
+): string | null {
   const prazo = a.prazo ? new Date(a.prazo) : null
   const desde = a.desde ? new Date(a.desde) : null
   if (prazo && !Number.isNaN(prazo.getTime())) {
     if (prazo > agora) {
       // O último instante válido é o dia do vencimento (prazo = 00:00 do dia seguinte).
-      const dias = diasCivis(agora, new Date(prazo.getTime() - 1))
+      const dias = diasCivis(agora, new Date(prazo.getTime() - 1), fuso)
       if (dias <= 0) return 'vence hoje'
       if (dias === 1) return 'vence amanhã'
       return `vence em ${dias} dias`
