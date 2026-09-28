@@ -11,6 +11,10 @@ FacILPI é um SaaS multi-tenant para ILPIs. O backend concentra regras de negóc
 - Frontend: React + Vite + Tailwind.
 - Infraestrutura: Docker/Compose conforme ambiente autorizado.
 
+## Datas e fuso horário
+
+Data com hora é gravada e trafega em UTC, sempre com fuso. No ORM, colunas de data com hora usam `UtcDateTime` (`infrastructure/models.py`), que converte para UTC na gravação e marca UTC na leitura, porque o SQLite não guarda fuso; um teste recusa coluna com `DateTime` puro. A API devolve o instante com `Z`. A exibição e o "dia" operacional usam o fuso da ILPI (`America/Sao_Paulo` por padrão): o frontend formata com `formatDateTime`, e o backend converte com o fuso da instituição quando precisa da data local. Migrations continuam declarando `sa.DateTime(timezone=True)`; o tipo físico não muda.
+
 ## Isolamento multi-tenant
 
 O tenant efetivo deve ser derivado da sessão/contexto de segurança autenticado. Identificadores de ILPI enviados pelo cliente não substituem o contexto do backend quando a regra do módulo exige tenant da sessão.
