@@ -6,6 +6,8 @@ import { Modal } from '../components/Modal'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { Alert } from '../components/ui/feedback'
 import { MeuTurno } from '../components/plantao/MeuTurno'
+import { MinhaArea } from '../components/plantao/MinhaArea'
+import { meuPlantaoApi, type MeuPlantaoResumo } from '../services/meuPlantao'
 import { cn } from '../lib/utils'
 import {
   PLANTAO_LIMIT_PADRAO,
@@ -129,6 +131,14 @@ export function MeuPlantao() {
 
   useEffect(() => { carregar() }, [carregar])
 
+  // #126: recorte do plantão pela área (só com plantão ativo e com o que o perfil lê).
+  const [resumo, setResumo] = useState<MeuPlantaoResumo | null>(null)
+  const carregarResumo = useCallback(() => {
+    meuPlantaoApi.resumo().then(setResumo).catch(() => setResumo(null))
+  }, [])
+  useEffect(() => { carregarResumo() }, [carregarResumo])
+  const aoMudarAlerta = useCallback(() => { carregarResumo(); void carregar() }, [carregarResumo, carregar])
+
   useEffect(() => {
     // Auxiliar: a falha aqui não vira erro de tela, só mantém o id como rótulo.
     getResidentesResumo()
@@ -241,7 +251,8 @@ export function MeuPlantao() {
       </div>
 
       {/* #120: início/fim do próprio plantão e por quais áreas responde (só com plantao:registrar). */}
-      <MeuTurno />
+      <MeuTurno onMudou={carregarResumo} />
+      {resumo && <MinhaArea resumo={resumo} podeAssumir={pode('alertas:assumir')} onMudou={aoMudarAlerta} />}
 
       <div className="flex gap-2 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Filtrar por origem">
         {([{ value: 'todos' as Filtro, label: 'Todos' }, ...PLANTAO_ORIGENS]).map(opcao => (
