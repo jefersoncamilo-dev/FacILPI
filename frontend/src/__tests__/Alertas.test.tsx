@@ -204,6 +204,13 @@ describe('quandoDoAlerta (#117)', () => {
     expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo: '2026-09-28T03:00:00Z' }, agora)).toBe('vence amanhã')
     expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo: '2026-09-30T03:00:00Z' }, agora)).toBe('vence em 3 dias')
   })
+  it('usa o fuso da ILPI informado pelo backend (não o de São Paulo)', () => {
+    // Manaus (UTC-4): validade 26/09 vence às 00:00 de 27/09 em Manaus = 04:00Z.
+    const prazo = '2026-09-27T04:00:00Z'
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo }, agora, 'America/Manaus')).toBe('vence hoje')
+    // Com o fuso de São Paulo o último instante válido cairia em 27/09 (o defeito evitado).
+    expect(quandoDoAlerta({ natureza: 'pendencia', desde: null, prazo }, agora)).toBe('vence amanhã')
+  })
   it('prazo passado: atrasado (alerta) ou venceu (pendência)', () => {
     const doze = '2026-09-26T14:42:00Z'
     expect(quandoDoAlerta({ natureza: 'alerta', desde: doze, prazo: doze }, agora)).toBe('atrasado há 18 min')

@@ -15,9 +15,11 @@ export const ESTILO_GRAVIDADE: Record<Gravidade, { faixa: string; ficha: string;
  * quem (residente), onde (local), quando (prazo/origem) e o que fazer — a
  * ação leva ao módulo de origem, que é onde o alerta se resolve.
  */
-export function ItemAlerta({ alerta: a, compacto = false, agora }: { alerta: Alerta; compacto?: boolean; agora?: Date }) {
+export function ItemAlerta({ alerta: a, compacto = false, agora, fuso }: {
+  alerta: Alerta; compacto?: boolean; agora?: Date; fuso?: string
+}) {
   const destino = destinoDoAlerta(a)
-  const quando = quandoDoAlerta(a, agora ?? new Date())
+  const quando = quandoDoAlerta(a, agora ?? new Date(), fuso)
   const meta = [ROTULO_NATUREZA[a.natureza], quando, compacto ? null : a.detalhe].filter(Boolean).join(' · ')
   return (
     <div className="relative flex items-stretch overflow-hidden rounded-card border border-border bg-card shadow-card">
