@@ -72,7 +72,9 @@ Estoque, financeiro, portal da família, agenda ampliada, relatórios e outras f
 
 ## 16. Camada Operacional — ciclo atual: Fases 1–5
 
-Registrada em 28/09 (#115). Objetivo do ciclo: o primeiro fluxo operacional diário completo.
+Registrada em 28/09 (#115). **Status: planejada, em execução por PRs sequenciais** — nada desta seção está integrado até o merge do PR correspondente (confirme no GitHub). Ciclo autorizado em 28/09; o D.4 (seção 7) segue pendente e não é substituído por este ciclo.
+
+Objetivo do ciclo: o primeiro fluxo operacional diário completo.
 
 `profissional inicia plantão → FacILPI identifica sua área e residentes → apresenta prioridades, atividades e alertas → profissional assume uma situação → atua no módulo de origem → a fonte resolve o alerta → o que continuar aberto entra na passagem de plantão → o próximo turno recebe e confirma`
 
@@ -87,12 +89,12 @@ Registrada em 28/09 (#115). Objetivo do ciclo: o primeiro fluxo operacional diá
 
 ### Regras arquiteturais
 
-1. **ID estável do alerta.** O ID é determinístico: `regra:referência[:contexto]`. A referência é o identificador estável da entidade de origem (documento, intercorrência, plano, residente…); o contexto só entra quando a mesma entidade pode originar situações distintas (ex.: etapa da admissão parada). Texto livre entra como hash curto. Nunca entram componentes voláteis (horário atual, posição na lista, contagem). Recalcular a projeção não muda o ID. A Fase 3 associa o estado operacional a esse ID.
-2. **Temporalidade da responsabilidade.** Responsabilidade operacional tem vigência (`inicio_em`, `fim_em`) e é append-only: trocar o responsável encerra a vigência anterior e abre outra, nunca reescreve a anterior. Ex.: evento às 14:10 com Ana responsável desde 07:00; Juliana assume a área às 15:00 → o histórico do evento das 14:10 continua mostrando Ana.
+1. **ID estável do alerta.** O ID é determinístico: `regra:referência[:contexto]`. A referência é o identificador estável da entidade de origem (documento, intercorrência, plano, residente…); o contexto só entra quando a mesma entidade pode originar situações distintas (ex.: etapa da admissão parada). Texto livre da fonte que identifica a situação entra como hash curto — se a fonte muda esse texto, é outra situação. Nunca entram componentes voláteis (horário atual, posição na lista, contagem). Recalcular a projeção não muda o ID. A Fase 3 associa o estado operacional ao ID **por episódio**: quando a projeção deixa de gerar o ID, o estado aberto é encerrado; se a mesma situação voltar a existir depois (mesmo ID), começa como novo, sem herdar "assumido" do episódio anterior.
+2. **Temporalidade da responsabilidade.** Responsabilidade operacional tem vigência (`inicio_em`, `fim_em`) e é append-only: a única alteração permitida numa vigência é gravar `fim_em` uma vez (de vazio para um instante); trocar o responsável encerra a vigência anterior e abre outra, nunca reescreve a anterior. Mais de um profissional pode responder pela mesma área ao mesmo tempo; o mesmo profissional não tem duas vigências abertas para a mesma área. Eventos não copiam o nome do responsável: "quem respondia no instante T" é sempre consultado pela vigência (`inicio_em ≤ T < fim_em`), fonte única. Ex.: evento às 14:10 com Ana responsável desde 07:00; Juliana assume a área às 15:00 → o histórico do evento das 14:10 continua mostrando Ana.
 
 ### Fase 1 — Alertas e Pendências (PR 1A backend, PR 1B frontend)
 
-- `alertas:ler` para cuidador, enfermagem, médico, responsável técnico e administrativo (migration 023; templates + clones institucionais; sem `platform_superuser`).
+- `alertas:ler` para cuidador, enfermagem, médico, responsável técnico e administrativo (migration 023, a criar; templates + clones institucionais; sem `platform_superuser`).
 - Localização operacional mínima no item (`unidade`, `quarto`, `leito`, `local`), sem exigir `quartos_leitos:ler` e sem conceder acesso ao módulo.
 - `natureza` separada de `gravidade` (domínio `alerta | pendencia | informativo | atividade`; nesta fase só `alerta` e `pendencia`). Contagem por natureza.
 - Contrato de tempo: `desde` (origem da situação), `prazo` (vencimento real, só quando o domínio fornece), `gerado_em` (metadado da resposta); "agora" é só referência de apresentação do frontend.
