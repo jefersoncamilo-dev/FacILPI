@@ -21,7 +21,10 @@ function Item({ item }: { item: ItemPassagem }) {
           {observacao ? item.texto : item.titulo}
         </p>
         <p className="text-xs text-muted-foreground">
-          {[observacao && item.categoria ? ROTULO_CATEGORIA[item.categoria] : ROTULO_ORIGEM[item.origem], item.residente_nome,
+          {[observacao && item.categoria ? ROTULO_CATEGORIA[item.categoria]
+            // Item vindo da central: o rótulo segue a natureza (pendência não é "alerta").
+            : item.origem === 'alerta' && item.natureza === 'pendencia' ? 'Pendência' : ROTULO_ORIGEM[item.origem],
+            item.residente_nome,
             item.previsto_em && item.origem === 'atividade' ? `previsto ${formatDateTime(item.previsto_em)}` : null]
             .filter(Boolean).join(' · ')}
         </p>
@@ -40,7 +43,7 @@ function Item({ item }: { item: ItemPassagem }) {
  * Passagens entregues aguardando o próximo turno (#125). Cada item mostra a
  * situação ATUAL da fonte; quem recebe confirma. Quem entregou não confirma.
  */
-export function PassagensAReceber({ podeReceber }: { podeReceber: boolean }) {
+export function PassagensAReceber({ podeReceber, versao = 0 }: { podeReceber: boolean; versao?: number }) {
   const [passagens, setPassagens] = useState<Passagem[] | null>(null)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
@@ -56,7 +59,8 @@ export function PassagensAReceber({ podeReceber }: { podeReceber: boolean }) {
     }
   }, [])
 
-  useEffect(() => { void carregar() }, [carregar])
+  // `versao` muda quando uma passagem é entregue nesta tela: a lista reflete na hora.
+  useEffect(() => { void carregar() }, [carregar, versao])
 
   async function receber(p: Passagem) {
     setErro('')
@@ -115,7 +119,7 @@ export function PassagensAReceber({ podeReceber }: { podeReceber: boolean }) {
  * Passar o plantão (#125): o resumo automático vem do servidor (só com dados
  * reais e o que seu perfil lê); você acrescenta observações curtas.
  */
-export function PassarPlantao() {
+export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) {
   const [aberto, setAberto] = useState(false)
   const [previa, setPrevia] = useState<Previa | null>(null)
   const [emPlantao, setEmPlantao] = useState(false)
@@ -155,6 +159,7 @@ export function PassarPlantao() {
       setEntregue(p)
       setObservacoes([])
       setAberto(false)
+      onEntregue?.()
     } catch (e) {
       setErro(mensagemDeErro(e, 'Não foi possível entregar a passagem.'))
     } finally {

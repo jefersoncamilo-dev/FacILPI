@@ -45,6 +45,7 @@ interface PorResidente {
 export function PassagemPlantao() {
   const { pode, status } = usePermissoesOuPadrao()
   const [janela, setJanela] = useState<Janela>(12)
+  const [entregas, setEntregas] = useState(0)
   const [instante, setInstante] = useState(() => Date.now())
   const [plantao, setPlantao] = useState<Fonte<PlantaoItem[]> | null>(null)
   const [intercorrencias, setIntercorrencias] = useState<Fonte<Intercorrencia[]> | null>(null)
@@ -141,8 +142,8 @@ export function PassagemPlantao() {
       </div>
 
       {/* #125: passagem persistida — receber a do turno anterior e entregar a sua. Abaixo, a visão ao vivo (UX-09). */}
-      {status === 'ok' && pode('passagem_plantao:ler') && <PassagensAReceber podeReceber={pode('passagem_plantao:registrar')} />}
-      {status === 'ok' && pode('passagem_plantao:registrar') && <PassarPlantao />}
+      {status === 'ok' && pode('passagem_plantao:ler') && <PassagensAReceber podeReceber={pode('passagem_plantao:registrar')} versao={entregas} />}
+      {status === 'ok' && pode('passagem_plantao:registrar') && <PassarPlantao onEntregue={() => setEntregas(n => n + 1)} />}
       {status === 'ok' && (pode('passagem_plantao:ler') || pode('passagem_plantao:registrar')) && (
         <h2 className="font-display text-lg font-semibold text-foreground">Visão ao vivo do período</h2>
       )}

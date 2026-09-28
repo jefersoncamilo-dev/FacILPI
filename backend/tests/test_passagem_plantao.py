@@ -82,12 +82,8 @@ def test_passar_e_receber_plantao(passagem_db):
         ilpi, hg, ala_b, x = await _cenario(client, db)
         _, h_ana, _ = await _institucional(db, ilpi, "cuidador")
         _, h_ju, _ = await _institucional(db, ilpi, "enfermagem")
-        # Ana comecou o plantao 1 h atras na Ala B.
-        plantao = await _ok(await client.post("/api/plantoes/iniciar", headers=h_ana, json={"area_ids": [ala_b["id"]]}), 201)
-        uma_hora = _agora() - timedelta(hours=1)
-        await db.execute(update(m.Plantao).where(m.Plantao.id == plantao["id"]).values(inicio_em=uma_hora))
-        await db.execute(update(m.Responsabilidade).where(m.Responsabilidade.plantao_id == plantao["id"]).values(inicio_em=uma_hora))
-        await db.commit()
+        # Ana inicia o plantao AGORA na Ala B: o cuidado atrasado de antes (herdado) tambem passa adiante.
+        await _ok(await client.post("/api/plantoes/iniciar", headers=h_ana, json={"area_ids": [ala_b["id"]]}), 201)
 
         previa = await _ok(await client.get(f"{URL}/previa", headers=h_ana))
         assert previa["area_nome"] == "Ala B", "sem area informada, vale a unica area pela qual Ana responde"
