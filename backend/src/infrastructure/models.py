@@ -1360,3 +1360,74 @@ class AlertaEstado(Base):
     encerramento: Mapped[str] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
+
+
+class PassagemPlantao(Base):
+    """Passagem de plantao (#125): REGISTRO do que foi comunicado, nao fonte de fatos clinicos."""
+
+    __tablename__ = "passagens_plantao"
+    __table_args__ = (
+        UniqueConstraint("id", "ilpi_id", name="uq_passagens_plantao_id_ilpi"),
+        ForeignKeyConstraint(["plantao_id", "ilpi_id"], ["plantoes.id", "plantoes.ilpi_id"],
+                             name="fk_passagens_plantao", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["area_id", "ilpi_id"], ["areas_operacionais.id", "areas_operacionais.ilpi_id"],
+                             name="fk_passagens_area", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["entregue_por_funcionario_id", "ilpi_id"], ["funcionarios.id", "funcionarios.ilpi_id"],
+                             name="fk_passagens_entregue_funcionario", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["recebida_por_funcionario_id", "ilpi_id"], ["funcionarios.id", "funcionarios.ilpi_id"],
+                             name="fk_passagens_recebida_funcionario", ondelete="RESTRICT"),
+        CheckConstraint("situacao IN ('entregue','recebida')", name="ck_passagens_situacao"),
+        CheckConstraint("(situacao = 'entregue' AND recebida_em IS NULL AND recebida_por IS NULL) OR "
+                        "(situacao = 'recebida' AND recebida_em IS NOT NULL AND recebida_por IS NOT NULL)",
+                        name="ck_passagens_recebimento"),
+        CheckConstraint("janela_fim >= janela_inicio", name="ck_passagens_janela"),
+        Index("ix_passagens_ilpi_situacao", "ilpi_id", "situacao", "entregue_em"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
+    plantao_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    area_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    janela_inicio: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    janela_fim: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="entregue")
+    entregue_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    entregue_por_funcionario_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    entregue_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    recebida_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    recebida_por_funcionario_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    recebida_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+
+
+class PassagemItem(Base):
+    """Item da passagem: o que foi dito (titulo/texto) e para onde aponta (origem)."""
+
+    __tablename__ = "passagem_itens"
+    __table_args__ = (
+        ForeignKeyConstraint(["passagem_id", "ilpi_id"], ["passagens_plantao.id", "passagens_plantao.ilpi_id"],
+                             name="fk_passagem_itens_passagem", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"],
+                             name="fk_passagem_itens_residente", ondelete="RESTRICT"),
+        CheckConstraint("origem IN ('alerta','intercorrencia','atividade','ausencia','observacao')", name="ck_passagem_itens_origem"),
+        CheckConstraint("categoria IS NULL OR categoria IN ('assistencial','comportamento','familia_visitas','estrutura_materiais','outro')",
+                        name="ck_passagem_itens_categoria"),
+        CheckConstraint("origem != 'observacao' OR (categoria IS NOT NULL AND texto IS NOT NULL AND length(trim(texto)) > 0)",
+                        name="ck_passagem_itens_observacao"),
+        Index("ix_passagem_itens_passagem", "passagem_id", "ordem"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
+    passagem_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False)
+    origem: Mapped[str] = mapped_column(String(20), nullable=False)
+    alerta_id: Mapped[str] = mapped_column(String(255), nullable=True)
+    regra: Mapped[str] = mapped_column(String(64), nullable=True)
+    referencia_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    gravidade: Mapped[str] = mapped_column(String(20), nullable=True)
+    natureza: Mapped[str] = mapped_column(String(20), nullable=True)
+    titulo: Mapped[str] = mapped_column(String(255), nullable=False)
+    previsto_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    categoria: Mapped[str] = mapped_column(String(30), nullable=True)
+    texto: Mapped[str] = mapped_column(String(280), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())

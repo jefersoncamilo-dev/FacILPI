@@ -78,6 +78,12 @@ Prontuário deve consultar/agregar fatos oficiais já persistidos. Não criar um
 
 Deve sintetizar informações relevantes do turno sem virar nova fonte de fatos clínicos. Deve apontar para origens oficiais e permitir complemento humano quando necessário.
 
+**Passagem persistida (#125, migration 027).** A passagem é o *registro do que foi comunicado* na troca de turno:
+- **Parte automática montada pelo servidor** — nunca aceita do cliente —, só com dados reais e o RBAC de quem entrega, recortada pelos residentes da área (a única área pela qual a pessoa responde, ou a informada): alertas/pendências abertos da projeção (cuidados e doses entram como atividade, item a item), intercorrências abertas que ainda não são alerta, atividades não concluídas na janela do plantão (início do plantão até a entrega; sem plantão, últimas 12 h) e ausências ativas.
+- **Parte manual**: observações curtas (até 280 caracteres) com categoria (`assistencial | comportamento | familia_visitas | estrutura_materiais | outro`) e residente opcional — não é prontuário paralelo.
+- **Recebimento**: o próximo turno vê as passagens entregues com a **situação atual de cada fonte** ("ainda aberto" / "resolvido desde então"), filtrada pela leitura de origem de quem consulta (itens sem acesso aparecem só como contagem), e confirma. Quem entregou não confirma o próprio recebimento. Entregar pode encerrar o plantão no mesmo passo.
+- Auditoria de quem passou/quando e quem recebeu/quando. Permissões `passagem_plantao:ler` (ilpi_admin, cuidador, enfermagem, médico, RT) e `passagem_plantao:registrar` (ilpi_admin, cuidador, enfermagem, RT). A visão ao vivo da UX-09 continua na mesma tela.
+
 ## Alertas e pendências
 
 Decisão do responsável (26/09, #107): alertas são **projeção derivada**, calculada a cada consulta (`GET /api/central-alertas/`) a partir das fontes oficiais; não há job agendado, "ciente" nem dispensa, e o alerta some quando o problema é resolvido na tela de origem. A tabela legada `alertas` (001) e o CRUD `/api/alertas/` continuam `fail_closed`.

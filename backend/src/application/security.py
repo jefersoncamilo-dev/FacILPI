@@ -200,6 +200,9 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "alertas:ler",
         # #123: estado do alerta (assumir/atender/liberar) na ILPI da sessao.
         "alertas:assumir",
+        # #125: passagem de plantao da ILPI da sessao.
+        "passagem_plantao:ler",
+        "passagem_plantao:registrar",
         # #120: estrutura operacional da ILPI da sessao (areas, turnos, plantao real).
         "escala:ler",
         "escala:gerenciar",
