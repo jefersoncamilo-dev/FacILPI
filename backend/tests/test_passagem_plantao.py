@@ -128,6 +128,9 @@ def test_itens_respeitam_a_leitura_de_quem_consulta_e_o_tenant(passagem_db):
     async def op(client, db):
         ilpi, hg, ala_b, x = await _cenario(client, db)
         _, h_ana, _ = await _institucional(db, ilpi, "cuidador")
+        # A area informada precisa ser uma pela qual Ana responde agora.
+        assert (await client.post(URL + "/", headers=h_ana, json={"area_id": ala_b["id"]})).status_code == 403
+        await _ok(await client.post("/api/plantoes/iniciar", headers=h_ana, json={"area_ids": [ala_b["id"]]}), 201)
         entregue = await _ok(await client.post(URL + "/", headers=h_ana, json={
             "area_id": ala_b["id"], "observacoes": [{"categoria": "assistencial", "texto": "Trocar curativo às 22h"}]}), 201)
         total = len(entregue["itens"])
@@ -151,6 +154,80 @@ def test_itens_respeitam_a_leitura_de_quem_consulta_e_o_tenant(passagem_db):
         assert (await client.post(URL + "/", headers=h_b_cuid, json={
             "observacoes": [{"categoria": "outro", "residente_id": x["hilda"].id, "texto": "Residente de outra ILPI"}]})).status_code == 404
         assert (await client.get(f"{URL}/previa", headers=h_b_cuid, params={"area_id": ala_b["id"]})).status_code == 404
+    _run(passagem_db, op)
+
+
+def test_varias_areas_titulo_longo_ausencias_e_recebimento_concorrente(passagem_db):
+    async def op(client, db):
+        ilpi, hg, ala_b, x = await _cenario(client, db)
+        # Ala C com Joao; Carla responde pelas duas areas.
+        ala_c = await _ok(await client.post("/api/escala/areas", headers=hg, json={"nome": "Ala C", "tipo": "ala"}), 201)
+        leito = await _ok(await client.post("/api/quartos_leitos/", headers=hg, json={"unidade": "Ala C", "quarto": "30", "leito": "A"}), 201)
+        await _ok(await client.post(f"/api/quartos_leitos/{leito['id']}/alocar", headers=hg, json={"residente_id": x["joao"].id}))
+        await _ok(await client.post(f"/api/escala/areas/{ala_c['id']}/leitos", headers=hg, json={"quarto_leito_id": leito["id"]}), 201)
+        chaves_enf, _, _ = await _institucional(db, ilpi, "enfermagem")
+        carla = await _create_ilpi_user(db, ilpi, permissions=chaves_enf | {"ausencias:ler"}, profile_key="enf_ausencias", nome="Carla Sintetica")
+        await db.commit()
+        h_carla = _headers(carla, ilpi_id=ilpi.id)
+        # Ausencias: Hilda hospitalizada ha 10 dias (vira alerta, nao se repete); Rita saiu ontem (item de ausencia).
+        longa = m.Ausencia(id=_new_id(), instituicao_id=ilpi.id, residente_id=x["hilda"].id, tipo="hospitalizacao",
+                           data_inicio=_agora() - timedelta(days=10), motivo="Internacao sintetica", usuario_id=carla.id)
+        curta = m.Ausencia(id=_new_id(), instituicao_id=ilpi.id, residente_id=x["rita"].id, tipo="saida_temporaria",
+                           data_inicio=_agora() - timedelta(days=1), motivo="Passeio sintetico", usuario_id=carla.id)
+        db.add_all([longa, curta])
+        # Descricao de cuidado maior que o titulo persistido (255): a passagem trunca, nao quebra.
+        prog_intervencao = await db.scalar(select(m.ProgramacaoCuidado.intervencao_id).where(
+            m.ProgramacaoCuidado.id == x["ocorrencia"].programacao_id))
+        await db.execute(update(m.PaisIntervencao).where(m.PaisIntervencao.id == prog_intervencao)
+                         .values(descricao="Mudanca de decubito com protecao de proeminencias " * 8))
+        await db.commit()
+        await _ok(await client.post("/api/plantoes/iniciar", headers=h_carla, json={"area_ids": [ala_b["id"], ala_c["id"]]}), 201)
+
+        previa = await _ok(await client.get(f"{URL}/previa", headers=h_carla))
+        assert (previa["area_id"], previa["area_nome"]) == (None, "Ala B, Ala C"), "uniao das areas, nao a ILPI inteira"
+        itens = {(i["origem"], i.get("regra"), i["referencia_id"]) for i in previa["itens"]}
+        assert ("alerta", "intercorrencia_grave_aberta", x["fora"].id) in itens, "Joao esta na Ala C"
+        assert ("alerta", "ausencia_prolongada", longa.id) in itens
+        assert ("ausencia", None, longa.id) not in itens, "ausencia que ja e alerta nao se repete"
+        assert ("ausencia", None, curta.id) in itens
+
+        # Area de outra pessoa: so a coordenacao passa por ela.
+        _, h_ana, _ = await _institucional(db, ilpi, "cuidador")
+        assert (await client.get(f"{URL}/previa", headers=h_ana, params={"area_id": ala_c["id"]})).status_code == 403
+        coord = await _create_ilpi_user(db, ilpi, permissions={"passagem_plantao:registrar", "escala:gerenciar"}, profile_key="coord_passagem")
+        so_passagem = await _create_ilpi_user(db, ilpi, permissions={"passagem_plantao:registrar"}, profile_key="so_registra_passagem")
+        await db.commit()
+        assert (await _ok(await client.get(f"{URL}/previa", headers=_headers(coord, ilpi_id=ilpi.id),
+                                           params={"area_id": ala_c["id"]})))["area_nome"] == "Ala C"
+        # Encerrar plantao junto exige plantao:registrar.
+        assert (await client.post(URL + "/", headers=_headers(so_passagem, ilpi_id=ilpi.id),
+                                  json={"encerrar_plantao": True})).status_code == 403
+
+        entregue = await _ok(await client.post(URL + "/", headers=h_carla, json={}), 201)
+        assert entregue["area_id"] is None
+        [cuidado] = [i for i in entregue["itens"] if i["origem"] == "atividade" and i["referencia_id"] == x["ocorrencia"].id]
+        assert len(cuidado["titulo"]) == 255 and cuidado["titulo"].startswith("Cuidado sem registro: Mudanca")
+
+        # Quem recebe sem residentes:ler: ve os itens das origens que le, sem nomes; nada quebra.
+        sem_nomes = await _create_ilpi_user(db, ilpi, profile_key="recebe_sem_residentes", permissions={
+            "passagem_plantao:ler", "passagem_plantao:registrar", "intercorrencias:ler", "plantao:ler", "alertas:ler"})
+        rafa = await _create_ilpi_user(db, ilpi, permissions=chaves_enf, profile_key="enf_rafa", nome="Rafa Sintetico")
+        await db.commit()
+        h_sem, h_rafa = _headers(sem_nomes, ilpi_id=ilpi.id), _headers(rafa, ilpi_id=ilpi.id)
+        [visto] = await _ok(await client.get(URL + "/", headers=h_sem))
+        assert visto["itens"] and all(i["residente_nome"] is None for i in visto["itens"])
+        assert {i["origem"] for i in visto["itens"]} <= {"intercorrencia", "atividade", "alerta", "observacao"}
+
+        # Duas pessoas confirmam ao mesmo tempo: uma recebe, a outra 409 (nunca 500 nem sobrescrita).
+        respostas = await asyncio.gather(
+            client.post(f"{URL}/{entregue['id']}/receber", headers=h_sem),
+            client.post(f"{URL}/{entregue['id']}/receber", headers=h_rafa))
+        assert sorted(r.status_code for r in respostas) == [200, 409], [r.text for r in respostas]
+        vencedor = next(r for r in respostas if r.status_code == 200).json()["recebida_por_nome"]
+        assert (await _ok(await client.get(f"{URL}/{entregue['id']}", headers=h_rafa)))["recebida_por_nome"] == vencedor
+        recebimentos = (await db.scalars(select(m.Auditoria.acao).where(
+            m.Auditoria.registro_id == entregue["id"], m.Auditoria.acao == "passagens_plantao.receber"))).all()
+        assert len(recebimentos) == 1
     _run(passagem_db, op)
 
 

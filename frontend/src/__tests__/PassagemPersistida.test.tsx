@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { PassagensAReceber, PassarPlantao } from '../components/plantao/PassagemPersistida'
 import { api } from '../services/api'
@@ -92,12 +92,66 @@ describe('Passar plantão (#125)', () => {
     await userEvent.click(within(form).getByRole('button', { name: /Adicionar observação/ }))
     expect(within(screen.getByRole('list', { name: 'Observações' })).getByText('Comportamento: Agitada no fim da tarde')).toBeTruthy()
 
-    expect((screen.getByRole('checkbox', { name: 'Encerrar meu plantão ao entregar' }) as HTMLInputElement).checked).toBe(true)
+    // Encerrar o plantão é escolha explícita: vem desmarcado.
+    const encerrar = screen.getByRole('checkbox', { name: 'Encerrar meu plantão ao entregar' }) as HTMLInputElement
+    expect(encerrar.checked).toBe(false)
+    await userEvent.click(encerrar)
     await userEvent.click(screen.getByRole('button', { name: /Entregar passagem/ }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/passagens/', {
       area_id: 'a1', encerrar_plantao: true,
       observacoes: [{ categoria: 'comportamento', residente_id: 'r1', texto: 'Agitada no fim da tarde' }],
     }))
     expect(await screen.findByText(/Passagem entregue/)).toBeTruthy()
+  })
+
+  it('resumo que falhou: tentar de novo ou voltar; no máximo 20 observações', async () => {
+    const previa: Previa = { area_id: null, area_nome: 'Ala B, Ala C', janela_inicio: '2026-09-28T10:00:00Z', janela_fim: '2026-09-28T22:00:00Z', itens: [] }
+    let falhar = true
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === '/passagens/previa') {
+        if (falhar) throw { response: { status: 500, data: {} } }
+        return { data: previa } as any
+      }
+      return { data: { pode_registrar: true, funcionario_id: 'f1', plantao: null } } as any
+    })
+    render(<PassarPlantao />)
+    await userEvent.click(screen.getByRole('button', { name: /Preparar passagem/ }))
+    expect(await screen.findByText('Não foi possível montar o resumo do plantão.')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Voltar' }))
+    expect(screen.queryByText('Não foi possível montar o resumo do plantão.')).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /Preparar passagem/ }))
+    falhar = false
+    await userEvent.click(await screen.findByRole('button', { name: 'Tentar de novo' }))
+    expect(await screen.findByText(/Área: Ala B, Ala C/)).toBeTruthy()
+    // Sem plantão ativo não há o que encerrar.
+    expect(screen.queryByRole('checkbox', { name: 'Encerrar meu plantão ao entregar' })).toBeNull()
+
+    const form = screen.getByRole('form', { name: 'Nova observação' })
+    const texto = within(form).getByRole('textbox', { name: 'Observação' })
+    const adicionar = within(form).getByRole('button', { name: /Adicionar observação/ }) as HTMLButtonElement
+    for (let n = 1; n <= 20; n++) {
+      fireEvent.change(texto, { target: { value: `Obs ${n}` } })
+      fireEvent.click(adicionar)
+    }
+    expect(within(screen.getByRole('list', { name: 'Observações' })).getAllByRole('listitem')).toHaveLength(20)
+    fireEvent.change(texto, { target: { value: 'Obs 21' } })
+    expect(adicionar.disabled).toBe(true)
+    expect(screen.getByText('Limite de 20 observações por passagem.')).toBeTruthy()
+  })
+
+  it('confirmar recebimento fica desabilitado enquanto envia', async () => {
+    mockGet.mockResolvedValue({ data: [passagem({})] } as any)
+    let concluir: (v: unknown) => void = () => {}
+    mockPost.mockReturnValue(new Promise(r => { concluir = r }) as any)
+    render(<PassagensAReceber podeReceber />)
+    const botao = await screen.findByRole('button', { name: /Confirmar recebimento/ })
+    await userEvent.click(botao)
+    const enviando = screen.getByRole('button', { name: /Confirmando/ }) as HTMLButtonElement
+    expect(enviando.disabled).toBe(true)
+    await userEvent.click(enviando)
+    expect(mockPost).toHaveBeenCalledTimes(1)
+    mockGet.mockResolvedValue({ data: [] } as any)
+    concluir({ data: passagem({ situacao: 'recebida' }) })
+    expect(await screen.findByText(/Recebimento confirmado/)).toBeTruthy()
   })
 })
