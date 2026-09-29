@@ -10,6 +10,7 @@ import { Button } from '../components/ui/button'
 import { Alert, Badge, Skeleton } from '../components/ui/feedback'
 import { EmptyState, ErrorState } from '../components/ui/states'
 import { cn } from '../lib/utils'
+import { PassagensAReceber, PassarPlantao } from '../components/plantao/PassagemPersistida'
 
 /**
  * Passagem de Plantão (UX-09 / #82). LEITURA das fontes governadas — nada aqui
@@ -44,6 +45,7 @@ interface PorResidente {
 export function PassagemPlantao() {
   const { pode, status } = usePermissoesOuPadrao()
   const [janela, setJanela] = useState<Janela>(12)
+  const [entregas, setEntregas] = useState(0)
   const [instante, setInstante] = useState(() => Date.now())
   const [plantao, setPlantao] = useState<Fonte<PlantaoItem[]> | null>(null)
   const [intercorrencias, setIntercorrencias] = useState<Fonte<Intercorrencia[]> | null>(null)
@@ -138,6 +140,13 @@ export function PassagemPlantao() {
         </div>
         <Button variant="outline" onClick={() => setInstante(Date.now())}><RefreshCw aria-hidden="true" /> Atualizar</Button>
       </div>
+
+      {/* #125: passagem persistida — receber a do turno anterior e entregar a sua. Abaixo, a visão ao vivo (UX-09). */}
+      {status === 'ok' && pode('passagem_plantao:ler') && <PassagensAReceber podeReceber={pode('passagem_plantao:registrar')} versao={entregas} />}
+      {status === 'ok' && pode('passagem_plantao:registrar') && <PassarPlantao onEntregue={() => setEntregas(n => n + 1)} />}
+      {status === 'ok' && (pode('passagem_plantao:ler') || pode('passagem_plantao:registrar')) && (
+        <h2 className="font-display text-lg font-semibold text-foreground">Visão ao vivo do período</h2>
+      )}
 
       <div className="space-y-2">
         <div className="flex flex-wrap gap-2" role="group" aria-label="Período do plantão">
