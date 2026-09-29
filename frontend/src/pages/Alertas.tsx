@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { CheckCircle2, Info, RefreshCw } from 'lucide-react'
 import { recarregarCentralAlertas, useCentralAlertas } from '../hooks/useCentralAlertas'
+import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { LIMIARES, type Alerta } from '../services/alertas'
 import { ESTILO_GRAVIDADE, ItemAlerta } from '../components/alertas/ItemAlerta'
 import { Button } from '../components/ui/button'
@@ -20,10 +21,15 @@ const ABAS: { id: Aba; rotulo: string; filtro: (a: Alerta) => boolean; vazio: st
 
 const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
 
-function Lista({ itens, agora, fuso }: { itens: Alerta[]; agora: Date; fuso?: string }) {
+function Lista({ itens, agora, fuso, podeAssumir, podeLiberarOutros, onMudou }: {
+  itens: Alerta[]; agora: Date; fuso?: string; podeAssumir: boolean; podeLiberarOutros: boolean; onMudou: () => void
+}) {
   return (
     <ul className="space-y-2">
-      {itens.map(a => <li key={a.id}><ItemAlerta alerta={a} agora={agora} fuso={fuso} /></li>)}
+      {itens.map(a => (
+        <li key={a.id}><ItemAlerta alerta={a} agora={agora} fuso={fuso} podeAssumir={podeAssumir}
+          podeLiberarOutros={podeLiberarOutros} onMudou={onMudou} /></li>
+      ))}
     </ul>
   )
 }
@@ -38,6 +44,10 @@ function Lista({ itens, agora, fuso }: { itens: Alerta[]; agora: Date; fuso?: st
  */
 export function Alertas() {
   const carga = useCentralAlertas()
+  // #123: assumir/atender/liberar; o backend confere de novo em cada ação.
+  const permissoes = usePermissoesOuPadrao()
+  const podeAssumir = permissoes.pode('alertas:assumir')
+  const podeLiberarOutros = podeAssumir && permissoes.pode('escala:gerenciar')
   const [aba, setAba] = useState<Aba>('todos')
 
   // Abrir a Central sempre busca o retrato atual (e atualiza o sino junto).
@@ -128,7 +138,8 @@ export function Alertas() {
                     <span aria-hidden="true" className={cn('size-2.5 rounded-full', ESTILO_GRAVIDADE.critico.ponto)} />
                     Prioridade agora <span className="text-sm font-medium text-muted-foreground">({prioridade.length})</span>
                   </h2>
-                  <Lista itens={prioridade} agora={agora} fuso={dados.fuso} />
+                  <Lista itens={prioridade} agora={agora} fuso={dados.fuso} podeAssumir={podeAssumir}
+                    podeLiberarOutros={podeLiberarOutros} onMudou={atualizar} />
                 </section>
               )}
               {demais.length > 0 && (
@@ -138,7 +149,8 @@ export function Alertas() {
                       Demais <span className="text-sm font-medium text-muted-foreground">({demais.length})</span>
                     </h2>
                   )}
-                  <Lista itens={demais} agora={agora} fuso={dados.fuso} />
+                  <Lista itens={demais} agora={agora} fuso={dados.fuso} podeAssumir={podeAssumir}
+                    podeLiberarOutros={podeLiberarOutros} onMudou={atualizar} />
                 </section>
               )}
             </div>

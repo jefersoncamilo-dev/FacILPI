@@ -24,7 +24,7 @@ from .test_d3_admissao import ALL as ADMISSOES, _client
 from .test_d3_admissao_migration import _migrate, _ref
 from src.infrastructure import models as m
 
-HEAD = "023_alertas_operacionais"
+HEAD = "026_alerta_estados"
 URL = "/api/central-alertas/"
 FONTES = {
     "residentes:ler", "documentos:ler", "documentos:validar", "avaliacoes:ler", "grau_dependencia:ler",

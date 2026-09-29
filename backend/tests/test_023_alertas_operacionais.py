@@ -84,11 +84,20 @@ def test_023_concede_aos_perfis_operacionais_e_clones(pre023_db):
             assert await _tem(db, chave, None) == 1, f"template {chave} sem alertas:ler"
             assert await _tem(db, chave, semeado["ilpi"]) == 1, f"clone {chave} sem alertas:ler"
             assert await _chaves_perfil(db, semeado["perfis"][chave]) == semeado["antes"][chave] | {CHAVE}
-            r = await client.get(URL, headers=_headers(semeado["usuarios"][chave], ilpi_id=semeado["ilpi"]))
-            assert r.status_code == 200, (chave, r.text)
         assert await _tem(db, "ilpi_admin", None) == 1
         assert await _tem(db, "platform_superuser", None) == 0, "superusuario nao recebe alertas"
     asyncio.run(_client(pre023_db, depois))
+
+    # A central le o schema de head (estado do alerta, 026): a leitura e conferida
+    # em head e o banco volta a 023 para o downgrade abaixo.
+    _migrate(pre023_db, target="head")
+
+    async def em_head(client, db):
+        for chave in OPERACIONAIS:
+            r = await client.get(URL, headers=_headers(semeado["usuarios"][chave], ilpi_id=semeado["ilpi"]))
+            assert r.status_code == 200, (chave, r.text)
+    asyncio.run(_client(pre023_db, em_head))
+    _migrate(pre023_db, target=HEAD, command="downgrade")
 
     _migrate(pre023_db, target=PRE_023, command="downgrade")
 

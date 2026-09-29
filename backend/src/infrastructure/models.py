@@ -1315,3 +1315,48 @@ class Escala(Base):
     atualizado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
+
+
+class AlertaEstado(Base):
+    """Estado persistente do alerta (#123): o que a equipe fez, por episodio.
+
+    Nunca cria nem mantem alerta: a projecao (id estavel) decide se a situacao
+    existe; quando deixa de gerar o id, o estado aberto vira ``resolvido`` pela
+    fonte. Um estado aberto por (ILPI, alerta_id); fechado, fica como historico.
+    """
+
+    __tablename__ = "alerta_estados"
+    __table_args__ = (
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"],
+                             name="fk_alerta_estados_residente", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["assumido_por_funcionario_id", "ilpi_id"], ["funcionarios.id", "funcionarios.ilpi_id"],
+                             name="fk_alerta_estados_funcionario", ondelete="RESTRICT"),
+        CheckConstraint("situacao IN ('assumido','em_atendimento','resolvido','liberado')", name="ck_alerta_estados_situacao"),
+        CheckConstraint(
+            "(situacao IN ('assumido','em_atendimento') AND encerrado_em IS NULL AND encerramento IS NULL) OR "
+            "(situacao = 'resolvido' AND encerramento = 'fonte' AND encerrado_em IS NOT NULL) OR "
+            "(situacao = 'liberado' AND encerramento = 'liberado' AND encerrado_em IS NOT NULL)",
+            name="ck_alerta_estados_encerramento"),
+        CheckConstraint("situacao != 'em_atendimento' OR em_atendimento_em IS NOT NULL", name="ck_alerta_estados_atendimento"),
+        Index("uq_alerta_estados_aberto", "ilpi_id", "alerta_id", unique=True,
+              sqlite_where=sa.text("situacao IN ('assumido','em_atendimento')"),
+              postgresql_where=sa.text("situacao IN ('assumido','em_atendimento')")),
+        Index("ix_alerta_estados_ilpi_situacao", "ilpi_id", "situacao"),
+        Index("ix_alerta_estados_ilpi_alerta", "ilpi_id", "alerta_id", "assumido_em"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
+    alerta_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    regra: Mapped[str] = mapped_column(String(64), nullable=False)
+    referencia_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False)
+    assumido_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    assumido_por_funcionario_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    assumido_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    em_atendimento_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    encerrado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    encerrado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    encerramento: Mapped[str] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())

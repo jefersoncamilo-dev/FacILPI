@@ -62,9 +62,17 @@ def test_022_concede_ao_administrador_e_so_a_ele(pre022_db):
         assert await _tem(db, "ilpi_admin", semeado["ilpi"]) == 1, "clone existente sem alertas:ler"
         for chave in OUTROS_TEMPLATES:
             assert await _tem(db, chave, None) == 0, f"{chave} nao deveria receber alertas"
+    asyncio.run(_client(pre022_db, depois))
+
+    # A central le o schema de head (estado do alerta, 026): a leitura e conferida
+    # em head e o banco volta a 022 para o downgrade abaixo.
+    _migrate(pre022_db, target="head")
+
+    async def em_head(client, db):
         r = await client.get(URL, headers=_headers(semeado["gestor"], ilpi_id=semeado["ilpi"]))
         assert r.status_code == 200, r.text
-    asyncio.run(_client(pre022_db, depois))
+    asyncio.run(_client(pre022_db, em_head))
+    _migrate(pre022_db, target=HEAD, command="downgrade")
 
     _migrate(pre022_db, target=PRE_022, command="downgrade")
 

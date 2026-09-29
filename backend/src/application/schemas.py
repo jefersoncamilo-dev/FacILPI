@@ -106,6 +106,36 @@ AlertaCategoria = Literal["admissao_documentos", "avaliacao_grau_pais", "plantao
 AlertaNatureza = Literal["alerta", "pendencia", "informativo", "atividade"]
 
 
+class AlertaEstadoItem(BaseModel):
+    """#123: o que a equipe fez sobre o alerta (estado aberto do episodio atual)."""
+
+    id: str
+    situacao: Literal["assumido", "em_atendimento"]
+    por_nome: str
+    por_mim: bool
+    assumido_em: datetime
+    em_atendimento_em: Optional[datetime] = None
+
+
+class AlertaAcao(BaseModel):
+    alerta_id: str = Field(..., min_length=3, max_length=255)
+
+
+class AlertaEstadoResposta(BaseModel):
+    alerta_id: str
+    estado: Optional[AlertaEstadoItem] = None
+
+
+class AlertaEstadoHistorico(BaseModel):
+    id: str
+    situacao: Literal["assumido", "em_atendimento", "resolvido", "liberado"]
+    por_nome: str
+    assumido_em: datetime
+    em_atendimento_em: Optional[datetime] = None
+    encerrado_em: Optional[datetime] = None
+    encerramento: Optional[Literal["fonte", "liberado"]] = None
+
+
 class AlertaGestorItem(BaseModel):
     # id estavel: regra:referencia[:contexto] — nunca muda so porque a projecao foi recalculada.
     id: str
@@ -126,6 +156,8 @@ class AlertaGestorItem(BaseModel):
     # desde: quando nasceu a situacao de origem; prazo: quando vence/venceu (so se o dominio fornece).
     desde: Optional[datetime] = None
     prazo: Optional[datetime] = None
+    # #123: estado persistente (nulo = novo, ninguem assumiu).
+    estado: Optional[AlertaEstadoItem] = None
 
 
 class AlertaGestorContagem(BaseModel):
