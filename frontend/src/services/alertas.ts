@@ -112,6 +112,11 @@ export interface Destino {
   acao: string
 }
 
+/** Meu Plantão a partir de um horário passado (`?desde=`, já aceito pela tela). */
+export function plantaoDesde(iso: string | null | undefined): string {
+  return iso ? `/plantao?desde=${encodeURIComponent(iso)}` : '/plantao'
+}
+
 /** Onde e como cada alerta é resolvido — o único mapa de destinos (sino, Central, Início, Meu Plantão). */
 export function destinoDoAlerta(a: Alerta): Destino {
   switch (a.regra) {
@@ -132,10 +137,11 @@ export function destinoDoAlerta(a: Alerta): Destino {
       return { to: `/plano/${a.referencia_id}`, rotulo: 'Plano de Cuidados', acao: 'Abrir PAIS' }
     case 'pais_ausente':
       return { to: '/plano', rotulo: 'Plano de Cuidados', acao: 'Elaborar PAIS' }
+    // O prazo é o horário mais antigo sem registro: com ?desde= o Meu Plantão lista o atraso.
     case 'cuidados_sem_registro':
-      return { to: '/plantao', rotulo: 'Meu Plantão', acao: 'Registrar cuidados' }
+      return { to: plantaoDesde(a.prazo), rotulo: 'Meu Plantão', acao: 'Registrar cuidados' }
     case 'doses_sem_registro':
-      return { to: '/plantao', rotulo: 'Meu Plantão', acao: 'Registrar doses' }
+      return { to: plantaoDesde(a.prazo), rotulo: 'Meu Plantão', acao: 'Registrar doses' }
     case 'intercorrencia_grave_aberta':
     case 'intercorrencia_aberta_prolongada':
       return { to: '/intercorrencias', rotulo: 'Intercorrências', acao: 'Ver intercorrência' }

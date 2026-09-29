@@ -11,6 +11,7 @@ import { Input, Label } from '../components/ui/input'
 import { Alert } from '../components/ui/feedback'
 import { SESSION_ENDED_KEY } from '../types/context'
 import type { ContextOption } from '../types/context'
+import { destinoAposLogin } from '../services/meuPlantao'
 
 // A marca só é consumida quando a pessoa tenta entrar de novo. Consumir ao
 // montar falhava: após um 401 o React já redireciona pela SPA (montando o
@@ -60,7 +61,8 @@ export function Login() {
       } else {
         // Contexto único global é o operador da plataforma: a aplicação
         // institucional responderia 403 em tudo.
-        navigate(res.options[0]?.scope === 'global' ? '/platform' : '/')
+        // #126: com plantão ativo, Meu Plantão é o destino operacional.
+        navigate(res.options[0]?.scope === 'global' ? '/platform' : await destinoAposLogin())
       }
     } catch (e: any) {
       // Conta com mais de um vínculo institucional: o backend exige escolher o
@@ -86,7 +88,7 @@ export function Login() {
     setPicking(true)
     try {
       await switchContext(opt)
-      navigate('/')
+      navigate(await destinoAposLogin())
     } catch (e: any) {
       setErr(mensagemDeErro(e, 'Contexto não autorizado'))
     } finally {

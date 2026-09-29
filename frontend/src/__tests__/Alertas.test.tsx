@@ -113,7 +113,9 @@ describe('Alertas e Pendências (#107, #117) — página', () => {
 
     const prioridade = await screen.findByRole('region', { name: 'Prioridade agora (1)' })
     expect(within(prioridade).getByText('2 doses de medicação sem registro')).toBeTruthy()
-    expect(within(prioridade).getByRole('link', { name: 'Registrar doses em Meu Plantão' }).getAttribute('href')).toBe('/plantao')
+    // O Meu Plantão abre a partir do horário mais antigo sem registro, para o atraso aparecer na lista.
+    expect(within(prioridade).getByRole('link', { name: 'Registrar doses em Meu Plantão' }).getAttribute('href'))
+      .toBe('/plantao?desde=2026-09-26T14%3A42%3A00Z')
 
     const demais = screen.getByRole('region', { name: 'Demais (3)' })
     expect(within(demais).getByRole('link', { name: 'Continuar admissão em Admissões' }).getAttribute('href')).toBe('/admissoes/adm-9')
@@ -254,7 +256,7 @@ describe('Sino, navegação inferior e Início (#107, #117)', () => {
       'Acesso ainda não utilizado: Tiago Ramos',
       'Documento vence em breve: 1',
     ])
-    expect(itens[0].getAttribute('href')).toBe('/plantao')
+    expect(itens[0].getAttribute('href')).toBe('/plantao?desde=2026-09-26T14%3A42%3A00Z')
     const central_ = itens[itens.length - 1]
     expect(central_.textContent).toContain('Ver Central de Alertas')
     expect(central_.getAttribute('href')).toBe('/alertas')
