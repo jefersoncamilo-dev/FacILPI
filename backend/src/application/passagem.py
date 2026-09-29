@@ -360,8 +360,10 @@ async def _por_area(db, ilpi, areas, automaticos: list[dict], manuais: list[dict
     area_de = {r: area for area, residentes in (await residentes_das_areas(db, ilpi, [a for a, _ in areas])).items()
                for r in residentes}
     grupos: dict[str, list[dict]] = {a: [] for a, _ in areas}
+    primeira = areas[0][0]
     for item in automaticos:
-        grupos[area_de[item["residente_id"]]].append(item)
+        # Residente que trocou de leito entre as duas leituras: fica na primeira area (nunca 500).
+        grupos[area_de.get(item["residente_id"], primeira)].append(item)
     for item in manuais:
         destino = area_de.get(item.get("residente_id"))
         for area_id in ([destino] if destino else list(grupos)):
