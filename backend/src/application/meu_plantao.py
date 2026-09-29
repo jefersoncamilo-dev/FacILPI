@@ -29,7 +29,7 @@ from ..infrastructure.database import get_db
 from . import schemas as s
 from .alertas import HORAS_JANELA_PLANTAO, _estado_item, _estados_abertos, _local, _nomes_de, projetar
 from .operacao import (
-    EscalaResposta, PlantaoResposta, _escalas_resposta, _plantoes_resposta, _responsabilidades,
+    EscalaResposta, PlantaoResposta, _escalas_resposta, _fim_de_hoje, _plantoes_resposta, _responsabilidades,
     funcionario_da_sessao, residentes_das_areas,
 )
 from .rotina import meu_plantao as projecao_do_plantao
@@ -93,11 +93,13 @@ async def meu_plantao(db: AsyncSession = Depends(get_db), context: SecurityConte
         m.Plantao.ilpi_id == ilpi, m.Plantao.funcionario_id == funcionario.id,
         m.Plantao.situacao == "em_andamento"))).scalar_one_or_none()
     if plantao is None:
+        # Mesmo recorte de /plantoes/atual: so a escala que toca HOJE (fuso da ILPI) pode ser iniciada.
         pendentes = (await db.scalars(select(m.Escala).where(
             m.Escala.ilpi_id == ilpi, m.Escala.funcionario_id == funcionario.id, m.Escala.situacao == "prevista",
-            m.Escala.plantao_id.is_(None), m.Escala.fim_previsto > agora)
+            m.Escala.plantao_id.is_(None), m.Escala.fim_previsto > agora,
+            m.Escala.inicio_previsto < await _fim_de_hoje(db, ilpi, agora))
             .order_by(m.Escala.inicio_previsto, m.Escala.id).limit(3))).all()
-        resposta.escalas_pendentes = await _escalas_resposta(db, ilpi, list(pendentes))
+        resposta.escalas_pendentes = await _escalas_resposta(db, ilpi, list(pendentes), mostrar_motivo=False)
         return resposta
 
     resposta.plantao = (await _plantoes_resposta(db, ilpi, [plantao]))[0]

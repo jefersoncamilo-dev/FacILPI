@@ -4,6 +4,7 @@ Somente bancos descartaveis (SQLite em tmp_path; PostgreSQL via D3_TEST_POSTGRES
 """
 
 import asyncio
+from datetime import timedelta
 
 
 
@@ -12,6 +13,7 @@ from .test_alertas_gestor import _agora
 from .test_alertas_operacionais import _institucional
 from .test_d2_rotina import _create_ilpi_user, _headers
 from .test_d3_admissao import _client
+from .test_escala_planejada import _funcionario_id
 from .test_operacao_escala import _ok
 from .test_passagem_plantao import URL as PASSAGENS, _cenario, passagem_db  # noqa: F401 (fixture)
 from src.infrastructure import models as m
@@ -25,11 +27,20 @@ def _run(ref, operation):
 
 def test_sem_plantao_nada_novo_aparece(passagem_db):
     async def op(client, db):
-        ilpi, _, _, _ = await _cenario(client, db)
-        _, h_ana, _ = await _institucional(db, ilpi, "cuidador")
+        ilpi, hg, ala_b, _ = await _cenario(client, db)
+        _, h_ana, ana = await _institucional(db, ilpi, "cuidador")
+        f_ana = await _funcionario_id(db, ana)
+        # Escala de hoje e de amanha: so a de hoje pode ser iniciada, entao so ela aparece.
+        hoje = await _ok(await client.post("/api/escala/previsto", headers=hg, json={
+            "funcionario_id": f_ana, "area_id": ala_b["id"], "inicio_previsto": (_agora() - timedelta(hours=1)).isoformat(),
+            "fim_previsto": (_agora() + timedelta(hours=11)).isoformat()}), 201)
+        await _ok(await client.post("/api/escala/previsto", headers=hg, json={
+            "funcionario_id": f_ana, "area_id": ala_b["id"], "inicio_previsto": (_agora() + timedelta(hours=30)).isoformat(),
+            "fim_previsto": (_agora() + timedelta(hours=36)).isoformat()}), 201)
         antes = await _ok(await client.get("/api/plantao/", headers=h_ana))
         visao = await _ok(await client.get(URL, headers=h_ana))
         assert visao["plantao"] is None and visao["areas"] == []
+        assert [e["id"] for e in visao["escalas_pendentes"]] == [hoje["id"]]
         for bloco in ("residentes", "prioridades", "atividades", "passagens_a_receber"):
             assert visao[bloco] is None, bloco
         # A projecao de sempre continua igual para quem nao esta de plantao.
