@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `020_documentos_admin_anexar`. O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `027_passagem_plantao` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -24,7 +24,11 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Medicação: medicamento, prescrição, programação, dose prevista e administração.
 - Plano de Cuidados/PAIS: plano, necessidades, metas e intervenções.
 - Rotina assistencial: programação, ocorrência e execução.
-- Projeção inicial de Meu Plantão.
+- Central de Alertas e Pendências: projeção calculada a cada consulta, RBAC por origem, ID estável, natureza/prazo e localização mínima (021–023).
+- Estado persistente do alerta: assumir, em atendimento, liberar; resolução só pela fonte (026).
+- Escala operacional: áreas, turnos, plantão real e responsabilidade temporal append-only (024); escala planejada × plantão real, ausência, substituição simples e cobertura (025).
+- Passagem de plantão persistida: resumo montado pelo servidor, observações curtas e recebimento com a situação atual da fonte (027).
+- Meu Plantão como destino operacional do turno (área, residentes, prioridades, atividades, passagens a receber) e pós-login.
 - Matriz de permissões clínicas/institucionais.
 - Admissão ponta a ponta.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
@@ -34,8 +38,13 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 ### Prontuário longitudinal
 D.4 é a próxima frente funcional em recuperação/correção no fluxo atual. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. Não assuma que D.4 está integrado sem verificar GitHub.
 
+### Camada Operacional (Fases 1–5 integradas)
+Fluxo diário completo: inicia plantão → área/residentes → prioridades/atividades → assume → resolve na origem → a fonte encerra → passagem → próximo turno confirma. Regras em `docs/DOMAIN_RULES.md`; visão e Fases 6–14 (fora do ciclo, sem design técnico) em `docs/ROADMAP.md`.
+
+Decisões de produto pendentes: (1) alerta de doses sem registro para o cuidador — hoje segue `plantao:ler`, como o Meu Plantão; (2) doses/cuidados que saem da janela de 24 h encerram o estado do alerta como "resolvido pela fonte" sem registro. As migrations 021–027 precisam ser aplicadas em ordem em qualquer ambiente persistente — decisão humana, nunca automática.
+
 ### Passagem de Plantão
-D.5 permanece posterior ao Prontuário. Deve consumir fontes oficiais/projeções sem duplicar fonte clínica de verdade.
+Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. A integração com o Prontuário longitudinal (D.4) segue posterior.
 
 ### Frontend
 Existe frontend funcional, mas a consolidação visual/mobile-first definitiva ainda é uma etapa posterior ao hardening do núcleo operacional. Não iniciar redesign amplo dentro de uma Issue backend.
