@@ -204,3 +204,101 @@ def test_025_cria_e_reverte_sem_apagar_planejamento(pre025_db):
     _run(pre025_db, limpar)
     _migrate(pre025_db, target="024_escala_estrutura", command="downgrade")
     _migrate(pre025_db, target=HEAD)
+
+
+def test_revisao_motivo_dia_outro_ilpi_e_substituicao_de_novo(planejada_db):
+    async def op(client, db):
+        ilpi, _, hg, ala_b = await _ilpi_com_area(client, db)
+        ilpi_b, _, h_b, ala_outra = await _ilpi_com_area(client, db, "ILPI B")
+        cuidador = await _template(db, "cuidador")
+        ana, h_ana = await _usuario(db, ilpi, cuidador, "cuidador", "Ana Sintetica")
+        ju, _ = await _usuario(db, ilpi, cuidador, "cuidador_j", "Juliana Sintetica")
+        bia, _ = await _usuario(db, ilpi, cuidador, "cuidador_b", "Bia Sintetica")
+        f_ana, f_ju, f_bia = [await _funcionario_id(db, u) for u in (ana, ju, bia)]
+        turno_b = await _ok(await client.post("/api/escala/turnos", headers=h_b, json={"nome": "Diurno", "hora_inicio": "07:00", "hora_fim": "19:00"}), 201)
+
+        # Turno e area de outra ILPI: inexistentes (404).
+        assert (await client.post("/api/escala/previsto", headers=hg, json={
+            "funcionario_id": f_ana, "turno_id": turno_b["id"], "data": "2030-01-15"})).status_code == 404
+        assert (await client.post("/api/escala/previsto", headers=hg, json={
+            "funcionario_id": f_ana, "area_id": ala_outra["id"], "inicio_previsto": _agora().isoformat(),
+            "fim_previsto": (_agora() + timedelta(hours=2)).isoformat()})).status_code == 404
+
+        # Motivo de ausencia (pode ser dado de saude) so para quem gere a escala.
+        falta = await _escala_agora(client, hg, f_bia)
+        await _ok(await client.post(f"/api/escala/previsto/{falta['id']}/ausencia", headers=hg, json={"motivo": "Atestado medico"}))
+        de_gestor = {e["id"]: e for e in (await _ok(await client.get("/api/escala/previsto", headers=hg)))["escalas"]}
+        de_cuidadora = {e["id"]: e for e in (await _ok(await client.get("/api/escala/previsto", headers=h_ana)))["escalas"]}
+        assert de_gestor[falta["id"]]["motivo"] == "Atestado medico"
+        assert de_cuidadora[falta["id"]]["motivo"] is None and de_cuidadora[falta["id"]]["estado"] == "ausente"
+
+        # Escala de amanha nao aparece como pendente nem se cumpre hoje; escala encerrada tambem nao.
+        amanha = await _ok(await client.post("/api/escala/previsto", headers=hg, json={
+            "funcionario_id": f_ana, "inicio_previsto": (_agora() + timedelta(days=2)).isoformat(),
+            "fim_previsto": (_agora() + timedelta(days=2, hours=12)).isoformat()}), 201)
+        assert amanha["id"] not in {e["id"] for e in (await _ok(await client.get("/api/plantoes/atual", headers=h_ana)))["escalas_pendentes"]}
+        r = await client.post("/api/plantoes/iniciar", headers=h_ana, json={"escala_id": amanha["id"]})
+        assert r.status_code == 409 and "outro dia" in r.text
+        passada = await _ok(await client.post("/api/escala/previsto", headers=hg, json={
+            "funcionario_id": f_ana, "inicio_previsto": (_agora() - timedelta(hours=10)).isoformat(),
+            "fim_previsto": (_agora() - timedelta(hours=2)).isoformat()}), 201)
+        r = await client.post("/api/plantoes/iniciar", headers=h_ana, json={"escala_id": passada["id"]})
+        assert r.status_code == 409 and "terminou" in r.text
+        # Escala de outra ILPI ao iniciar: inexistente.
+        bia_b, _ = await _usuario(db, ilpi_b, cuidador, "cuidador", "Bia B")
+        de_b = await _escala_agora(client, h_b, await _funcionario_id(db, bia_b))
+        assert (await client.post("/api/plantoes/iniciar", headers=h_ana, json={"escala_id": de_b["id"]})).status_code == 404
+
+        # Substituta cancelada libera nova substituicao.
+        original = await _escala_agora(client, hg, f_ana, ala_b["id"])
+        _, sub = await _ok(await client.post(f"/api/escala/previsto/{original['id']}/substituir", headers=hg,
+                                             json={"funcionario_id": f_ju, "motivo": "Troca combinada"}), 201)
+        await _ok(await client.post(f"/api/escala/previsto/{sub['id']}/cancelar", headers=hg, json={"motivo": "Juliana nao pode"}))
+        _, sub2 = await _ok(await client.post(f"/api/escala/previsto/{original['id']}/substituir", headers=hg,
+                                              json={"funcionario_id": f_bia, "motivo": "Bia cobre"}), 201)
+        assert sub2["funcionario_nome"] == "Bia Sintetica"
+
+        # Area da escala inativada depois: o plantao comeca sem area (nao bloqueia).
+        ala_c = await _ok(await client.post("/api/escala/areas", headers=hg, json={"nome": "Ala C"}), 201)
+        ju_hoje = await _ok(await client.post("/api/escala/previsto", headers=hg, json={
+            "funcionario_id": f_ju, "area_id": ala_c["id"], "inicio_previsto": (_agora() - timedelta(minutes=30)).isoformat(),
+            "fim_previsto": (_agora() + timedelta(hours=6)).isoformat()}), 201)
+        await _ok(await client.patch(f"/api/escala/areas/{ala_c['id']}", headers=hg, json={"situacao": "inativa"}))
+        h_ju = _headers(ju, ilpi_id=ilpi.id)
+        plantao = await _ok(await client.post("/api/plantoes/iniciar", headers=h_ju, json={"escala_id": ju_hoje["id"]}), 201)
+        assert plantao["escala_id"] == ju_hoje["id"] and plantao["responsabilidades"] == []
+    _run(planejada_db, op)
+
+
+def test_revisao_concorrencia_posse_e_motivo_em_branco(planejada_db):
+    async def op(client, db):
+        ilpi, _, hg, ala_b = await _ilpi_com_area(client, db)
+        cuidador = await _template(db, "cuidador")
+        ana, h_ana = await _usuario(db, ilpi, cuidador, "cuidador", "Ana Sintetica")
+        ju, _ = await _usuario(db, ilpi, cuidador, "cuidador_j", "Juliana Sintetica")
+        bruno, _ = await _usuario(db, ilpi, cuidador, "cuidador_b", "Bruno Sintetico")
+        f_ana, f_ju, f_bruno = [await _funcionario_id(db, u) for u in (ana, ju, bruno)]
+
+        # So espacos: 422 (antes virava 500 ao violar ck_escalas_motivo depois do strip).
+        escala = await _escala_agora(client, hg, f_bruno, ala_b["id"])
+        for rota, corpo in (("ausencia", {}), ("cancelar", {}), ("substituir", {"funcionario_id": f_ju})):
+            r = await client.post(f"/api/escala/previsto/{escala['id']}/{rota}", headers=hg, json={**corpo, "motivo": "     "})
+            assert r.status_code == 422, (rota, r.text)
+
+        # Duas transicoes ao mesmo tempo na mesma escala: uma vence, a outra recebe 409 (nunca 500).
+        respostas = await asyncio.gather(
+            client.post(f"/api/escala/previsto/{escala['id']}/substituir", headers=hg, json={"funcionario_id": f_ju, "motivo": "Troca A"}),
+            client.post(f"/api/escala/previsto/{escala['id']}/cancelar", headers=hg, json={"motivo": "Cancelamento B"}))
+        codigos = sorted(r.status_code for r in respostas)
+        assert codigos in ([200, 409], [201, 409]), [r.text for r in respostas]
+        # Dois planejamentos sobrepostos da mesma pessoa ao mesmo tempo: um so entra.
+        inicio = _agora() + timedelta(hours=30)
+        corpo = {"funcionario_id": f_ana, "inicio_previsto": inicio.isoformat(),
+                 "fim_previsto": (inicio + timedelta(hours=6)).isoformat(), "area_id": ala_b["id"]}
+        duplas = await asyncio.gather(client.post("/api/escala/previsto", headers=hg, json=corpo),
+                                      client.post("/api/escala/previsto", headers=hg, json=corpo))
+        assert sorted(r.status_code for r in duplas) == [201, 409], [r.text for r in duplas]
+
+        # Escala de outra pessoa, mesmo ja encerrada (nao prevista): 404 antes de qualquer 409 de estado.
+        assert (await client.post("/api/plantoes/iniciar", headers=h_ana, json={"escala_id": escala["id"]})).status_code == 404
+    _run(planejada_db, op)

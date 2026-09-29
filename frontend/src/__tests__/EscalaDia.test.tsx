@@ -78,6 +78,9 @@ describe('Escala do dia — previsto × efetivo (#122)', () => {
     comPermissoes(['escala:ler'])
     responder()
     const lista = await abrirDia()
+    // Sem dia escolhido, a API decide "hoje" no fuso da ILPI e a tela adota o dia devolvido.
+    expect(mockGet).toHaveBeenCalledWith('/escala/previsto', { params: {} })
+    expect((screen.getByLabelText('Dia') as HTMLInputElement).value).toBe('2030-01-15')
     expect(within(within(lista).getByRole('region', { name: 'Escala de Ana Sintetica' })).getByText('Presente')).toBeTruthy()
     expect(within(within(lista).getByRole('region', { name: 'Escala de Bruno Sintetico' })).getByText('Não iniciada')).toBeTruthy()
     const carla = within(lista).getByRole('region', { name: 'Escala de Carla Sintetica' })
@@ -100,13 +103,13 @@ describe('Escala do dia — previsto × efetivo (#122)', () => {
     expect(within(within(lista).getByRole('region', { name: 'Escala de Ana Sintetica' })).queryByRole('button')).toBeNull()
 
     await userEvent.click(within(bruno).getByRole('button', { name: 'Registrar ausência' }))
-    await userEvent.type(within(bruno).getByPlaceholderText('Ex.: atestado'), 'Atestado médico')
+    await userEvent.type(within(bruno).getByRole('textbox', { name: 'Motivo' }), 'Atestado médico')
     await userEvent.click(within(bruno).getByRole('button', { name: 'Confirmar' }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/escala/previsto/e2/ausencia', { motivo: 'Atestado médico' }))
 
     await userEvent.click(within(bruno).getByRole('button', { name: 'Substituir' }))
     await userEvent.selectOptions(within(bruno).getByRole('combobox', { name: 'Substituto' }), 'f4')
-    await userEvent.type(within(bruno).getByPlaceholderText('Ex.: atestado'), 'Troca de última hora')
+    await userEvent.type(within(bruno).getByRole('textbox', { name: 'Motivo' }), 'Troca de última hora')
     await userEvent.click(within(bruno).getByRole('button', { name: 'Confirmar' }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/escala/previsto/e2/substituir', { funcionario_id: 'f4', motivo: 'Troca de última hora' }))
   })
