@@ -44,7 +44,7 @@ export function MinhaArea({ resumo, podeAssumir, onMudou }: { resumo: MeuPlantao
             {emAtencao.map(r => (
               <li key={r.id} className="flex flex-wrap items-center gap-x-2 text-sm">
                 <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
-                <Link to={`/residentes/${r.id}`} className="font-medium text-primary hover:underline">{r.nome}</Link>
+                <Link to={`/residentes/${r.id}`} className="inline-flex min-h-[44px] items-center font-medium text-primary hover:underline">{r.nome}</Link>
                 {r.local && <span className="text-muted-foreground">{r.local}</span>}
                 <span className="text-xs text-orange-800">{r.motivos.join(' · ')}</span>
               </li>

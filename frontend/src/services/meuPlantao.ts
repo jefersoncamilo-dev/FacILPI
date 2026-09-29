@@ -44,11 +44,11 @@ export const meuPlantaoApi = {
  * Para onde ir depois do login (#126): com plantão ativo, Meu Plantão é o
  * destino operacional; sem plantão (ou se a consulta falhar), o Início de sempre.
  */
+const ESPERA_DESTINO_MS = 3000
+
 export async function destinoAposLogin(): Promise<string> {
-  try {
-    const atual = await plantoesApi.atual()
-    return atual?.plantao ? '/plantao' : '/'
-  } catch {
-    return '/'
-  }
+  // Nunca prende a pessoa no login: erro ou sem resposta em 3 s → Início.
+  const consulta = plantoesApi.atual().then(atual => (atual?.plantao ? '/plantao' : '/')).catch(() => '/')
+  const limite = new Promise<string>(resolve => { setTimeout(() => resolve('/'), ESPERA_DESTINO_MS) })
+  return Promise.race([consulta, limite])
 }

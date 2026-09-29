@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from .test_alertas_gestor import _agora
 from .test_alertas_operacionais import _institucional
-from .test_d2_rotina import _create_ilpi_user, _headers
+from .test_d2_rotina import _create_ilpi_user, _headers, _new_id
 from .test_d3_admissao import _client
 from .test_escala_planejada import _funcionario_id
 from .test_operacao_escala import _ok
@@ -55,6 +55,11 @@ def test_com_plantao_recorta_pela_area_e_pelo_rbac(passagem_db):
         _, h_bruno, _ = await _institucional(db, ilpi, "enfermagem")
         # Plantao iniciado AGORA: o cuidado atrasado (15 min antes) foi herdado e tem de aparecer.
         plantao = await _ok(await client.post("/api/plantoes/iniciar", headers=h_ana, json={"area_ids": [ala_b["id"]]}), 201)
+        # Intercorrencia leve de Rita aberta ha 30 h: vira alerta "atencao" (prolongada) e Rita segue em atencao.
+        tosse = m.Intercorrencia(id=_new_id(), residente_id=x["rita"].id, ilpi_id=ilpi.id, tipo="Tosse persistente",
+                                 gravidade="leve", situacao="aberta", ocorrido_em=_agora() - timedelta(hours=30))
+        db.add(tosse)
+        await db.commit()
         # Passagem do turno anterior (Bruno, sem area) aguardando.
         await _ok(await client.post(PASSAGENS + "/", headers=h_bruno, json={"observacoes": [{"categoria": "outro", "texto": "Plantão tranquilo"}]}), 201)
 
@@ -65,7 +70,10 @@ def test_com_plantao_recorta_pela_area_e_pelo_rbac(passagem_db):
         assert residentes["Hilda Sintetica"]["em_atencao"] and residentes["Hilda Sintetica"]["local"] == "Ala B · Quarto 12 · Leito A"
         # Motivo sem repeticao: a queda grave ja e alerta; nao volta como "intercorrencia aberta".
         assert residentes["Hilda Sintetica"]["motivos"].count("Intercorrência aberta: Queda") == 0
-        assert visao["residentes"][0]["nome"] == "Hilda Sintetica", "em atencao primeiro"
+        rita = residentes["Rita Sintetica"]
+        assert rita["em_atencao"], rita
+        assert sum("Tosse persistente" in motivo for motivo in rita["motivos"]) == 1, "motivo presente e sem repeticao"
+        assert visao["residentes"][0]["em_atencao"], "em atencao primeiro"
         assert {p["residente_id"] for p in visao["prioridades"]} <= {x["hilda"].id, x["rita"].id}
         assert f"intercorrencia_grave_aberta:{x['grave'].id}" in {p["id"] for p in visao["prioridades"]}
         assert x["fora"].id not in {p["referencia_id"] for p in visao["prioridades"]}

@@ -51,7 +51,7 @@ describe('Minha área agora (#126)', () => {
     expect(within(secao).getByRole('link', { name: 'Hilda Sintetica' }).getAttribute('href')).toBe('/residentes/r1')
     expect(within(secao).queryByRole('link', { name: 'Rita Sintetica' })).toBeNull()
     expect(within(secao).getByRole('link', { name: 'Ver intercorrência em Intercorrências' }).getAttribute('href')).toBe('/intercorrencias')
-    expect(within(secao).getByRole('button', { name: 'Assumir' })).toBeTruthy()
+    expect(within(secao).getByRole('button', { name: /^Assumir/ })).toBeTruthy()
     expect(within(secao).getByRole('link', { name: /1 passagem de plantão aguardando você/ }).getAttribute('href')).toBe('/passagem')
     expect(within(secao).getByText(/1 atrasada/)).toBeTruthy()
     // Atrasadas listadas, com o caminho para registrá-las a partir do horário mais antigo.
@@ -79,5 +79,16 @@ describe('Destino após o login (#126)', () => {
     mockGet.mockRejectedValueOnce(new Error('rede'))
     expect(await destinoAposLogin()).toBe('/')
     expect(mockGet).toHaveBeenCalledWith('/plantoes/atual')
+
+    // Sem resposta: em 3 s segue para o Início (o login nunca fica preso).
+    vi.useFakeTimers()
+    try {
+      mockGet.mockReturnValueOnce(new Promise(() => {}) as any)
+      const destino = destinoAposLogin()
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(await destino).toBe('/')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

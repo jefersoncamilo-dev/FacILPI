@@ -21,7 +21,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..infrastructure import models as m
@@ -149,10 +149,14 @@ async def meu_plantao(db: AsyncSession = Depends(get_db), context: SecurityConte
         motivos: dict[str, list[str]] = {rid: [] for rid in escopo}
         ja_em_alerta: set[str] = set()
         for p in resposta.prioridades or []:
-            if p.gravidade == "critico" and p.residente_id in motivos:
+            if p.residente_id not in motivos:
+                continue
+            # Em atencao = alerta critico OU intercorrencia aberta (de qualquer gravidade: a leve que
+            # passou de 24 h vira alerta "atencao" e continua sendo motivo, sem repetir abaixo).
+            if p.gravidade == "critico" or p.regra.startswith("intercorrencia_"):
                 motivos[p.residente_id].append(p.titulo)
-            if p.regra.startswith("intercorrencia_"):
-                ja_em_alerta.add(p.referencia_id)
+                if p.regra.startswith("intercorrencia_"):
+                    ja_em_alerta.add(p.referencia_id)
         if "intercorrencias:ler" in chaves and escopo:
             for i in (await db.scalars(select(m.Intercorrencia).where(
                     m.Intercorrencia.ilpi_id == ilpi, m.Intercorrencia.situacao == "aberta",
@@ -169,8 +173,8 @@ async def meu_plantao(db: AsyncSession = Depends(get_db), context: SecurityConte
 
     if "passagem_plantao:ler" in chaves:
         area_ids = [r.area_id for r in abertas]
-        resposta.passagens_a_receber = len((await db.scalars(select(m.PassagemPlantao.id).where(
+        resposta.passagens_a_receber = await db.scalar(select(func.count(m.PassagemPlantao.id)).where(
             m.PassagemPlantao.ilpi_id == ilpi, m.PassagemPlantao.situacao == "entregue",
             m.PassagemPlantao.entregue_por != context.user.id,
-            (m.PassagemPlantao.area_id.in_(area_ids)) | (m.PassagemPlantao.area_id.is_(None))))).all())
+            (m.PassagemPlantao.area_id.in_(area_ids)) | (m.PassagemPlantao.area_id.is_(None))))
     return resposta
