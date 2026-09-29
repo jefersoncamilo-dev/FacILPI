@@ -39,6 +39,9 @@ function Item({ item }: { item: ItemPassagem }) {
   )
 }
 
+/** Observações por passagem (mesmo teto do backend). */
+const LIMITE_OBSERVACOES = 20
+
 /**
  * Passagens entregues aguardando o próximo turno (#125). Cada item mostra a
  * situação ATUAL da fonte; quem recebe confirma. Quem entregou não confirma.
@@ -47,6 +50,7 @@ export function PassagensAReceber({ podeReceber, versao = 0 }: { podeReceber: bo
   const [passagens, setPassagens] = useState<Passagem[] | null>(null)
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
+  const [recebendo, setRecebendo] = useState<string | null>(null)
 
   const carregar = useCallback(async () => {
     try {
@@ -64,12 +68,16 @@ export function PassagensAReceber({ podeReceber, versao = 0 }: { podeReceber: bo
 
   async function receber(p: Passagem) {
     setErro('')
+    setRecebendo(p.id)
     try {
       await passagemApi.receber(p.id)
       setSucesso(`Recebimento confirmado: passagem de ${p.entregue_por_nome}.`)
-      await carregar()
     } catch (e) {
+      // 409: outra pessoa confirmou antes — a lista recarregada mostra o estado atual.
       setErro(mensagemDeErro(e, 'Não foi possível confirmar o recebimento.'))
+    } finally {
+      setRecebendo(null)
+      await carregar()
     }
   }
 
@@ -104,7 +112,9 @@ export function PassagensAReceber({ podeReceber, versao = 0 }: { podeReceber: bo
                 </p>
               )}
               {podeReceber && !p.entregue_por_mim && (
-                <Button onClick={() => receber(p)} className="min-h-[44px]"><CheckCircle2 aria-hidden="true" /> Confirmar recebimento</Button>
+                <Button onClick={() => receber(p)} disabled={recebendo !== null} className="min-h-[44px]">
+                  <CheckCircle2 aria-hidden="true" /> {recebendo === p.id ? 'Confirmando…' : 'Confirmar recebimento'}
+                </Button>
               )}
               {p.entregue_por_mim && <p className="text-xs text-muted-foreground">Você entregou esta passagem; quem assume o próximo turno confirma.</p>}
             </article>
@@ -125,7 +135,8 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
   const [emPlantao, setEmPlantao] = useState(false)
   const [observacoes, setObservacoes] = useState<ObservacaoNova[]>([])
   const [nova, setNova] = useState<{ categoria: CategoriaObservacao; residente_id: string; texto: string }>({ categoria: 'assistencial', residente_id: '', texto: '' })
-  const [encerrar, setEncerrar] = useState(true)
+  // Encerrar o plantão é escolha explícita: passar a passagem não encerra por padrão.
+  const [encerrar, setEncerrar] = useState(false)
   const [erro, setErro] = useState('')
   const [entregue, setEntregue] = useState<Passagem | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -134,6 +145,8 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
     setAberto(true)
     setErro('')
     setEntregue(null)
+    setPrevia(null)
+    setEncerrar(false)
     try {
       const [p, atual] = await Promise.all([passagemApi.previa(), plantoesApi.atual().catch(() => null)])
       setPrevia(p)
@@ -146,7 +159,7 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
   function adicionar(e: FormEvent) {
     e.preventDefault()
     const texto = nova.texto.trim()
-    if (!texto) return
+    if (!texto || observacoes.length >= LIMITE_OBSERVACOES) return
     setObservacoes(lista => [...lista, { categoria: nova.categoria, texto, ...(nova.residente_id ? { residente_id: nova.residente_id } : {}) }])
     setNova({ ...nova, texto: '' })
   }
@@ -183,6 +196,12 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
       )}
       {erro && <Alert variant="error">{erro}</Alert>}
       {aberto && !previa && !erro && <Skeleton className="h-24 w-full" />}
+      {aberto && !previa && erro && (
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={abrir} className="min-h-[44px]">Tentar de novo</Button>
+          <Button variant="outline" onClick={() => { setAberto(false); setErro('') }} className="min-h-[44px]">Voltar</Button>
+        </div>
+      )}
       {aberto && previa && (
         <div className="space-y-4 rounded-card border border-border bg-card p-4 shadow-card">
           <p className="text-sm text-muted-foreground">
@@ -224,9 +243,13 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
               </label>
               <span id="observacao-limite" className="text-xs text-muted-foreground">{nova.texto.length}/{LIMITE_OBSERVACAO} caracteres</span>
             </div>
-            <Button type="submit" variant="outline" disabled={!nova.texto.trim()} className="min-h-[44px] sm:col-span-2 sm:justify-self-start">
+            <Button type="submit" variant="outline" disabled={!nova.texto.trim() || observacoes.length >= LIMITE_OBSERVACOES}
+              className="min-h-[44px] sm:col-span-2 sm:justify-self-start">
               <Plus aria-hidden="true" /> Adicionar observação
             </Button>
+            {observacoes.length >= LIMITE_OBSERVACOES && (
+              <p className="text-xs text-muted-foreground sm:col-span-2">Limite de {LIMITE_OBSERVACOES} observações por passagem.</p>
+            )}
           </form>
           {observacoes.length > 0 && (
             <ul aria-label="Observações" className="space-y-1">
