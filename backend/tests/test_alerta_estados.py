@@ -219,3 +219,38 @@ def test_concorrencia_assumir_e_reconciliacao_sem_corrida(alertas_db):
                                    .execution_options(populate_existing=True))
         assert situacao == "assumido"
     _run(alertas_db, op)
+
+
+def test_indice_unico_vira_409_sem_500_e_atender_nao_reabre(alertas_db, monkeypatch):
+    from src.application import alertas as modulo
+
+    async def op(client, db):
+        ilpi, _, queda, _ = await _cenario(db)
+        _, h_ana, _ = await _institucional(db, ilpi, "cuidador")
+        _, h_bruno, _ = await _institucional(db, ilpi, "enfermagem")
+        alerta = f"intercorrencia_grave_aberta:{queda.id}"
+        assert (await client.post(f"{URL}/assumir", headers=h_ana, json={"alerta_id": alerta})).status_code == 200
+
+        # Bruno "nao ve" o estado aberto na primeira leitura (como numa corrida real): o INSERT
+        # esbarra no indice unico parcial, o rollback acontece e a resposta e 409 — nunca 500.
+        original, leituras = modulo._estados_abertos, []
+
+        async def cego_na_primeira(db_, ilpi_id):
+            leituras.append(1)
+            return {} if len(leituras) == 1 else await original(db_, ilpi_id)
+        monkeypatch.setattr(modulo, "_estados_abertos", cego_na_primeira)
+        r = await client.post(f"{URL}/assumir", headers=h_bruno, json={"alerta_id": alerta})
+        monkeypatch.setattr(modulo, "_estados_abertos", original)
+        assert r.status_code == 409, r.text
+        assert "Já assumido por" in r.json()["detail"]["message"]
+
+        # A fonte encerrou o estado no meio-tempo: "iniciar atendimento" nao o reabre.
+        estado_id = await db.scalar(select(m.AlertaEstado.id).where(m.AlertaEstado.alerta_id == alerta))
+        await db.execute(update(m.AlertaEstado).where(m.AlertaEstado.id == estado_id)
+                         .values(situacao="resolvido", encerramento="fonte", encerrado_em=_agora()))
+        await db.commit()
+        await client.post(f"{URL}/atender", headers=h_ana, json={"alerta_id": alerta})
+        situacao = await db.scalar(select(m.AlertaEstado.situacao).where(m.AlertaEstado.id == estado_id)
+                                   .execution_options(populate_existing=True))
+        assert situacao == "resolvido"
+    _run(alertas_db, op)
