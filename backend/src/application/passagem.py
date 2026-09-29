@@ -48,6 +48,13 @@ LIMITE_ATIVIDADES = 5000
 FAMILIA_DA_REGRA = {"documento_vencendo": "documento_validade", "documento_vencido": "documento_validade"}
 
 
+# Alertas cuja fonte e um registro com situacao propria: a situacao atual vem da FONTE, nao do id do
+# alerta (a gravidade da intercorrencia pode ser corrigida e o alerta trocar de regra, seguindo aberta).
+FONTE_DO_ALERTA = {**{r: "intercorrencia" for r in ORIGEM_DA_REGRA if r.startswith("intercorrencia_")},
+                   "ausencia_prolongada": "ausencia"}
+LOTE_IN = 1000  # asyncpg aceita ate 32767 parametros por consulta
+
+
 def _familia(regra: Optional[str]) -> str:
     return FAMILIA_DA_REGRA.get(regra or "", regra or "")
 
@@ -174,7 +181,7 @@ async def _escopo(db, context, area_id, plantao, chaves: set[str]) -> list[tuple
 
 
 def _area_unica(areas: list[tuple[str, str]]) -> tuple[Optional[str], Optional[str]]:
-    """Uma area: ela. Varias: sem area (os itens ja vem recortados pela uniao); nomes juntos na previa."""
+    """Previa: uma area e ela; varias saem juntas (nomes unidos) — a entrega gera uma passagem por area."""
     if not areas:
         return None, None
     if len(areas) == 1:
@@ -249,6 +256,14 @@ async def montar_previa(db: AsyncSession, context: SecurityContext, areas: list[
     return itens
 
 
+async def _em_lotes(db, consulta, coluna, ids: set[str]) -> set[str]:
+    """Ids de ``ids`` que a consulta devolve, em lotes (sem estourar o limite de parametros)."""
+    lista, achados = sorted(ids), set()
+    for inicio in range(0, len(lista), LOTE_IN):
+        achados |= set((await db.scalars(consulta.where(coluna.in_(lista[inicio:inicio + LOTE_IN])))).all())
+    return achados
+
+
 async def _situacao_atual(db, context, itens: list[dict]) -> None:
     """Status ATUAL de cada fonte para quem consulta (mesma projecao, mesmas fontes)."""
     if not itens:
@@ -267,23 +282,30 @@ async def _situacao_atual(db, context, itens: list[dict]) -> None:
     por_origem: dict[str, set[str]] = {}
     for i in itens:
         if i.get("referencia_id"):
-            por_origem.setdefault(i["origem"] + ":" + (i.get("regra") or ""), set()).add(i["referencia_id"])
-    abertas_inter = set((await db.scalars(select(m.Intercorrencia.id).where(
-        m.Intercorrencia.ilpi_id == ilpi, m.Intercorrencia.situacao == "aberta",
-        m.Intercorrencia.id.in_(por_origem.get("intercorrencia:", set()))))).all())
-    cuidados_pendentes = set((await db.scalars(select(m.OcorrenciaCuidado.id).where(
-        m.OcorrenciaCuidado.ilpi_id == ilpi, m.OcorrenciaCuidado.situacao == "prevista", ~_has_execucao_vigente(),
-        m.OcorrenciaCuidado.id.in_(por_origem.get("atividade:cuidado", set()))))).all())
-    doses_pendentes = set((await db.scalars(select(m.DosePrevista.id).where(
-        m.DosePrevista.ilpi_id == ilpi, m.DosePrevista.situacao == "prevista", ~_has_admin_vigente(),
-        m.DosePrevista.id.in_(por_origem.get("atividade:medicacao", set()))))).all())
-    ausencias_abertas = set((await db.scalars(select(m.Ausencia.id).where(
-        m.Ausencia.instituicao_id == ilpi, m.Ausencia.data_fim.is_(None),
-        m.Ausencia.id.in_(por_origem.get("ausencia:", set()))))).all())
+            chave = FONTE_DO_ALERTA.get(i.get("regra") or "") if i["origem"] == "alerta" else None
+            chave = f"{chave}:" if chave else i["origem"] + ":" + (i.get("regra") or "")
+            por_origem.setdefault(chave, set()).add(i["referencia_id"])
+    abertas_inter = await _em_lotes(db, select(m.Intercorrencia.id).where(
+        m.Intercorrencia.ilpi_id == ilpi, m.Intercorrencia.situacao == "aberta"),
+        m.Intercorrencia.id, por_origem.get("intercorrencia:", set()))
+    cuidados_pendentes = await _em_lotes(db, select(m.OcorrenciaCuidado.id).where(
+        m.OcorrenciaCuidado.ilpi_id == ilpi, m.OcorrenciaCuidado.situacao == "prevista", ~_has_execucao_vigente()),
+        m.OcorrenciaCuidado.id, por_origem.get("atividade:cuidado", set()))
+    doses_pendentes = await _em_lotes(db, select(m.DosePrevista.id).where(
+        m.DosePrevista.ilpi_id == ilpi, m.DosePrevista.situacao == "prevista", ~_has_admin_vigente()),
+        m.DosePrevista.id, por_origem.get("atividade:medicacao", set()))
+    ausencias_abertas = await _em_lotes(db, select(m.Ausencia.id).where(
+        m.Ausencia.instituicao_id == ilpi, m.Ausencia.data_fim.is_(None)),
+        m.Ausencia.id, por_origem.get("ausencia:", set()))
     for i in itens:
         origem, ref = i["origem"], i.get("referencia_id")
         if origem == "observacao":
             i["situacao_atual"] = None
+            continue
+        fonte = FONTE_DO_ALERTA.get(i.get("regra") or "") if origem == "alerta" else None
+        if fonte is not None:
+            aberto = ref in (abertas_inter if fonte == "intercorrencia" else ausencias_abertas)
+            i["situacao_atual"] = "aberto" if aberto else "resolvido"
             continue
         if origem == "alerta":
             if i.get("alerta_id") in ids_alerta or (_familia(i.get("regra")), ref) in chaves_alerta:
@@ -327,7 +349,27 @@ async def previa(area_id: Optional[str] = None, db: AsyncSession = Depends(get_d
                   janela_inicio=inicio, janela_fim=agora, itens=[ItemPassagem(**i) for i in itens])
 
 
-@passagens_router.post("/", response_model=PassagemResposta, status_code=201)
+async def _por_area(db, ilpi, areas, automaticos: list[dict], manuais: list[dict]) -> list[tuple[Optional[str], list[dict]]]:
+    """Uma passagem por area: cada proximo turno confirma a SUA (o leito esta em no maximo uma area ativa).
+
+    Itens automaticos seguem o residente; observacao sobre residente da area vai para ela, observacao
+    geral (ou de residente fora das areas) vai para todas.
+    """
+    if len(areas) <= 1:
+        return [(areas[0][0] if areas else None, automaticos + manuais)]
+    area_de = {r: area for area, residentes in (await residentes_das_areas(db, ilpi, [a for a, _ in areas])).items()
+               for r in residentes}
+    grupos: dict[str, list[dict]] = {a: [] for a, _ in areas}
+    for item in automaticos:
+        grupos[area_de[item["residente_id"]]].append(item)
+    for item in manuais:
+        destino = area_de.get(item.get("residente_id"))
+        for area_id in ([destino] if destino else list(grupos)):
+            grupos[area_id].append(item)
+    return list(grupos.items())
+
+
+@passagens_router.post("/", response_model=list[PassagemResposta], status_code=201)
 async def entregar(payload: Entregar, request: Request, db: AsyncSession = Depends(get_db),
                    context: SecurityContext = Depends(require_permission("passagem_plantao:registrar"))):
     ilpi = context.ilpi_id
@@ -338,7 +380,6 @@ async def entregar(payload: Entregar, request: Request, db: AsyncSession = Depen
     funcionario = await funcionario_da_sessao(db, context)
     plantao = await _plantao_ativo(db, context, funcionario)
     areas = await _escopo(db, context, payload.area_id, plantao, chaves)
-    area_id_unica, _ = _area_unica(areas)
     residentes_obs = {o.residente_id for o in payload.observacoes if o.residente_id}
     if residentes_obs:
         existentes = set((await db.scalars(select(m.Residente.id).where(
@@ -347,31 +388,34 @@ async def entregar(payload: Entregar, request: Request, db: AsyncSession = Depen
             _nao_encontrado()
     inicio = _utc(plantao.inicio_em) if plantao else agora - timedelta(hours=HORAS_JANELA_SEM_PLANTAO)
     automaticos = await montar_previa(db, context, areas, inicio, agora)
-    passagem = m.PassagemPlantao(
-        ilpi_id=ilpi, plantao_id=plantao.id if plantao else None, area_id=area_id_unica,
-        janela_inicio=inicio, janela_fim=agora, situacao="entregue", entregue_por=context.user.id,
-        entregue_por_funcionario_id=funcionario.id if funcionario else None, entregue_em=agora)
-    db.add(passagem)
-    await db.flush()
     manuais = [{"origem": "observacao", "residente_id": o.residente_id, "categoria": o.categoria, "texto": o.texto,
                 "titulo": o.texto[:TITULO_MAX]} for o in payload.observacoes]
     campos = ("origem", "alerta_id", "regra", "referencia_id", "residente_id", "gravidade", "natureza", "titulo",
               "previsto_em", "categoria", "texto")
-    for ordem, item in enumerate(automaticos + manuais):
-        db.add(m.PassagemItem(ilpi_id=ilpi, passagem_id=passagem.id, ordem=ordem,
-                              **{c: item.get(c) for c in campos}))
-    add_audit(db, acao="passagens_plantao.entregar", entidade="passagens_plantao", registro_id=passagem.id,
-              usuario_id=context.user.id, ilpi_id=ilpi,
-              valores_posteriores={"area_id": passagem.area_id, "area_ids": [a for a, _ in areas],
-                                   "plantao_id": passagem.plantao_id,
-                                   "itens_automaticos": len(automaticos), "observacoes": len(manuais)},
-              request=request)
+    passagens = []
+    for area_id, itens in await _por_area(db, ilpi, areas, automaticos, manuais):
+        passagem = m.PassagemPlantao(
+            ilpi_id=ilpi, plantao_id=plantao.id if plantao else None, area_id=area_id,
+            janela_inicio=inicio, janela_fim=agora, situacao="entregue", entregue_por=context.user.id,
+            entregue_por_funcionario_id=funcionario.id if funcionario else None, entregue_em=agora)
+        db.add(passagem)
+        await db.flush()
+        for ordem, item in enumerate(itens):
+            db.add(m.PassagemItem(ilpi_id=ilpi, passagem_id=passagem.id, ordem=ordem,
+                                  **{c: item.get(c) for c in campos}))
+        add_audit(db, acao="passagens_plantao.entregar", entidade="passagens_plantao", registro_id=passagem.id,
+                  usuario_id=context.user.id, ilpi_id=ilpi,
+                  valores_posteriores={"area_id": area_id, "plantao_id": passagem.plantao_id,
+                                       "itens_automaticos": sum(i["origem"] != "observacao" for i in itens),
+                                       "observacoes": sum(i["origem"] == "observacao" for i in itens)},
+                  request=request)
+        passagens.append(passagem)
     if payload.encerrar_plantao and plantao is not None:
         plantao = await _travar_plantao(db, ilpi, plantao.id)
         if plantao.situacao == "em_andamento":
             await _encerrar_plantao(db, context, request, plantao)
     await db.commit()
-    return (await _respostas(db, context, [passagem]))[0]
+    return await _respostas(db, context, passagens)
 
 
 async def _respostas(db, context, passagens: list[m.PassagemPlantao]) -> list[PassagemResposta]:

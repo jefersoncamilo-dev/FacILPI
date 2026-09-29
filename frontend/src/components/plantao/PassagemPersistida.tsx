@@ -138,19 +138,20 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
   // Encerrar o plantão é escolha explícita: passar a passagem não encerra por padrão.
   const [encerrar, setEncerrar] = useState(false)
   const [erro, setErro] = useState('')
-  const [entregue, setEntregue] = useState<Passagem | null>(null)
+  const [entregues, setEntregues] = useState<Passagem[] | null>(null)
   const [salvando, setSalvando] = useState(false)
 
   async function abrir() {
     setAberto(true)
     setErro('')
-    setEntregue(null)
+    setEntregues(null)
     setPrevia(null)
     setEncerrar(false)
     try {
       const [p, atual] = await Promise.all([passagemApi.previa(), plantoesApi.atual().catch(() => null)])
       setPrevia(p)
-      setEmPlantao(Boolean(atual?.plantao))
+      // Só oferece encerrar a quem está de plantão E pode registrar plantão (o backend exige o mesmo).
+      setEmPlantao(Boolean(atual?.plantao && atual.pode_registrar))
     } catch (e) {
       setErro(mensagemDeErro(e, 'Não foi possível montar o resumo do plantão.'))
     }
@@ -168,8 +169,8 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
     setSalvando(true)
     setErro('')
     try {
-      const p = await passagemApi.entregar({ observacoes, encerrar_plantao: emPlantao && encerrar, ...(previa?.area_id ? { area_id: previa.area_id } : {}) })
-      setEntregue(p)
+      const lista = await passagemApi.entregar({ observacoes, encerrar_plantao: emPlantao && encerrar, ...(previa?.area_id ? { area_id: previa.area_id } : {}) })
+      setEntregues(lista)
       setObservacoes([])
       setAberto(false)
       onEntregue?.()
@@ -189,9 +190,11 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
         <h2 className="font-display text-lg font-semibold text-foreground">Passar plantão</h2>
         {!aberto && <Button onClick={abrir} className="min-h-[44px]"><Send aria-hidden="true" /> Preparar passagem</Button>}
       </div>
-      {entregue && (
+      {entregues && entregues.length > 0 && (
         <Alert variant="success">
-          Passagem entregue às {formatDateTime(entregue.entregue_em)} com {entregue.itens.length} {entregue.itens.length === 1 ? 'item' : 'itens'}. O próximo turno confirma o recebimento.
+          {entregues.length === 1
+            ? `Passagem entregue às ${formatDateTime(entregues[0].entregue_em)} com ${entregues[0].itens.length} ${entregues[0].itens.length === 1 ? 'item' : 'itens'}. O próximo turno confirma o recebimento.`
+            : `Passagens entregues às ${formatDateTime(entregues[0].entregue_em)}, uma por área: ${entregues.map(p => `${p.area_nome} (${p.itens.length} ${p.itens.length === 1 ? 'item' : 'itens'})`).join(', ')}. O próximo turno de cada área confirma a sua.`}
         </Alert>
       )}
       {erro && <Alert variant="error">{erro}</Alert>}

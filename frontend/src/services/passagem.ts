@@ -84,6 +84,7 @@ export const passagemApi = {
   listar: (situacao: 'entregue' | 'recebida' | 'todas' = 'entregue') =>
     api.get<Passagem[]>('/passagens/', { params: { situacao } }).then(r => r.data),
   entregar: (dados: { area_id?: string; observacoes: ObservacaoNova[]; encerrar_plantao: boolean }) =>
-    api.post<Passagem>('/passagens/', dados).then(r => r.data),
+    // Uma passagem por área: quem responde por várias entrega de uma vez e cada área recebe a sua.
+    api.post<Passagem[]>('/passagens/', dados).then(r => r.data),
   receber: (id: string) => api.post<Passagem>(`/passagens/${id}/receber`, {}).then(r => r.data),
 }
