@@ -153,7 +153,8 @@ def _pode_ver(item: dict, chaves: set[str]) -> bool:
     if origem == "intercorrencia":
         return "intercorrencias:ler" in chaves
     if origem == "atividade":
-        return "plantao:ler" in chaves
+        # Dose so com permissao de medicacao (#131), como no Meu Plantao e na central.
+        return "plantao:ler" in chaves and (item.get("regra") != "medicacao" or "administracoes:ler" in chaves)
     if origem == "ausencia":
         return "ausencias:ler" in chaves
     return True  # observacao: quem le a passagem le o que foi dito

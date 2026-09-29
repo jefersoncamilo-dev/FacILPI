@@ -25,7 +25,7 @@ from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
 from .audit import add_audit
-from .security import RESOURCE_NOT_FOUND, SecurityContext, require_ilpi_context, require_permission
+from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_ilpi_context, require_permission
 
 
 programacoes_router = APIRouter(prefix="/programacoes-cuidado", tags=["programacoes-cuidado"], dependencies=[Depends(require_ilpi_context)])
@@ -552,7 +552,9 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
             "previsto_em": _utc(ocorrencia.previsto_em),
             "prioridade": programacao.prioridade if programacao else None,
         })
-    doses = (await db.execute(select(m.DosePrevista, True).where(
+    # #131: doses so para quem tem permissao de medicacao; plantao:ler sozinho nao basta.
+    ve_doses = "administracoes:ler" in set(await allowed_permission_keys(db, context))
+    doses = [] if not ve_doses else (await db.execute(select(m.DosePrevista, True).where(
         m.DosePrevista.ilpi_id == context.ilpi_id,
         m.DosePrevista.situacao == "prevista",
         m.DosePrevista.previsto_em >= inicio, m.DosePrevista.previsto_em < fim,
