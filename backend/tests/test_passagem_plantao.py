@@ -96,13 +96,20 @@ def test_passar_e_receber_plantao(passagem_db):
 
         assert (await client.post(URL + "/", headers=h_ana, json={"observacoes": [{"categoria": "outro", "texto": "x" * 281}]})).status_code == 422
         assert (await client.post(URL + "/", headers=h_ana, json={"observacoes": [{"categoria": "invalida", "texto": "Oi"}]})).status_code == 422
-        entregue = await _ok(await client.post(URL + "/", headers=h_ana, json={
+        [entregue] = await _ok(await client.post(URL + "/", headers=h_ana, json={
             "observacoes": [{"categoria": "comportamento", "residente_id": x["hilda"].id, "texto": "Agitada no fim da tarde"}],
             "encerrar_plantao": True}), 201)
         assert entregue["situacao"] == "entregue" and entregue["entregue_por_mim"] is True
         obs = [i for i in entregue["itens"] if i["origem"] == "observacao"]
         assert [(o["categoria"], o["texto"], o["residente_nome"]) for o in obs] == [("comportamento", "Agitada no fim da tarde", "Hilda Sintetica")]
         assert (await _ok(await client.get("/api/plantoes/atual", headers=h_ana)))["plantao"] is None, "encerrou o plantao"
+
+        # A gravidade da queda e corrigida (o alerta muda de regra/some), mas a intercorrencia segue aberta.
+        await db.execute(update(m.Intercorrencia).where(m.Intercorrencia.id == x["grave"].id).values(gravidade="leve"))
+        await db.commit()
+        [pendente] = await _ok(await client.get(URL + "/", headers=h_ju))
+        situacao = {(i["origem"], i["referencia_id"]): i["situacao_atual"] for i in pendente["itens"]}
+        assert situacao[("alerta", x["grave"].id)] == "aberto", "a fonte continua aberta"
 
         # A fonte resolve a queda depois da passagem: quem recebe ve a situacao ATUAL.
         await db.execute(update(m.Intercorrencia).where(m.Intercorrencia.id == x["grave"].id)
@@ -131,7 +138,7 @@ def test_itens_respeitam_a_leitura_de_quem_consulta_e_o_tenant(passagem_db):
         # A area informada precisa ser uma pela qual Ana responde agora.
         assert (await client.post(URL + "/", headers=h_ana, json={"area_id": ala_b["id"]})).status_code == 403
         await _ok(await client.post("/api/plantoes/iniciar", headers=h_ana, json={"area_ids": [ala_b["id"]]}), 201)
-        entregue = await _ok(await client.post(URL + "/", headers=h_ana, json={
+        [entregue] = await _ok(await client.post(URL + "/", headers=h_ana, json={
             "area_id": ala_b["id"], "observacoes": [{"categoria": "assistencial", "texto": "Trocar curativo às 22h"}]}), 201)
         total = len(entregue["itens"])
         # So le passagens: ve as observacoes; o resto so aparece como contagem sem acesso.
@@ -203,8 +210,18 @@ def test_varias_areas_titulo_longo_ausencias_e_recebimento_concorrente(passagem_
         assert (await client.post(URL + "/", headers=_headers(so_passagem, ilpi_id=ilpi.id),
                                   json={"encerrar_plantao": True})).status_code == 403
 
-        entregue = await _ok(await client.post(URL + "/", headers=h_carla, json={}), 201)
-        assert entregue["area_id"] is None
+        entregues = await _ok(await client.post(URL + "/", headers=h_carla, json={
+            "observacoes": [{"categoria": "estrutura_materiais", "texto": "Faltam luvas M"},
+                            {"categoria": "comportamento", "residente_id": x["joao"].id, "texto": "Joao ansioso"}]}), 201)
+        # Uma passagem por area: cada proximo turno confirma a sua.
+        por_area = {e["area_nome"]: e for e in entregues}
+        assert sorted(por_area) == ["Ala B", "Ala C"] and all(e["area_id"] for e in entregues)
+        refs = {nome: {i["referencia_id"] for i in e["itens"]} for nome, e in por_area.items()}
+        assert x["fora"].id in refs["Ala C"] and x["fora"].id not in refs["Ala B"]
+        assert x["grave"].id in refs["Ala B"] and x["grave"].id not in refs["Ala C"]
+        textos = {nome: {i["texto"] for i in e["itens"] if i["origem"] == "observacao"} for nome, e in por_area.items()}
+        assert textos == {"Ala B": {"Faltam luvas M"}, "Ala C": {"Faltam luvas M", "Joao ansioso"}}
+        entregue = por_area["Ala B"]
         [cuidado] = [i for i in entregue["itens"] if i["origem"] == "atividade" and i["referencia_id"] == x["ocorrencia"].id]
         assert len(cuidado["titulo"]) == 255 and cuidado["titulo"].startswith("Cuidado sem registro: Mudanca")
 
@@ -214,9 +231,11 @@ def test_varias_areas_titulo_longo_ausencias_e_recebimento_concorrente(passagem_
         rafa = await _create_ilpi_user(db, ilpi, permissions=chaves_enf, profile_key="enf_rafa", nome="Rafa Sintetico")
         await db.commit()
         h_sem, h_rafa = _headers(sem_nomes, ilpi_id=ilpi.id), _headers(rafa, ilpi_id=ilpi.id)
-        [visto] = await _ok(await client.get(URL + "/", headers=h_sem))
-        assert visto["itens"] and all(i["residente_nome"] is None for i in visto["itens"])
-        assert {i["origem"] for i in visto["itens"]} <= {"intercorrencia", "atividade", "alerta", "observacao"}
+        vistos = await _ok(await client.get(URL + "/", headers=h_sem))
+        assert len(vistos) == 2
+        itens_vistos = [i for v in vistos for i in v["itens"]]
+        assert itens_vistos and all(i["residente_nome"] is None for i in itens_vistos)
+        assert {i["origem"] for i in itens_vistos} <= {"intercorrencia", "atividade", "alerta", "observacao"}
 
         # Duas pessoas confirmam ao mesmo tempo: uma recebe, a outra 409 (nunca 500 nem sobrescrita).
         respostas = await asyncio.gather(

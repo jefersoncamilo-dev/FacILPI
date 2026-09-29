@@ -483,7 +483,9 @@ async def _reconciliar(db: AsyncSession, context: SecurityContext, request: Requ
     atuais = {i["id"] for i in proj.itens}
     abertos = (await db.scalars(select(m.AlertaEstado).where(
         m.AlertaEstado.ilpi_id == context.ilpi_id, m.AlertaEstado.situacao.in_(ABERTOS),
-        m.AlertaEstado.regra.in_(avaliaveis), m.AlertaEstado.assumido_em < proj.agora))).all()
+        m.AlertaEstado.regra.in_(avaliaveis), m.AlertaEstado.assumido_em < proj.agora)
+        # Ordem fixa: consultas simultaneas travam as linhas na mesma ordem (sem deadlock no PostgreSQL).
+        .order_by(m.AlertaEstado.id))).all()
     mudou = False
     for estado in abertos:
         if estado.alerta_id in atuais:
@@ -609,6 +611,12 @@ async def atender_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSessi
     return await _assumir(db, context, request, payload.alerta_id, iniciar=True)
 
 
+def _violou_estado_aberto(erro: IntegrityError) -> bool:
+    texto = str(erro.orig)
+    # PostgreSQL cita o indice; SQLite cita as colunas do unico indice unico da tabela.
+    return "uq_alerta_estados_aberto" in texto or "alerta_estados.ilpi_id, alerta_estados.alerta_id" in texto
+
+
 async def _assumir(db, context, request, alerta_id: str, *, iniciar: bool) -> dict:
     # Ids simples antes de qualquer escrita: o rollback do conflito expira os objetos da sessao.
     ilpi, uid = context.ilpi_id, context.user.id
@@ -638,9 +646,11 @@ async def _assumir(db, context, request, alerta_id: str, *, iniciar: bool) -> di
     db.add(estado)
     try:
         await db.flush()
-    except IntegrityError:
+    except IntegrityError as erro:
         # Duas pessoas ao mesmo tempo: o indice unico parcial garante um so estado aberto.
         await db.rollback()
+        if not _violou_estado_aberto(erro):
+            raise  # FK/CHECK nao e "ja assumido": e erro de verdade
         await _conflito_de(db, ilpi, uid, alerta_id)
     _auditar_estado(db, context, request, estado, "atender" if iniciar else "assumir")
     await db.commit()

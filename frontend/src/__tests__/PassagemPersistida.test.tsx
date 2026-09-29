@@ -77,7 +77,7 @@ describe('Passar plantão (#125)', () => {
       if (url === '/plantoes/atual') return { data: { pode_registrar: true, funcionario_id: 'f1', plantao: { id: 'pl1' } } } as any
       return { data: [] } as any
     })
-    mockPost.mockResolvedValue({ data: passagem({ entregue_por_mim: true }) } as any)
+    mockPost.mockResolvedValue({ data: [passagem({ entregue_por_mim: true })] } as any)
     render(<PassarPlantao />)
     await userEvent.click(screen.getByRole('button', { name: /Preparar passagem/ }))
     const resumo = await screen.findByRole('list', { name: 'Resumo automático' })
@@ -102,6 +102,25 @@ describe('Passar plantão (#125)', () => {
       observacoes: [{ categoria: 'comportamento', residente_id: 'r1', texto: 'Agitada no fim da tarde' }],
     }))
     expect(await screen.findByText(/Passagem entregue/)).toBeTruthy()
+  })
+
+  it('várias áreas: uma passagem por área; sem plantao:registrar não oferece encerrar', async () => {
+    const previa: Previa = { area_id: null, area_nome: 'Ala B, Ala C', janela_inicio: '2026-09-28T10:00:00Z', janela_fim: '2026-09-28T22:00:00Z', itens: [] }
+    mockGet.mockImplementation(async (url: string) => {
+      if (url === '/passagens/previa') return { data: previa } as any
+      return { data: { pode_registrar: false, funcionario_id: 'f1', plantao: { id: 'pl1' } } } as any
+    })
+    mockPost.mockResolvedValue({ data: [
+      passagem({ id: 'b', area_nome: 'Ala B', entregue_por_mim: true }),
+      passagem({ id: 'c', area_id: 'a2', area_nome: 'Ala C', entregue_por_mim: true, itens: [item({})] }),
+    ] } as any)
+    render(<PassarPlantao />)
+    await userEvent.click(screen.getByRole('button', { name: /Preparar passagem/ }))
+    expect(await screen.findByText(/Área: Ala B, Ala C/)).toBeTruthy()
+    expect(screen.queryByRole('checkbox', { name: 'Encerrar meu plantão ao entregar' })).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: /Entregar passagem/ }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/passagens/', { observacoes: [], encerrar_plantao: false }))
+    expect(await screen.findByText(/uma por área: Ala B \(4 itens\), Ala C \(1 item\)/)).toBeTruthy()
   })
 
   it('resumo que falhou: tentar de novo ou voltar; no máximo 20 observações', async () => {
