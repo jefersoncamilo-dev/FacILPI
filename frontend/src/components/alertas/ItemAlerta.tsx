@@ -23,13 +23,15 @@ const BOTAO = 'inline-flex min-h-[44px] items-center rounded-md border border-bo
  * cuidando (estado) e o que fazer — a ação leva ao módulo de origem, que é
  * onde o alerta se resolve. Assumir não resolve: só avisa a equipe.
  */
-export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssumir = false, onMudou }: {
+export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssumir = false, podeLiberarOutros = false, onMudou }: {
   alerta: Alerta
   compacto?: boolean
   agora?: Date
   fuso?: string
   /** `alertas:assumir` confirmado; o backend decide de novo em cada ação. */
   podeAssumir?: boolean
+  /** `escala:gerenciar`: a coordenação pode liberar o alerta assumido por outra pessoa. */
+  podeLiberarOutros?: boolean
   onMudou?: () => void
 }) {
   const [salvando, setSalvando] = useState(false)
@@ -60,7 +62,7 @@ export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssum
       : estado.por_mim
         ? [...(estado.situacao === 'assumido' ? [{ acao: 'atender' as const, rotulo: 'Iniciar atendimento' }] : []),
            { acao: 'liberar' as const, rotulo: 'Liberar' }]
-        : []
+        : podeLiberarOutros ? [{ acao: 'liberar' as const, rotulo: 'Liberar' }] : []
 
   return (
     <div className="relative flex items-stretch overflow-hidden rounded-card border border-border bg-card shadow-card">
@@ -91,7 +93,8 @@ export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssum
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           {acoes.map(x => (
-            <button key={x.acao} type="button" className={BOTAO} disabled={salvando} onClick={() => agir(x.acao)}>
+            <button key={x.acao} type="button" className={BOTAO} disabled={salvando} onClick={() => agir(x.acao)}
+              aria-label={`${x.rotulo}: ${a.titulo}`}>
               {x.rotulo}
             </button>
           ))}

@@ -483,7 +483,7 @@ async def _reconciliar(db: AsyncSession, context: SecurityContext, request: Requ
     atuais = {i["id"] for i in proj.itens}
     abertos = (await db.scalars(select(m.AlertaEstado).where(
         m.AlertaEstado.ilpi_id == context.ilpi_id, m.AlertaEstado.situacao.in_(ABERTOS),
-        m.AlertaEstado.regra.in_(avaliaveis)))).all()
+        m.AlertaEstado.regra.in_(avaliaveis), m.AlertaEstado.assumido_em < proj.agora))).all()
     mudou = False
     for estado in abertos:
         if estado.alerta_id in atuais:
@@ -567,13 +567,14 @@ async def _alerta_da_sessao(db: AsyncSession, context: SecurityContext, request:
     return item
 
 
-async def _responder_estado(db, context, alerta_id) -> dict:
-    abertos = await _estados_abertos(db, context.ilpi_id)
+async def _responder_estado(db, ilpi: str, usuario_id: str, alerta_id: str) -> dict:
+    """Recebe ids simples (nao o objeto da sessao): depois de um rollback, objetos ORM expiram."""
+    abertos = await _estados_abertos(db, ilpi)
     estado = abertos.get(alerta_id)
     if estado is None:
         return {"alerta_id": alerta_id, "estado": None}
-    nomes = await _nomes_de(db, context.ilpi_id, [estado])
-    return {"alerta_id": alerta_id, "estado": _estado_item(estado, nomes, context.user.id)}
+    nomes = await _nomes_de(db, ilpi, [estado])
+    return {"alerta_id": alerta_id, "estado": _estado_item(estado, nomes, usuario_id)}
 
 
 async def _funcionario_id(db, context) -> str | None:
@@ -588,8 +589,8 @@ def _auditar_estado(db, context, request, estado: m.AlertaEstado, acao: str, ant
               valores_posteriores={"alerta_id": estado.alerta_id, "situacao": estado.situacao}, request=request)
 
 
-async def _conflito_de(db, context, alerta_id):
-    atual = (await _responder_estado(db, context, alerta_id))["estado"]
+async def _conflito_de(db, ilpi: str, usuario_id: str, alerta_id: str):
+    atual = (await _responder_estado(db, ilpi, usuario_id, alerta_id))["estado"]
     quem = atual["por_nome"] if atual else "outra pessoa"
     raise HTTPException(status_code=409, detail={"code": ALERTA_CONFLITO, "message": f"Já assumido por {quem}",
                                                  "estado": jsonable_encoder(atual)})
@@ -609,19 +610,26 @@ async def atender_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSessi
 
 
 async def _assumir(db, context, request, alerta_id: str, *, iniciar: bool) -> dict:
+    # Ids simples antes de qualquer escrita: o rollback do conflito expira os objetos da sessao.
+    ilpi, uid = context.ilpi_id, context.user.id
     item = await _alerta_da_sessao(db, context, request, alerta_id)
     agora = datetime.now(timezone.utc)
-    atual = (await _estados_abertos(db, context.ilpi_id)).get(alerta_id)
+    atual = (await _estados_abertos(db, ilpi)).get(alerta_id)
     if atual is not None:
-        if atual.assumido_por != context.user.id:
-            await _conflito_de(db, context, alerta_id)
+        if atual.assumido_por != uid:
+            await _conflito_de(db, ilpi, uid, alerta_id)
         if iniciar and atual.situacao == "assumido":
-            antes = {"situacao": atual.situacao}
-            atual.situacao, atual.em_atendimento_em = "em_atendimento", agora
-            await db.flush()
-            _auditar_estado(db, context, request, atual, "atender", antes)
-            await db.commit()
-        return await _responder_estado(db, context, alerta_id)
+            # Condicional: se a fonte encerrou o estado nesse meio-tempo, nao o reabre.
+            resultado = await db.execute(
+                update(m.AlertaEstado).where(m.AlertaEstado.id == atual.id, m.AlertaEstado.situacao == "assumido")
+                .values(situacao="em_atendimento", em_atendimento_em=agora, updated_at=agora)
+                .execution_options(synchronize_session=False))
+            if resultado.rowcount == 1:
+                add_audit(db, acao="alerta_estados.atender", entidade="alerta_estados", registro_id=atual.id,
+                          usuario_id=uid, ilpi_id=ilpi, valores_anteriores={"situacao": "assumido"},
+                          valores_posteriores={"alerta_id": alerta_id, "situacao": "em_atendimento"}, request=request)
+                await db.commit()
+        return await _responder_estado(db, ilpi, uid, alerta_id)
     estado = m.AlertaEstado(
         ilpi_id=context.ilpi_id, alerta_id=alerta_id, regra=item["regra"], referencia_id=item["referencia_id"],
         residente_id=item["residente_id"], situacao="em_atendimento" if iniciar else "assumido",
@@ -633,10 +641,10 @@ async def _assumir(db, context, request, alerta_id: str, *, iniciar: bool) -> di
     except IntegrityError:
         # Duas pessoas ao mesmo tempo: o indice unico parcial garante um so estado aberto.
         await db.rollback()
-        await _conflito_de(db, context, alerta_id)
+        await _conflito_de(db, ilpi, uid, alerta_id)
     _auditar_estado(db, context, request, estado, "atender" if iniciar else "assumir")
     await db.commit()
-    return await _responder_estado(db, context, alerta_id)
+    return await _responder_estado(db, ilpi, uid, alerta_id)
 
 
 @central_alertas_router.post("/liberar", response_model=s.AlertaEstadoResposta)
@@ -662,7 +670,7 @@ async def liberar_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSessi
                   usuario_id=context.user.id, ilpi_id=context.ilpi_id, valores_anteriores=antes,
                   valores_posteriores={"alerta_id": atual.alerta_id, "situacao": "liberado"}, request=request)
         await db.commit()
-    return await _responder_estado(db, context, payload.alerta_id)
+    return await _responder_estado(db, context.ilpi_id, context.user.id, payload.alerta_id)
 
 
 @central_alertas_router.get("/historico", response_model=list[s.AlertaEstadoHistorico])
