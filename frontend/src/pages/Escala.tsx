@@ -405,18 +405,23 @@ const ESTILO_ESTADO: Record<EstadoEscala, string> = {
   substituida: 'border-sky-200 bg-sky-50 text-sky-800',
   cancelada: 'border-border bg-muted text-slate-500',
 }
-const HORA_LOCAL = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
-const hojeLocal = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
-const horario = (e: EscalaPlanejada) => `${HORA_LOCAL.format(new Date(e.inicio_previsto))}–${HORA_LOCAL.format(new Date(e.fim_previsto))}`
+// Horário no fuso da ILPI (vem da API); São Paulo só até a primeira resposta.
+const horaNoFuso = (fuso: string) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: fuso })
+const horario = (e: EscalaPlanejada, fuso: string) => {
+  const hora = horaNoFuso(fuso)
+  return `${hora.format(new Date(e.inicio_previsto))}–${hora.format(new Date(e.fim_previsto))}`
+}
 
 interface FuncionarioOpcao { id: string; nome: string; situacao: string }
 type AcaoEscala = { escalaId: string; tipo: 'ausencia' | 'substituir' | 'cancelar' } | null
 
 /** #122: escala planejada do dia × plantão real, com ausência, substituição simples e cobertura. */
 function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolean }) {
-  const [dia, setDia] = useState(hojeLocal())
-  const buscar = useCallback(() => escalaApi.dia(dia), [dia])
+  // Sem dia escolhido, a API devolve "hoje" no fuso da ILPI (não no do navegador).
+  const [dia, setDia] = useState<string | null>(null)
+  const buscar = useCallback(() => escalaApi.dia(dia ?? undefined), [dia])
   const [carga, recarregar] = useCarga<EscalaDia>(buscar)
+  const diaAtual = dia ?? (carga.status === 'ok' ? carga.dados.dia : '')
   const [funcionarios, setFuncionarios] = useState<FuncionarioOpcao[]>([])
   const [turnos, setTurnos] = useState<Turno[]>([])
   const [areas, setAreas] = useState<Area[]>([])
@@ -451,9 +456,9 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
 
   function criar(e: FormEvent) {
     e.preventDefault()
-    if (!nova.funcionario_id || !nova.turno_id) return
+    if (!nova.funcionario_id || !nova.turno_id || !diaAtual) return
     void executar(() => escalaApi.criarEscala({
-      funcionario_id: nova.funcionario_id, turno_id: nova.turno_id, data: dia, tipo: nova.tipo,
+      funcionario_id: nova.funcionario_id, turno_id: nova.turno_id, data: diaAtual, tipo: nova.tipo,
       ...(nova.area_id ? { area_id: nova.area_id } : {}),
     }), 'Não foi possível criar a escala.')
   }
@@ -473,7 +478,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1 text-sm">
           <span className="font-medium text-foreground">Dia</span>
-          <input type="date" value={dia} onChange={e => e.target.value && setDia(e.target.value)} className={CAMPO} />
+          <input type="date" value={diaAtual} onChange={e => e.target.value && setDia(e.target.value)} className={CAMPO} />
         </label>
         <Button variant="outline" onClick={recarregar} className="min-h-[44px]"><RefreshCw aria-hidden="true" /> Atualizar</Button>
       </div>
@@ -538,23 +543,23 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
                         </p>
                         <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-semibold', ESTILO_ESTADO[e.estado])}>{ROTULO_ESTADO_ESCALA[e.estado]}</span>
                       </div>
-                      <p className="text-sm text-slate-700">{[e.turno_nome, horario(e), e.area_nome].filter(Boolean).join(' · ')}</p>
+                      <p className="text-sm text-slate-700">{[e.turno_nome, horario(e, carga.dados.fuso), e.area_nome].filter(Boolean).join(' · ')}</p>
                       {e.motivo && <p className="text-xs text-muted-foreground">Motivo: {e.motivo}</p>}
                       {e.substituto_nome && <p className="text-xs text-muted-foreground">Substituído(a) por {e.substituto_nome}</p>}
                       {(editavel || substituivel) && acao?.escalaId !== e.id && (
                         <div className="flex flex-wrap gap-3">
                           {editavel && (
-                            <button type="button" className="min-h-[36px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'ausencia' })}>
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'ausencia' })}>
                               Registrar ausência
                             </button>
                           )}
                           {substituivel && (
-                            <button type="button" className="min-h-[36px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'substituir' })}>
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'substituir' })}>
                               Substituir
                             </button>
                           )}
                           {editavel && (
-                            <button type="button" className="min-h-[36px] text-xs font-medium text-red-700 hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'cancelar' })}>
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-red-700 hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'cancelar' })}>
                               Cancelar escala
                             </button>
                           )}
@@ -573,7 +578,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
                           )}
                           <label className="space-y-1 text-xs">
                             <span className="text-muted-foreground">Motivo</span>
-                            <input value={motivo} onChange={ev => setMotivo(ev.target.value)} placeholder="Ex.: atestado" className={CAMPO} />
+                            <input value={motivo} onChange={ev => setMotivo(ev.target.value)} placeholder="Ex.: troca combinada com a coordenação" className={CAMPO} />
                           </label>
                           <Button type="submit" disabled={motivo.trim().length < 3 || (acao.tipo === 'substituir' && !substituto)} className="min-h-[44px]">
                             Confirmar
