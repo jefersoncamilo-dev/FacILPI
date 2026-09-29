@@ -268,3 +268,37 @@ def test_revisao_motivo_dia_outro_ilpi_e_substituicao_de_novo(planejada_db):
         plantao = await _ok(await client.post("/api/plantoes/iniciar", headers=h_ju, json={"escala_id": ju_hoje["id"]}), 201)
         assert plantao["escala_id"] == ju_hoje["id"] and plantao["responsabilidades"] == []
     _run(planejada_db, op)
+
+
+def test_revisao_concorrencia_posse_e_motivo_em_branco(planejada_db):
+    async def op(client, db):
+        ilpi, _, hg, ala_b = await _ilpi_com_area(client, db)
+        cuidador = await _template(db, "cuidador")
+        ana, h_ana = await _usuario(db, ilpi, cuidador, "cuidador", "Ana Sintetica")
+        ju, _ = await _usuario(db, ilpi, cuidador, "cuidador_j", "Juliana Sintetica")
+        bruno, _ = await _usuario(db, ilpi, cuidador, "cuidador_b", "Bruno Sintetico")
+        f_ana, f_ju, f_bruno = [await _funcionario_id(db, u) for u in (ana, ju, bruno)]
+
+        # So espacos: 422 (antes virava 500 ao violar ck_escalas_motivo depois do strip).
+        escala = await _escala_agora(client, hg, f_bruno, ala_b["id"])
+        for rota, corpo in (("ausencia", {}), ("cancelar", {}), ("substituir", {"funcionario_id": f_ju})):
+            r = await client.post(f"/api/escala/previsto/{escala['id']}/{rota}", headers=hg, json={**corpo, "motivo": "     "})
+            assert r.status_code == 422, (rota, r.text)
+
+        # Duas transicoes ao mesmo tempo na mesma escala: uma vence, a outra recebe 409 (nunca 500).
+        respostas = await asyncio.gather(
+            client.post(f"/api/escala/previsto/{escala['id']}/substituir", headers=hg, json={"funcionario_id": f_ju, "motivo": "Troca A"}),
+            client.post(f"/api/escala/previsto/{escala['id']}/cancelar", headers=hg, json={"motivo": "Cancelamento B"}))
+        codigos = sorted(r.status_code for r in respostas)
+        assert codigos in ([200, 409], [201, 409]), [r.text for r in respostas]
+        # Dois planejamentos sobrepostos da mesma pessoa ao mesmo tempo: um so entra.
+        inicio = _agora() + timedelta(hours=30)
+        corpo = {"funcionario_id": f_ana, "inicio_previsto": inicio.isoformat(),
+                 "fim_previsto": (inicio + timedelta(hours=6)).isoformat(), "area_id": ala_b["id"]}
+        duplas = await asyncio.gather(client.post("/api/escala/previsto", headers=hg, json=corpo),
+                                      client.post("/api/escala/previsto", headers=hg, json=corpo))
+        assert sorted(r.status_code for r in duplas) == [201, 409], [r.text for r in duplas]
+
+        # Escala de outra pessoa, mesmo ja encerrada (nao prevista): 404 antes de qualquer 409 de estado.
+        assert (await client.post("/api/plantoes/iniciar", headers=h_ana, json={"escala_id": escala["id"]})).status_code == 404
+    _run(planejada_db, op)

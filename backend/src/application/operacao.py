@@ -243,6 +243,15 @@ class EscalaCriar(BaseModel):
 class Motivo(BaseModel):
     motivo: str = Field(..., min_length=3, max_length=500)
 
+    @field_validator("motivo")
+    @classmethod
+    def _motivo(cls, v: str) -> str:
+        # So espacos passaria no tamanho e violaria ck_escalas_motivo depois do strip (500): 422 aqui.
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError("Informe o motivo (mínimo 3 caracteres)")
+        return v
+
 
 class Substituir(Motivo):
     funcionario_id: str
