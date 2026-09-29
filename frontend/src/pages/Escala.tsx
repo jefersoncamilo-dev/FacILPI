@@ -3,15 +3,15 @@ import { MapPin, Plus, RefreshCw, UserRound } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { api, formatDateTime, mensagemDeErro } from '../services/api'
 import {
-  escalaApi, ROTULO_TIPO_AREA, rotuloLeitoDaArea,
-  type Area, type EscalaAgora, type TipoArea, type Turno,
+  escalaApi, ROTULO_ESTADO_ESCALA, ROTULO_TIPO_AREA, rotuloLeitoDaArea,
+  type Area, type Escala as EscalaPlanejada, type EscalaAgora, type EscalaDia, type EstadoEscala, type TipoArea, type Turno,
 } from '../services/escala'
 import { Button } from '../components/ui/button'
 import { Alert, Skeleton } from '../components/ui/feedback'
 import { EmptyState, ErrorState } from '../components/ui/states'
 import { cn } from '../lib/utils'
 
-type Aba = 'agora' | 'areas' | 'turnos'
+type Aba = 'agora' | 'dia' | 'areas' | 'turnos'
 type Carga<T> = { status: 'carregando' } | { status: 'ok'; dados: T } | { status: 'erro'; mensagem: string }
 
 interface LeitoOpcao { id: string; unidade: string | null; quarto: string; leito: string }
@@ -42,6 +42,7 @@ export function Escala() {
   const [aba, setAba] = useState<Aba>('agora')
   const abas: { id: Aba; rotulo: string }[] = [
     { id: 'agora', rotulo: 'Agora' },
+    { id: 'dia', rotulo: 'Dia' },
     { id: 'areas', rotulo: 'Áreas' },
     { id: 'turnos', rotulo: 'Turnos' },
   ]
@@ -50,7 +51,7 @@ export function Escala() {
     <div className="space-y-6">
       <div className="space-y-1">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Escala</h1>
-        <p className="text-sm text-muted-foreground">Quem responde por cada área agora, as áreas da ILPI e os turnos.</p>
+        <p className="text-sm text-muted-foreground">Quem responde por cada área agora, a escala do dia (previsto × efetivo), as áreas e os turnos.</p>
       </div>
       <div role="tablist" aria-label="Escala" className="flex gap-1 rounded-lg bg-muted p-1">
         {abas.map(x => (
@@ -67,6 +68,7 @@ export function Escala() {
         ))}
       </div>
       {aba === 'agora' && <Agora gerenciar={gerenciar} />}
+      {aba === 'dia' && <Dia gerenciar={gerenciar} podeEquipe={pode('funcionarios:ler')} />}
       {aba === 'areas' && <Areas gerenciar={gerenciar} podeLeitos={pode('quartos_leitos:ler')} />}
       {aba === 'turnos' && <Turnos gerenciar={gerenciar} />}
     </div>
@@ -388,6 +390,222 @@ function Turnos({ gerenciar }: { gerenciar: boolean }) {
             </li>
           ))}
         </ul>
+      )}
+    </div>
+  )
+}
+
+// Classes completas: o Tailwind não enxerga nomes montados em tempo de execução.
+const ESTILO_ESTADO: Record<EstadoEscala, string> = {
+  prevista: 'border-border bg-muted text-slate-700',
+  presente: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  realizada: 'border-border bg-muted text-slate-700',
+  nao_iniciada: 'border-orange-200 bg-orange-50 text-orange-800',
+  ausente: 'border-red-200 bg-red-50 text-red-800',
+  substituida: 'border-sky-200 bg-sky-50 text-sky-800',
+  cancelada: 'border-border bg-muted text-slate-500',
+}
+// Horário no fuso da ILPI (vem da API); São Paulo só até a primeira resposta.
+const horaNoFuso = (fuso: string) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: fuso })
+const horario = (e: EscalaPlanejada, fuso: string) => {
+  const hora = horaNoFuso(fuso)
+  return `${hora.format(new Date(e.inicio_previsto))}–${hora.format(new Date(e.fim_previsto))}`
+}
+
+interface FuncionarioOpcao { id: string; nome: string; situacao: string }
+type AcaoEscala = { escalaId: string; tipo: 'ausencia' | 'substituir' | 'cancelar' } | null
+
+/** #122: escala planejada do dia × plantão real, com ausência, substituição simples e cobertura. */
+function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolean }) {
+  // Sem dia escolhido, a API devolve "hoje" no fuso da ILPI (não no do navegador).
+  const [dia, setDia] = useState<string | null>(null)
+  const buscar = useCallback(() => escalaApi.dia(dia ?? undefined), [dia])
+  const [carga, recarregar] = useCarga<EscalaDia>(buscar)
+  const diaAtual = dia ?? (carga.status === 'ok' ? carga.dados.dia : '')
+  const [funcionarios, setFuncionarios] = useState<FuncionarioOpcao[]>([])
+  const [turnos, setTurnos] = useState<Turno[]>([])
+  const [areas, setAreas] = useState<Area[]>([])
+  const [nova, setNova] = useState({ funcionario_id: '', turno_id: '', area_id: '', tipo: 'regular' as 'regular' | 'cobertura' })
+  const [acao, setAcao] = useState<AcaoEscala>(null)
+  const [motivo, setMotivo] = useState('')
+  const [substituto, setSubstituto] = useState('')
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    if (!gerenciar) return
+    escalaApi.turnos().then(t => setTurnos(t.filter(x => x.situacao === 'ativo'))).catch(() => setTurnos([]))
+    escalaApi.areas().then(a => setAreas(a.filter(x => x.situacao === 'ativa'))).catch(() => setAreas([]))
+    if (podeEquipe) {
+      api.get<FuncionarioOpcao[]>('/funcionarios/').then(r => setFuncionarios((r.data || []).filter(f => f.situacao === 'ativo')))
+        .catch(() => setFuncionarios([]))
+    }
+  }, [gerenciar, podeEquipe])
+
+  async function executar(f: () => Promise<unknown>, falha: string) {
+    setErro('')
+    try {
+      await f()
+      setAcao(null)
+      setMotivo('')
+      setSubstituto('')
+      await recarregar()
+    } catch (e) {
+      setErro(mensagemDeErro(e, falha))
+    }
+  }
+
+  function criar(e: FormEvent) {
+    e.preventDefault()
+    if (!nova.funcionario_id || !nova.turno_id || !diaAtual) return
+    void executar(() => escalaApi.criarEscala({
+      funcionario_id: nova.funcionario_id, turno_id: nova.turno_id, data: diaAtual, tipo: nova.tipo,
+      ...(nova.area_id ? { area_id: nova.area_id } : {}),
+    }), 'Não foi possível criar a escala.')
+  }
+
+  function confirmar(e: FormEvent, escala: EscalaPlanejada) {
+    e.preventDefault()
+    if (!acao || motivo.trim().length < 3) return
+    if (acao.tipo === 'ausencia') void executar(() => escalaApi.ausencia(escala.id, motivo.trim()), 'Não foi possível registrar a ausência.')
+    if (acao.tipo === 'cancelar') void executar(() => escalaApi.cancelar(escala.id, motivo.trim()), 'Não foi possível cancelar a escala.')
+    if (acao.tipo === 'substituir' && substituto) {
+      void executar(() => escalaApi.substituir(escala.id, substituto, motivo.trim()), 'Não foi possível substituir.')
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="space-y-1 text-sm">
+          <span className="font-medium text-foreground">Dia</span>
+          <input type="date" value={diaAtual} onChange={e => e.target.value && setDia(e.target.value)} className={CAMPO} />
+        </label>
+        <Button variant="outline" onClick={recarregar} className="min-h-[44px]"><RefreshCw aria-hidden="true" /> Atualizar</Button>
+      </div>
+      {erro && <Alert variant="error">{erro}</Alert>}
+
+      {gerenciar && (
+        <form onSubmit={criar} aria-label="Nova escala" className="grid gap-2 rounded-card border border-border bg-card p-4 shadow-card sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-foreground">Profissional</span>
+            <select value={nova.funcionario_id} onChange={e => setNova({ ...nova, funcionario_id: e.target.value })} className={CAMPO}>
+              <option value="">Escolha…</option>
+              {funcionarios.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-foreground">Turno</span>
+            <select value={nova.turno_id} onChange={e => setNova({ ...nova, turno_id: e.target.value })} className={CAMPO}>
+              <option value="">Escolha…</option>
+              {turnos.map(t => <option key={t.id} value={t.id}>{t.nome} ({t.hora_inicio}–{t.hora_fim})</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-foreground">Área</span>
+            <select value={nova.area_id} onChange={e => setNova({ ...nova, area_id: e.target.value })} className={CAMPO}>
+              <option value="">Sem área</option>
+              {areas.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-foreground">Tipo</span>
+            <select value={nova.tipo} onChange={e => setNova({ ...nova, tipo: e.target.value as 'regular' | 'cobertura' })} className={CAMPO}>
+              <option value="regular">Regular</option>
+              <option value="cobertura">Cobertura (extra)</option>
+            </select>
+          </label>
+          <Button type="submit" disabled={!nova.funcionario_id || !nova.turno_id} className="min-h-[44px]">
+            <Plus aria-hidden="true" /> Escalar
+          </Button>
+        </form>
+      )}
+
+      {carga.status === 'carregando' && <Carregando />}
+      {carga.status === 'erro' && <ErrorState title="Não foi possível carregar a escala do dia" description={carga.mensagem} onRetry={recarregar} />}
+      {carga.status === 'ok' && (
+        carga.dados.escalas.length === 0 && carga.dados.coberturas_sem_escala.length === 0 ? (
+          <EmptyState icon={UserRound} title="Ninguém escalado neste dia" description="Monte a escala do dia para comparar o previsto com quem de fato trabalhou." />
+        ) : (
+          <div className="space-y-4">
+            <ul className="space-y-2" aria-label="Escala do dia">
+              {carga.dados.escalas.map(e => {
+                const editavel = gerenciar && e.plantao_id === null && (e.estado === 'prevista' || e.estado === 'nao_iniciada')
+                const substituivel = gerenciar && e.plantao_id === null && (editavel || e.estado === 'ausente')
+                return (
+                  <li key={e.id} className="rounded-card border border-border bg-card p-4 shadow-card">
+                    <section aria-label={'Escala de ' + e.funcionario_nome} className="space-y-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-medium text-foreground">
+                          {e.funcionario_nome}
+                          {e.tipo !== 'regular' && (
+                            <span className="ml-2 text-xs font-normal text-muted-foreground">{e.tipo === 'substituicao' ? 'substituição' : 'cobertura'}</span>
+                          )}
+                        </p>
+                        <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-semibold', ESTILO_ESTADO[e.estado])}>{ROTULO_ESTADO_ESCALA[e.estado]}</span>
+                      </div>
+                      <p className="text-sm text-slate-700">{[e.turno_nome, horario(e, carga.dados.fuso), e.area_nome].filter(Boolean).join(' · ')}</p>
+                      {e.motivo && <p className="text-xs text-muted-foreground">Motivo: {e.motivo}</p>}
+                      {e.substituto_nome && <p className="text-xs text-muted-foreground">Substituído(a) por {e.substituto_nome}</p>}
+                      {(editavel || substituivel) && acao?.escalaId !== e.id && (
+                        <div className="flex flex-wrap gap-3">
+                          {editavel && (
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'ausencia' })}>
+                              Registrar ausência
+                            </button>
+                          )}
+                          {substituivel && (
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-primary hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'substituir' })}>
+                              Substituir
+                            </button>
+                          )}
+                          {editavel && (
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-red-700 hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'cancelar' })}>
+                              Cancelar escala
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {acao?.escalaId === e.id && (
+                        <form onSubmit={ev => confirmar(ev, e)} aria-label="Confirmar alteração da escala" className="grid gap-2 border-t border-border pt-2 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
+                          {acao.tipo === 'substituir' && (
+                            <label className="space-y-1 text-xs">
+                              <span className="text-muted-foreground">Substituto</span>
+                              <select value={substituto} onChange={ev => setSubstituto(ev.target.value)} className={CAMPO}>
+                                <option value="">Escolha…</option>
+                                {funcionarios.filter(f => f.id !== e.funcionario_id).map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                              </select>
+                            </label>
+                          )}
+                          <label className="space-y-1 text-xs">
+                            <span className="text-muted-foreground">Motivo</span>
+                            <input value={motivo} onChange={ev => setMotivo(ev.target.value)} placeholder="Ex.: troca combinada com a coordenação" className={CAMPO} />
+                          </label>
+                          <Button type="submit" disabled={motivo.trim().length < 3 || (acao.tipo === 'substituir' && !substituto)} className="min-h-[44px]">
+                            Confirmar
+                          </Button>
+                          <Button type="button" variant="outline" onClick={() => setAcao(null)} className="min-h-[44px]">Voltar</Button>
+                        </form>
+                      )}
+                    </section>
+                  </li>
+                )
+              })}
+            </ul>
+            {carga.dados.coberturas_sem_escala.length > 0 && (
+              <section aria-label="Cobertura sem escala" className="space-y-2">
+                <h2 className="font-display text-base font-semibold text-foreground">Cobertura sem escala</h2>
+                <ul className="space-y-1 text-sm text-slate-700">
+                  {carga.dados.coberturas_sem_escala.map(p => (
+                    <li key={p.id}>
+                      {p.funcionario_nome} · desde {formatDateTime(p.inicio_em)}
+                      {p.situacao === 'encerrado' && p.fim_em ? ' até ' + formatDateTime(p.fim_em) : ''}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+        )
       )}
     </div>
   )

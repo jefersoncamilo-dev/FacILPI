@@ -49,11 +49,14 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
   const { atual } = carga
   if (!atual.pode_registrar && !atual.plantao) return null
 
-  async function iniciar() {
+  async function iniciar(escalaId?: string) {
     setSalvando(true)
     setErro('')
     try {
-      await plantoesApi.iniciar({ area_ids: escolhidas, ...(turnoId ? { turno_id: turnoId } : {}) })
+      // #122: a partir da própria escala, área e turno vêm dela; sem escala é cobertura.
+      await plantoesApi.iniciar(escalaId
+        ? { area_ids: [], escala_id: escalaId }
+        : { area_ids: escolhidas, ...(turnoId ? { turno_id: turnoId } : {}) })
       setEscolhidas([])
       await carregar()
     } catch (e) {
@@ -102,6 +105,20 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
       ) : (
         <div className="space-y-3">
           <p className="font-display text-base font-semibold text-foreground">Você não está em plantão</p>
+          {(atual.escalas_pendentes ?? []).slice(0, 1).map(e => (
+            <div key={e.id} className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-slate-700">
+                <span className="font-medium text-foreground">Sua escala:</span>{' '}
+                {[e.turno_nome, formatDateTime(e.inicio_previsto) + ' – ' + formatDateTime(e.fim_previsto), e.area_nome].filter(Boolean).join(' · ')}
+              </p>
+              <Button onClick={() => iniciar(e.id)} disabled={salvando} className="min-h-[44px]">
+                <LogIn aria-hidden="true" /> Iniciar minha escala
+              </Button>
+            </div>
+          ))}
+          {(atual.escalas_pendentes ?? []).length > 0 && (
+            <p className="text-xs text-muted-foreground">Ou inicie um plantão fora da escala (cobertura):</p>
+          )}
           {areas.length > 0 && (
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium text-foreground">Por quais áreas você responde?</legend>
@@ -135,7 +152,7 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
               </select>
             </label>
           )}
-          <Button onClick={iniciar} disabled={salvando} className="min-h-[44px]">
+          <Button onClick={() => iniciar()} disabled={salvando} className="min-h-[44px]">
             <LogIn aria-hidden="true" /> Iniciar plantão
           </Button>
         </div>

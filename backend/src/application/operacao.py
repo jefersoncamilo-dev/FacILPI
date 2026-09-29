@@ -17,7 +17,7 @@ auditada. Nao e RH: sem folha, ponto ou banco de horas.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..infrastructure import models as m
 from ..infrastructure.database import get_db
+from .alertas import _fuso
 from .audit import add_audit
 from .rotina import _data, _utc
 from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_ilpi_context, require_permission
@@ -182,7 +183,33 @@ class PlantaoResposta(BaseModel):
     inicio_em: datetime
     fim_em: Optional[datetime] = None
     situacao: str
+    # 2B (#122): escala planejada que este plantao cumpre (nulo = cobertura sem escala).
+    escala_id: Optional[str] = None
     responsabilidades: list[ResponsabilidadeResposta] = []
+
+
+EstadoEscala = Literal["prevista", "presente", "realizada", "nao_iniciada", "ausente", "substituida", "cancelada"]
+
+
+class EscalaResposta(BaseModel):
+    id: str
+    funcionario_id: str
+    funcionario_nome: str
+    turno_id: Optional[str] = None
+    turno_nome: Optional[str] = None
+    area_id: Optional[str] = None
+    area_nome: Optional[str] = None
+    inicio_previsto: datetime
+    fim_previsto: datetime
+    tipo: Literal["regular", "substituicao", "cobertura"]
+    situacao: Literal["prevista", "ausente", "cancelada"]
+    motivo: Optional[str] = None
+    substitui_escala_id: Optional[str] = None
+    substituta_id: Optional[str] = None
+    substituto_nome: Optional[str] = None
+    plantao_id: Optional[str] = None
+    # Previsto x efetivo, derivado agora (nao persistido).
+    estado: EstadoEscala
 
 
 class PlantaoAtual(BaseModel):
@@ -191,11 +218,51 @@ class PlantaoAtual(BaseModel):
     pode_registrar: bool
     funcionario_id: Optional[str] = None
     plantao: Optional[PlantaoResposta] = None
+    # 2B (#122): escalas previstas da pessoa ainda por cumprir (para iniciar a partir delas).
+    escalas_pendentes: list[EscalaResposta] = []
 
 
 class IniciarPlantao(BaseModel):
     area_ids: list[str] = Field(default_factory=list, max_length=20)
     turno_id: Optional[str] = None
+    # 2B (#122): cumpre a propria escala; sem ela o plantao e cobertura sem escala.
+    escala_id: Optional[str] = None
+
+
+class EscalaCriar(BaseModel):
+    funcionario_id: str
+    area_id: Optional[str] = None
+    turno_id: Optional[str] = None
+    # Com turno + data, o horario sai do turno no fuso da ILPI; senao, inicio/fim explicitos.
+    data: Optional[date] = None
+    inicio_previsto: Optional[datetime] = None
+    fim_previsto: Optional[datetime] = None
+    tipo: Literal["regular", "cobertura"] = "regular"
+
+
+class Motivo(BaseModel):
+    motivo: str = Field(..., min_length=3, max_length=500)
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo(cls, v: str) -> str:
+        # So espacos passaria no tamanho e violaria ck_escalas_motivo depois do strip (500): 422 aqui.
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError("Informe o motivo (mínimo 3 caracteres)")
+        return v
+
+
+class Substituir(Motivo):
+    funcionario_id: str
+
+
+class EscalaDia(BaseModel):
+    dia: date
+    fuso: str
+    escalas: list[EscalaResposta]
+    # Plantoes reais do dia sem escala (cobertura avulsa).
+    coberturas_sem_escala: list[PlantaoResposta]
 
 
 class Transferir(BaseModel):
@@ -330,10 +397,111 @@ async def _plantoes_resposta(db, ilpi, plantoes: list[m.Plantao]) -> list[Planta
     por_plantao: dict[str, list[ResponsabilidadeResposta]] = {i: [] for i in ids}
     for r in resp:
         por_plantao[r.plantao_id].append(r)
+    escala_de = dict((await db.execute(select(m.Escala.plantao_id, m.Escala.id).where(
+        m.Escala.ilpi_id == ilpi, m.Escala.plantao_id.in_(ids)))).all())
     return [PlantaoResposta(
         id=p.id, funcionario_id=p.funcionario_id, funcionario_nome=nomes.get(p.funcionario_id, ""),
         turno_id=p.turno_id, turno_nome=turnos.get(p.turno_id), inicio_em=_utc(p.inicio_em), fim_em=_utc(p.fim_em),
-        situacao=p.situacao, responsabilidades=por_plantao[p.id]) for p in plantoes]
+        situacao=p.situacao, escala_id=escala_de.get(p.id), responsabilidades=por_plantao[p.id]) for p in plantoes]
+
+
+# ------------------------------------------------- escala planejada (2B) ----
+
+def _estado_escala(e: m.Escala, plantao: Optional[m.Plantao], substituta: Optional[m.Escala], agora: datetime) -> str:
+    """Previsto x efetivo, sem julgamento inventado (nao ha tolerancia de atraso)."""
+    if e.situacao == "cancelada":
+        return "cancelada"
+    if e.situacao == "ausente":
+        return "substituida" if substituta is not None else "ausente"
+    if plantao is not None:
+        return "presente" if plantao.situacao == "em_andamento" else "realizada"
+    return "prevista" if agora < _utc(e.inicio_previsto) else "nao_iniciada"
+
+
+async def _escalas_resposta(db, ilpi, escalas: list[m.Escala], *, mostrar_motivo: bool = True) -> list[EscalaResposta]:
+    """``mostrar_motivo``: motivo de ausencia pode ser dado de saude do funcionario (LGPD) — so para quem gere."""
+    if not escalas:
+        return []
+    agora = _agora()
+    ids = [e.id for e in escalas]
+    substitutas = {s.substitui_escala_id: s for s in (await db.scalars(select(m.Escala).where(
+        m.Escala.ilpi_id == ilpi, m.Escala.substitui_escala_id.in_(ids), m.Escala.situacao != "cancelada"))).all()}
+    func_ids = {e.funcionario_id for e in escalas} | {s.funcionario_id for s in substitutas.values()}
+    nomes = dict((await db.execute(select(m.Funcionario.id, m.Funcionario.nome).where(
+        m.Funcionario.ilpi_id == ilpi, m.Funcionario.id.in_(func_ids)))).all())
+    turnos = dict((await db.execute(select(m.Turno.id, m.Turno.nome).where(
+        m.Turno.ilpi_id == ilpi, m.Turno.id.in_({e.turno_id for e in escalas if e.turno_id})))).all())
+    areas = dict((await db.execute(select(m.AreaOperacional.id, m.AreaOperacional.nome).where(
+        m.AreaOperacional.ilpi_id == ilpi, m.AreaOperacional.id.in_({e.area_id for e in escalas if e.area_id})))).all())
+    plantoes = {p.id: p for p in (await db.scalars(select(m.Plantao).where(
+        m.Plantao.ilpi_id == ilpi, m.Plantao.id.in_({e.plantao_id for e in escalas if e.plantao_id})))).all()}
+    saida = []
+    for e in escalas:
+        sub = substitutas.get(e.id)
+        saida.append(EscalaResposta(
+            id=e.id, funcionario_id=e.funcionario_id, funcionario_nome=nomes.get(e.funcionario_id, ""),
+            turno_id=e.turno_id, turno_nome=turnos.get(e.turno_id), area_id=e.area_id, area_nome=areas.get(e.area_id),
+            inicio_previsto=_utc(e.inicio_previsto), fim_previsto=_utc(e.fim_previsto), tipo=e.tipo, situacao=e.situacao,
+            motivo=e.motivo if mostrar_motivo else None, substitui_escala_id=e.substitui_escala_id,
+            substituta_id=sub.id if sub else None,
+            substituto_nome=nomes.get(sub.funcionario_id) if sub else None, plantao_id=e.plantao_id,
+            estado=_estado_escala(e, plantoes.get(e.plantao_id), sub, agora)))
+    return saida
+
+
+async def _funcionario_ativo(db, ilpi, funcionario_id) -> m.Funcionario:
+    func = (await db.execute(select(m.Funcionario).where(
+        m.Funcionario.id == funcionario_id, m.Funcionario.ilpi_id == ilpi))).scalar_one_or_none()
+    if func is None:
+        _nao_encontrado()
+    if func.situacao != "ativo":
+        _conflito("Este funcionário não está ativo")
+    return func
+
+
+async def _travar_funcionario(db, ilpi, funcionario_id) -> None:
+    """Serializa o planejamento da mesma pessoa (checar sobreposicao e inserir sem corrida)."""
+    resultado = await db.execute(
+        update(m.Funcionario).where(m.Funcionario.id == funcionario_id, m.Funcionario.ilpi_id == ilpi)
+        .values(situacao=m.Funcionario.situacao).execution_options(synchronize_session=False))
+    if resultado.rowcount != 1:
+        _nao_encontrado()
+
+
+async def _travar_escala(db, ilpi, escala_id) -> m.Escala:
+    """Primeiro DML da transicao da escala: ausencia, cancelamento, substituicao e inicio nao correm entre si."""
+    resultado = await db.execute(
+        update(m.Escala).where(m.Escala.id == escala_id, m.Escala.ilpi_id == ilpi)
+        .values(situacao=m.Escala.situacao).execution_options(synchronize_session=False))
+    if resultado.rowcount != 1:
+        _nao_encontrado()
+    return (await db.execute(select(m.Escala).where(m.Escala.id == escala_id, m.Escala.ilpi_id == ilpi)
+                             .execution_options(populate_existing=True))).scalar_one()
+
+
+async def _fim_de_hoje(db, ilpi, agora) -> datetime:
+    fuso = await _fuso(db, ilpi)
+    return datetime.combine(agora.astimezone(fuso).date() + timedelta(days=1), time.min, tzinfo=fuso).astimezone(timezone.utc)
+
+
+async def _sem_sobreposicao(db, ilpi, funcionario_id, inicio, fim, ignorar_id=None):
+    await _travar_funcionario(db, ilpi, funcionario_id)
+    consulta = select(m.Escala.id).where(
+        m.Escala.ilpi_id == ilpi, m.Escala.funcionario_id == funcionario_id, m.Escala.situacao == "prevista",
+        m.Escala.inicio_previsto < fim, m.Escala.fim_previsto > inicio)
+    if ignorar_id:
+        consulta = consulta.where(m.Escala.id != ignorar_id)
+    if (await db.execute(consulta.limit(1))).first() is not None:
+        _conflito("Este profissional já tem escala prevista neste horário")
+
+
+async def _escala_prevista_editavel(db, ilpi, escala_id) -> m.Escala:
+    escala = await _travar_escala(db, ilpi, escala_id)
+    if escala.situacao != "prevista":
+        _conflito("Esta escala não está mais prevista")
+    if escala.plantao_id is not None:
+        _conflito("Esta escala já foi cumprida por um plantão; o histórico não é alterado")
+    return escala
 
 
 async def _abrir_responsabilidade(db, context, request, plantao: m.Plantao, area: m.AreaOperacional, instante):
@@ -617,6 +785,117 @@ async def encerrar_responsabilidade(responsabilidade_id: str, request: Request, 
     return next(r for r in await _responsabilidades(db, context.ilpi_id, plantao_ids=[resp.plantao_id]) if r.id == resp.id)
 
 
+# ---------------------------------------------- previsto x efetivo (2B) ----
+
+@escala_router.get("/previsto", response_model=EscalaDia)
+async def escala_do_dia(dia: Optional[date] = None, db: AsyncSession = Depends(get_db),
+                        context: SecurityContext = Depends(require_permission("escala:ler"))):
+    """Escalas que tocam o dia (no fuso da ILPI) e coberturas reais sem escala."""
+    ilpi = context.ilpi_id
+    fuso = await _fuso(db, ilpi)
+    dia = dia or _agora().astimezone(fuso).date()
+    inicio = datetime.combine(dia, time.min, tzinfo=fuso).astimezone(timezone.utc)
+    fim = datetime.combine(dia + timedelta(days=1), time.min, tzinfo=fuso).astimezone(timezone.utc)
+    escalas = (await db.scalars(select(m.Escala).where(
+        m.Escala.ilpi_id == ilpi, m.Escala.inicio_previsto < fim, m.Escala.fim_previsto > inicio)
+        .order_by(m.Escala.inicio_previsto, m.Escala.created_at, m.Escala.id))).all()
+    cumpridos = select(m.Escala.plantao_id).where(m.Escala.ilpi_id == ilpi, m.Escala.plantao_id.is_not(None))
+    avulsos = (await db.scalars(select(m.Plantao).where(
+        m.Plantao.ilpi_id == ilpi, m.Plantao.inicio_em < fim, or_(m.Plantao.fim_em.is_(None), m.Plantao.fim_em > inicio),
+        m.Plantao.id.not_in(cumpridos)).order_by(m.Plantao.inicio_em, m.Plantao.id))).all()
+    gere = "escala:gerenciar" in set(await allowed_permission_keys(db, context))
+    return EscalaDia(dia=dia, fuso=fuso.key, escalas=await _escalas_resposta(db, ilpi, list(escalas), mostrar_motivo=gere),
+                     coberturas_sem_escala=await _plantoes_resposta(db, ilpi, list(avulsos)))
+
+
+@escala_router.post("/previsto", response_model=EscalaResposta, status_code=201)
+async def criar_escala(payload: EscalaCriar, request: Request, db: AsyncSession = Depends(get_db),
+                       context: SecurityContext = Depends(require_permission("escala:gerenciar"))):
+    ilpi = context.ilpi_id
+    func = await _funcionario_ativo(db, ilpi, payload.funcionario_id)
+    area = await _area_ativa(db, ilpi, payload.area_id) if payload.area_id else None
+    turno = await _obter(db, m.Turno, payload.turno_id, ilpi) if payload.turno_id else None
+    if turno is not None and turno.situacao != "ativo":
+        _conflito("Este turno está inativo")
+    if turno is not None and payload.data is not None:
+        # Horario do turno no fuso da ILPI; fim <= inicio cruza a meia-noite.
+        fuso = await _fuso(db, ilpi)
+        h_ini, h_fim = (time.fromisoformat(turno.hora_inicio), time.fromisoformat(turno.hora_fim))
+        inicio = datetime.combine(payload.data, h_ini, tzinfo=fuso)
+        fim = datetime.combine(payload.data + (timedelta(days=1) if h_fim <= h_ini else timedelta()), h_fim, tzinfo=fuso)
+        inicio, fim = inicio.astimezone(timezone.utc), fim.astimezone(timezone.utc)
+    elif payload.inicio_previsto is not None and payload.fim_previsto is not None:
+        inicio, fim = _utc(payload.inicio_previsto), _utc(payload.fim_previsto)
+    else:
+        raise HTTPException(status_code=422, detail={"code": OPERACAO_INVALIDA,
+                                                     "message": "Informe turno e data, ou início e fim previstos"})
+    if fim <= inicio:
+        raise HTTPException(status_code=422, detail={"code": OPERACAO_INVALIDA, "message": "O fim precisa ser depois do início"})
+    await _sem_sobreposicao(db, ilpi, func.id, inicio, fim)
+    escala = m.Escala(ilpi_id=ilpi, funcionario_id=func.id, turno_id=turno.id if turno else None,
+                      area_id=area.id if area else None, inicio_previsto=inicio, fim_previsto=fim,
+                      tipo=payload.tipo, situacao="prevista", criado_por=context.user.id)
+    db.add(escala)
+    await _auditar(db, escala, context, request, "criar")
+    await db.commit()
+    return (await _escalas_resposta(db, ilpi, [escala]))[0]
+
+
+@escala_router.post("/previsto/{escala_id}/ausencia", response_model=EscalaResposta)
+async def registrar_ausencia(escala_id: str, payload: Motivo, request: Request, db: AsyncSession = Depends(get_db),
+                             context: SecurityContext = Depends(require_permission("escala:gerenciar"))):
+    escala = await _escala_prevista_editavel(db, context.ilpi_id, escala_id)
+    antes = _data(escala)
+    escala.situacao, escala.motivo, escala.atualizado_por = "ausente", payload.motivo.strip(), context.user.id
+    await _auditar(db, escala, context, request, "ausencia", antes)
+    await db.commit()
+    return (await _escalas_resposta(db, context.ilpi_id, [escala]))[0]
+
+
+@escala_router.post("/previsto/{escala_id}/substituir", response_model=list[EscalaResposta], status_code=201)
+async def substituir(escala_id: str, payload: Substituir, request: Request, db: AsyncSession = Depends(get_db),
+                     context: SecurityContext = Depends(require_permission("escala:gerenciar"))):
+    """Substituicao simples: a original fica ausente e nasce uma escala de substituicao no mesmo periodo."""
+    ilpi = context.ilpi_id
+    original = await _travar_escala(db, ilpi, escala_id)
+    if original.situacao == "cancelada" or original.plantao_id is not None:
+        _conflito("Só uma escala prevista ou ausente, ainda não cumprida, pode ser substituída")
+    ja = (await db.execute(select(m.Escala.id).where(m.Escala.ilpi_id == ilpi, m.Escala.substitui_escala_id == original.id,
+                                                    m.Escala.situacao != "cancelada"))).first()
+    if ja is not None:
+        _conflito("Esta escala já tem substituto")
+    func = await _funcionario_ativo(db, ilpi, payload.funcionario_id)
+    if func.id == original.funcionario_id:
+        _conflito("O substituto precisa ser outro profissional")
+    await _sem_sobreposicao(db, ilpi, func.id, _utc(original.inicio_previsto), _utc(original.fim_previsto))
+    if original.situacao == "prevista":
+        antes = _data(original)
+        original.situacao, original.motivo, original.atualizado_por = "ausente", payload.motivo.strip(), context.user.id
+        await _auditar(db, original, context, request, "ausencia", antes)
+    nova = m.Escala(ilpi_id=ilpi, funcionario_id=func.id, turno_id=original.turno_id, area_id=original.area_id,
+                    inicio_previsto=original.inicio_previsto, fim_previsto=original.fim_previsto, tipo="substituicao",
+                    situacao="prevista", substitui_escala_id=original.id, motivo=None, criado_por=context.user.id)
+    db.add(nova)
+    try:
+        await _auditar(db, nova, context, request, "substituir")
+    except IntegrityError:
+        await db.rollback()
+        _conflito("Esta escala já tem substituto")
+    await db.commit()
+    return await _escalas_resposta(db, ilpi, [original, nova])
+
+
+@escala_router.post("/previsto/{escala_id}/cancelar", response_model=EscalaResposta)
+async def cancelar_escala(escala_id: str, payload: Motivo, request: Request, db: AsyncSession = Depends(get_db),
+                          context: SecurityContext = Depends(require_permission("escala:gerenciar"))):
+    escala = await _escala_prevista_editavel(db, context.ilpi_id, escala_id)
+    antes = _data(escala)
+    escala.situacao, escala.motivo, escala.atualizado_por = "cancelada", payload.motivo.strip(), context.user.id
+    await _auditar(db, escala, context, request, "cancelar", antes)
+    await db.commit()
+    return (await _escalas_resposta(db, context.ilpi_id, [escala]))[0]
+
+
 # --------------------------------------------------------------- plantoes ----
 
 @plantoes_router.get("/atual", response_model=PlantaoAtual)
@@ -632,7 +911,14 @@ async def plantao_atual(db: AsyncSession = Depends(get_db), context: SecurityCon
     resposta = (await _plantoes_resposta(db, context.ilpi_id, [plantao]))[0] if plantao else None
     if resposta is not None:
         resposta.responsabilidades = [r for r in resposta.responsabilidades if r.fim_em is None]
-    return PlantaoAtual(pode_registrar="plantao:registrar" in chaves, funcionario_id=funcionario.id, plantao=resposta)
+    # Escalas previstas da propria pessoa ainda por cumprir (as proximas primeiro).
+    pendentes = (await db.scalars(select(m.Escala).where(
+        m.Escala.ilpi_id == context.ilpi_id, m.Escala.funcionario_id == funcionario.id, m.Escala.situacao == "prevista",
+        m.Escala.plantao_id.is_(None), m.Escala.fim_previsto > _agora(),
+        m.Escala.inicio_previsto < await _fim_de_hoje(db, context.ilpi_id, _agora()))
+        .order_by(m.Escala.inicio_previsto, m.Escala.id).limit(3))).all()
+    return PlantaoAtual(pode_registrar="plantao:registrar" in chaves, funcionario_id=funcionario.id, plantao=resposta,
+                        escalas_pendentes=await _escalas_resposta(db, context.ilpi_id, list(pendentes)))
 
 
 @plantoes_router.post("/iniciar", response_model=PlantaoResposta, status_code=201)
@@ -642,13 +928,31 @@ async def iniciar_plantao(payload: IniciarPlantao, request: Request, db: AsyncSe
     funcionario = await funcionario_da_sessao(db, context)
     if funcionario is None:
         _conflito("Seu usuário não está vinculado a um funcionário ativo desta ILPI")
-    turno = None
-    if payload.turno_id:
-        turno = await _obter(db, m.Turno, payload.turno_id, ilpi)
-        if turno.situacao != "ativo":
-            _conflito("Este turno está inativo")
-    areas = [await _area_ativa(db, ilpi, area_id) for area_id in dict.fromkeys(payload.area_ids)]
     instante = _agora()
+    escala = None
+    if payload.escala_id:
+        # Posse primeiro: escala de outra pessoa (ou ILPI) e inexistente para quem pede.
+        propria = await _obter(db, m.Escala, payload.escala_id, ilpi)
+        if propria.funcionario_id != funcionario.id:
+            _nao_encontrado()
+        escala = await _escala_prevista_editavel(db, ilpi, propria.id)
+        if _utc(escala.fim_previsto) <= instante:
+            _conflito("O período desta escala já terminou")
+        # So escala que toca o dia de hoje (no fuso da ILPI): nao se cumpre hoje a escala de amanha.
+        if _utc(escala.inicio_previsto) >= await _fim_de_hoje(db, ilpi, instante):
+            _conflito("Esta escala é de outro dia")
+    turno_id = payload.turno_id or (escala.turno_id if escala else None)
+    turno = None
+    if turno_id:
+        turno = await _obter(db, m.Turno, turno_id, ilpi)
+        if turno.situacao != "ativo" and payload.turno_id:
+            _conflito("Este turno está inativo")
+    if payload.area_ids:
+        areas = [await _area_ativa(db, ilpi, area_id) for area_id in dict.fromkeys(payload.area_ids)]
+    else:
+        # Area da escala inativada depois do planejamento: o plantao comeca sem area (a coordenacao atribui).
+        da_escala = await _obter(db, m.AreaOperacional, escala.area_id, ilpi) if escala is not None and escala.area_id else None
+        areas = [da_escala] if da_escala is not None and da_escala.situacao == "ativa" else []
     plantao = m.Plantao(ilpi_id=ilpi, funcionario_id=funcionario.id, turno_id=turno.id if turno else None,
                         inicio_em=instante, situacao="em_andamento", iniciado_por=context.user.id)
     db.add(plantao)
@@ -658,6 +962,14 @@ async def iniciar_plantao(payload: IniciarPlantao, request: Request, db: AsyncSe
         await db.rollback()
         _conflito("Você já tem um plantão em andamento")
     await _auditar(db, plantao, context, request, "iniciar")
+    if escala is not None:
+        antes = _data(escala)
+        escala.plantao_id, escala.atualizado_por = plantao.id, context.user.id
+        try:
+            await _auditar(db, escala, context, request, "cumprir", antes)
+        except IntegrityError:
+            await db.rollback()
+            _conflito("A escala mudou enquanto o plantão era iniciado; atualize e tente de novo")
     for area in areas:
         await _abrir_responsabilidade(db, context, request, plantao, area, instante)
     await db.commit()

@@ -1262,3 +1262,56 @@ class Responsabilidade(Base):
     criado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     encerrado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+
+
+class Escala(Base):
+    """Escala PLANEJADA (#122): quem deveria trabalhar, quando e onde.
+
+    O plantao REAL continua em Plantao; quando nasce desta escala, ``plantao_id``
+    registra o vinculo. Ausencia e cancelamento sao situacoes (historico fica).
+    """
+
+    __tablename__ = "escalas"
+    __table_args__ = (
+        UniqueConstraint("id", "ilpi_id", name="uq_escalas_id_ilpi"),
+        ForeignKeyConstraint(["funcionario_id", "ilpi_id"], ["funcionarios.id", "funcionarios.ilpi_id"],
+                             name="fk_escalas_funcionario", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["turno_id", "ilpi_id"], ["turnos.id", "turnos.ilpi_id"],
+                             name="fk_escalas_turno", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["area_id", "ilpi_id"], ["areas_operacionais.id", "areas_operacionais.ilpi_id"],
+                             name="fk_escalas_area", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["substitui_escala_id", "ilpi_id"], ["escalas.id", "escalas.ilpi_id"],
+                             name="fk_escalas_substitui", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["plantao_id", "ilpi_id"], ["plantoes.id", "plantoes.ilpi_id"],
+                             name="fk_escalas_plantao", ondelete="RESTRICT"),
+        CheckConstraint("plantao_id IS NULL OR situacao = 'prevista'", name="ck_escalas_plantao_prevista"),
+        CheckConstraint("fim_previsto > inicio_previsto", name="ck_escalas_periodo"),
+        CheckConstraint("tipo IN ('regular','substituicao','cobertura')", name="ck_escalas_tipo"),
+        CheckConstraint("situacao IN ('prevista','ausente','cancelada')", name="ck_escalas_situacao"),
+        CheckConstraint("(tipo = 'substituicao') = (substitui_escala_id IS NOT NULL)", name="ck_escalas_substituicao"),
+        CheckConstraint("situacao = 'prevista' OR (motivo IS NOT NULL AND length(trim(motivo)) > 0)",
+                        name="ck_escalas_motivo"),
+        Index("ix_escalas_ilpi_inicio", "ilpi_id", "inicio_previsto"),
+        Index("ix_escalas_funcionario", "ilpi_id", "funcionario_id", "inicio_previsto"),
+        Index("uq_escalas_substituicao", "substitui_escala_id", unique=True,
+              sqlite_where=sa.text("substitui_escala_id IS NOT NULL AND situacao != 'cancelada'"),
+              postgresql_where=sa.text("substitui_escala_id IS NOT NULL AND situacao != 'cancelada'")),
+        Index("uq_escalas_plantao", "plantao_id", unique=True,
+              sqlite_where=sa.text("plantao_id IS NOT NULL"), postgresql_where=sa.text("plantao_id IS NOT NULL")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
+    funcionario_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    turno_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    area_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    inicio_previsto: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    fim_previsto: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(20), nullable=False, default="regular")
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="prevista")
+    substitui_escala_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    plantao_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    motivo: Mapped[str] = mapped_column(Text, nullable=True)
+    criado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
+    atualizado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), onupdate=func.now())
