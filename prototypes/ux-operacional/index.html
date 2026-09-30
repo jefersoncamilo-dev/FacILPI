@@ -2,7 +2,8 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="theme-color" content="#FFFFFF">
   <title>FacILPI · Protótipo do plantão</title>
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -40,13 +41,16 @@
 
     <div class="main">
       <header class="topbar">
-        <div>
-          <div class="topbar-title" id="page-title">Meu Plantão</div>
-          <div class="topbar-sub" id="page-sub"></div>
+        <div class="topbar-txt">
+          <h1 class="topbar-title" id="page-title">Meu Plantão</h1>
+          <div class="topbar-sub" id="page-sub">Manhã 07–13 · Ala B</div>
         </div>
-        <div class="me" aria-label="Profissional em plantão">
-          <span class="avatar sm" aria-hidden="true">AS</span>
-          <span class="me-txt"><strong>Ana Souza</strong><span>Cuidadora</span></span>
+        <div class="topbar-actions">
+          <button type="button" class="icon-btn bell" id="btn-sino" data-aux="notificacoes" aria-label="Notificações"></button>
+          <span class="me" aria-label="Profissional em plantão">
+            <span class="avatar sm" aria-hidden="true">AS</span>
+            <span class="me-txt"><strong>Ana Souza</strong><span>Cuidadora</span></span>
+          </span>
         </div>
       </header>
       <main id="view" tabindex="-1"></main>
@@ -55,6 +59,7 @@
 
   <nav class="bottom-nav" id="nav-bottom" aria-label="Navegação principal"></nav>
 
+  <div id="sheet-root"></div>
   <div id="live" class="sr-only" aria-live="polite"></div>
   <div id="toast" class="toast" role="status" hidden></div>
 

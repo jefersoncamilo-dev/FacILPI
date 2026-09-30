@@ -193,3 +193,50 @@ Cada PR é uma Issue.
 1. **Registro individual seguro** (P0-1 + P0-2): nenhum resultado pré-selecionado, horário real ajustável, motivo obrigatório para recusa e não realizado, e 409 lido como "já registrado" com o preenchimento preservado.
 2. **Registro coletivo por atividade** (P0-3): uma linha por residente com resultado e horário próprios, sem "marcar todos", usando o endpoint atual. O ajudante entra em seguida (P1-1).
 3. **Passagem que preserva responsabilidade** (P0-4 + P0-5): permissão correta no menu, pendências herdadas com responsável e prazo, e recebimento explicitamente separado de conclusão.
+
+---
+
+## 10. Rodada 2: protótipo com comportamento de aplicativo no celular
+
+**O que mudou no protótipo** (`prototypes/ux-operacional/`):
+
+- **Estrutura da tela:** cabeçalho compacto com um sino de notificações. A navegação inferior tem três itens: Plantão, Residentes e Passagem.
+  - "Residentes" não é uma tela nova. Mostra a mesma fonte de dados agrupada por pessoa, e tocar num residente filtra o Meu Plantão.
+- **Lista:** cada atividade é uma linha de cerca de 60 px, com horário, atividade e estado (ícone e texto). Há chips rápidos e filtros adicionais num Sheet.
+- **Registro abaixo de 1024 px:** o registro individual e o coletivo abrem num painel inferior (Sheet).
+  - O residente continua identificado no topo, o conteúdo rola por dentro e a barra de ação fica fixa no rodapé.
+  - A navegação inferior sai de cena enquanto o Sheet está aberto.
+- **A partir de 1024 px:** a lista e o painel lateral continuam como antes.
+- **Retorno sem perder contexto:**
+  - fechar o Sheet volta ao mesmo ponto da lista, com o foco no item que o abriu;
+  - `history.back()` só é usado quando o Sheet foi aberto de dentro do app; nos outros casos, volta para a tela principal;
+  - filtros e rascunhos são preservados.
+- **Depois de salvar:** só a linha, o grupo, os contadores e o sino são atualizados.
+- **"Salvar e próximo":** avança apenas entre cuidados sem registro dentro dos filtros ativos. Medicação continua no fluxo próprio.
+
+**Capturas mobile** (390 × 844, Chrome headless com o parâmetro `?captura`, que remove o atraso de carregamento e as animações só para a imagem): [capturas/](capturas/)
+1. `01-meu-plantao.png`
+2. `02-sheet-registro-individual.png`
+3. `03-sheet-registro-coletivo.png`
+4. `04-sheet-filtros.png`
+5. `05-residentes.png`
+6. `06-passagem.png`
+7. `07-sheet-notificacoes.png`
+
+**Verificado no navegador embutido:**
+- **360 e 390 px:**
+  - sem rolagem horizontal;
+  - alvos de toque ≥ 44 px;
+  - abrir e fechar o Sheet por teclado (Enter, Tab preso no Sheet, Esc) e pelo botão fechar;
+  - navegação inferior visível nas telas principais e oculta com o Sheet aberto;
+  - rodapé sem cobrir campos;
+  - falha, rascunho preservado e nova tentativa;
+  - "Salvar e próximo";
+  - coletivo, filtros, Residentes, Passagem com e sem acesso;
+  - console sem erros.
+- **768 px:** abre Sheet.
+- **1366 px:** lista com painel lateral.
+
+**Limitações:**
+- O **teclado virtual** não foi testado: a emulação de viewport estreito não o reproduz. O ajuste por `visualViewport` e `interactive-widget=resizes-content` é o tratamento proposto e precisa de validação em aparelho real (Android e iOS).
+- Não houve teste com leitor de tela nem em tablet físico.
