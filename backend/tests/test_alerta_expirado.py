@@ -141,3 +141,27 @@ def test_028_amplia_checks_mantem_indice_e_recusa_downgrade_com_expirado(pre028_
             await db.commit()
         await db.rollback()
     asyncio.run(_client(pre028_db, voltou))
+
+
+def test_item_anterior_a_janela_do_episodio_nao_expira_o_estado(expirado_db):
+    async def op(client, db):
+        h, res, alvo = await _cuidado_na_janela(client, db)
+        alerta = f"cuidados_sem_registro:{res.id}"
+        # Outra ocorrencia pendente muito antiga (fora da janela de quando o alerta foi assumido).
+        antiga = (await db.scalars(select(m.OcorrenciaCuidado).where(
+            m.OcorrenciaCuidado.programacao_id == alvo.programacao_id, m.OcorrenciaCuidado.id != alvo.id))).first()
+        await db.execute(update(m.OcorrenciaCuidado).where(m.OcorrenciaCuidado.id == antiga.id)
+                         .values(previsto_em=_agora() - timedelta(hours=30)))
+        await db.commit()
+        assert (await client.post(f"{URL}/assumir", headers=h, json={"alerta_id": alerta})).status_code == 200
+        # O alvo e executado; a antiga ja estava fora da janela do episodio -> resolvido, nao expirado.
+        r = await client.post("/api/execucoes-cuidado/", headers=h, json={
+            "ocorrencia_id": alvo.id, "resultado": "executada", "ocorrido_em": _agora().isoformat()})
+        assert r.status_code == 201, r.text
+        await _alertas(client, h)
+        await _alertas(client, h)
+        assert tuple(await _estado(db, alerta)) == ("resolvido", "fonte")
+        encerramentos = (await db.scalars(select(m.Auditoria.acao).where(
+            m.Auditoria.acao.in_(("alerta_estados.resolvido_pela_fonte", "alerta_estados.expirado_sem_registro"))))).all()
+        assert len(encerramentos) == 1, "duas consultas, uma auditoria"
+    _run(expirado_db, op)
