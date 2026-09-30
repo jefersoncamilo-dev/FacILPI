@@ -362,3 +362,23 @@ def test_prazo_no_fuso_da_ilpi(alertas_db):
         esperado = datetime.combine(doc.validade + timedelta(days=1), time.min, tzinfo=manaus).astimezone(timezone.utc)
         assert _dt(item["prazo"]) == esperado
     _run(alertas_db, op)
+
+
+def test_consulta_sem_permissao_de_medicacao_nao_fecha_estado_de_dose(alertas_db):
+    async def op(client, db):
+        ilpi, h_gestor, x = await _cenario(client, db)
+        _, h_enf, _ = await _institucional(db, ilpi, "enfermagem")
+        dose = f"doses_sem_registro:{x['hilda'].id}"
+        r = await client.post("/api/central-alertas/assumir", headers=h_enf, json={"alerta_id": dose})
+        assert r.status_code == 200, r.text
+        # Quem nao le medicacao consulta a central: a regra de dose nao e avaliada, entao o estado segue aberto (#131).
+        for chave in ("cuidador", "ilpi_admin"):
+            _, h, _ = await _institucional(db, ilpi, chave)
+            payload = await _alertas(client, h)
+            assert dose not in {a["id"] for a in payload["alertas"]}, chave
+        situacao = await db.scalar(select(m.AlertaEstado.situacao).where(m.AlertaEstado.alerta_id == dose)
+                                   .execution_options(populate_existing=True))
+        assert situacao == "assumido"
+        estado = next(a for a in (await _alertas(client, h_enf))["alertas"] if a["id"] == dose)["estado"]
+        assert estado["situacao"] == "assumido" and estado["por_mim"] is True
+    _run(alertas_db, op)
