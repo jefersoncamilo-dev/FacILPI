@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FacILPI · Protótipo do plantão</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="proto-strip" role="region" aria-label="Controles do protótipo">
+    <span class="proto-pill">Protótipo · dados sintéticos</span>
+    <div class="proto-controls">
+      <button type="button" id="btn-inspecao" class="proto-btn" aria-pressed="false">Inspeção</button>
+      <details class="proto-sim">
+        <summary class="proto-btn">Simulação</summary>
+        <div class="proto-sim-panel">
+          <label for="sim-falha">Próximo envio</label>
+          <select id="sim-falha">
+            <option value="none">Funciona normalmente</option>
+            <option value="antes">Falha de rede (nada é salvo)</option>
+            <option value="resposta">Resposta perdida (salvou no servidor)</option>
+          </select>
+          <label for="sim-perfil">Perfil</label>
+          <select id="sim-perfil">
+            <option value="com">Cuidadora com acesso à passagem</option>
+            <option value="sem">Cuidadora sem acesso à passagem</option>
+          </select>
+          <button type="button" id="sim-reset" class="proto-link">Reiniciar dados</button>
+          <p class="proto-note">Permissões e respostas aqui são simuladas no navegador e não comprovam o comportamento do servidor.</p>
+        </div>
+      </details>
+    </div>
+  </div>
+
+  <div class="shell">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <div class="brand">FacILPI</div>
+      <nav id="nav-side"></nav>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div>
+          <div class="topbar-title" id="page-title">Meu Plantão</div>
+          <div class="topbar-sub" id="page-sub"></div>
+        </div>
+        <div class="me" aria-label="Profissional em plantão">
+          <span class="avatar sm" aria-hidden="true">AS</span>
+          <span class="me-txt"><strong>Ana Souza</strong><span>Cuidadora</span></span>
+        </div>
+      </header>
+      <main id="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <nav class="bottom-nav" id="nav-bottom" aria-label="Navegação principal"></nav>
+
+  <div id="live" class="sr-only" aria-live="polite"></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <dialog id="dlg" aria-labelledby="dlg-title">
+    <form method="dialog" id="dlg-form">
+      <h2 id="dlg-title"></h2>
+      <div id="dlg-body"></div>
+      <div class="dlg-actions">
+        <button value="cancel" class="btn btn-ghost">Voltar</button>
+        <button value="ok" id="dlg-ok" class="btn btn-primary">Confirmar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
