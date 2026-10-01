@@ -267,9 +267,10 @@ describe('Sino, navegação inferior e Início (#107, #117)', () => {
     comPermissoes(['residentes:ler'])
     responde()
     renderShell()
-    await within(screen.getByRole('navigation', { name: 'Navegação principal' })).findByRole('link', { name: /Residentes/ })
+    await within(screen.getByRole('navigation', { name: 'Navegação principal' })).findAllByRole('link', { name: /Residentes/, hidden: true })
     expect(screen.queryByRole('button', { name: /^Alertas/ })).toBeNull()
     expect(screen.queryByRole('link', { name: /^Alertas/ })).toBeNull()
+    expect(screen.queryByRole('link', { name: /Central de Alertas/, hidden: true })).toBeNull()
     expect(chamouAlertas()).toBe(0)
   })
 
