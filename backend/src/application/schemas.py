@@ -128,12 +128,12 @@ class AlertaEstadoResposta(BaseModel):
 
 class AlertaEstadoHistorico(BaseModel):
     id: str
-    situacao: Literal["assumido", "em_atendimento", "resolvido", "liberado"]
+    situacao: Literal["assumido", "em_atendimento", "resolvido", "liberado", "expirado"]
     por_nome: str
     assumido_em: datetime
     em_atendimento_em: Optional[datetime] = None
     encerrado_em: Optional[datetime] = None
-    encerramento: Optional[Literal["fonte", "liberado"]] = None
+    encerramento: Optional[Literal["fonte", "liberado", "janela"]] = None
 
 
 class AlertaGestorItem(BaseModel):

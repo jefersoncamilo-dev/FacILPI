@@ -473,8 +473,35 @@ ORIGEM_DA_REGRA = {
 }
 
 
+# Regras de "sem registro" na janela: a fonte e a atividade prevista (#132).
+FONTE_SEM_REGISTRO = {
+    "cuidados_sem_registro": (m.OcorrenciaCuidado, _has_execucao_vigente),
+    "doses_sem_registro": (m.DosePrevista, _has_admin_vigente),
+}
+
+
+async def _expirou_sem_registro(db, ilpi: str, estado: m.AlertaEstado, agora: datetime) -> bool:
+    """O alerta sumiu porque algo que estava na janela quando foi assumido saiu dela SEM registro?
+
+    Cuidados/doses do residente com previsto em [assumido - 24 h, agora - 24 h),
+    ainda previstos e sem execucao/administracao vigente: sairam da janela, nao
+    foram feitos. Sem nada assim, o sumico e resolucao pela fonte.
+    """
+    fonte = FONTE_SEM_REGISTRO.get(estado.regra)
+    if fonte is None or estado.referencia_id is None:
+        return False
+    modelo, registrado = fonte
+    janela = timedelta(hours=HORAS_JANELA_PLANTAO)
+    assumido = _utc(estado.assumido_em)
+    return (await db.execute(select(modelo.id).where(
+        modelo.ilpi_id == ilpi, modelo.residente_id == estado.referencia_id, modelo.situacao == "prevista",
+        modelo.previsto_em >= assumido - janela, modelo.previsto_em < agora - janela, ~registrado())
+        .limit(1))).first() is not None
+
+
 async def _reconciliar(db: AsyncSession, context: SecurityContext, request: Request, proj: _Projecao) -> None:
-    """Resolucao pela fonte: estado aberto cujo alerta a projecao nao gera mais vira ``resolvido``.
+    """Resolucao pela fonte: estado aberto cujo alerta a projecao nao gera mais vira ``resolvido``
+    — ou ``expirado`` (#132), se cuidado/dose saiu da janela de 24 h sem registro.
 
     So para regras avaliadas por inteiro nesta consulta (sem permissao de
     origem ou com teto atingido, a ausencia do id nao prova nada). UPDATE
@@ -494,17 +521,21 @@ async def _reconciliar(db: AsyncSession, context: SecurityContext, request: Requ
         if estado.alerta_id in atuais:
             continue
         antes = {"situacao": estado.situacao, "alerta_id": estado.alerta_id}
+        # #132: sumir da janela de 24 h sem registro nao e resolver.
+        expirou = await _expirou_sem_registro(db, context.ilpi_id, estado, proj.agora)
+        situacao, encerramento = ("expirado", "janela") if expirou else ("resolvido", "fonte")
         resultado = await db.execute(
             update(m.AlertaEstado)
             .where(m.AlertaEstado.id == estado.id, m.AlertaEstado.situacao.in_(ABERTOS))
-            .values(situacao="resolvido", encerramento="fonte", encerrado_em=proj.agora, updated_at=proj.agora)
+            .values(situacao=situacao, encerramento=encerramento, encerrado_em=proj.agora, updated_at=proj.agora)
             .execution_options(synchronize_session=False))
         if resultado.rowcount == 1:
             mudou = True
-            # Quem encerrou foi a fonte; a consulta que detectou fica registrada.
-            add_audit(db, acao="alerta_estados.resolvido_pela_fonte", entidade="alerta_estados", registro_id=estado.id,
+            # Quem encerrou foi a fonte (ou a janela); a consulta que detectou fica registrada.
+            add_audit(db, acao="alerta_estados.expirado_sem_registro" if expirou else "alerta_estados.resolvido_pela_fonte",
+                      entidade="alerta_estados", registro_id=estado.id,
                       usuario_id=None, ilpi_id=context.ilpi_id, valores_anteriores=antes,
-                      valores_posteriores={"situacao": "resolvido", "encerramento": "fonte",
+                      valores_posteriores={"situacao": situacao, "encerramento": encerramento,
                                            "detectado_na_consulta_de": context.user.id},
                       request=request)
     if mudou:

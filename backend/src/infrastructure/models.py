@@ -1322,7 +1322,8 @@ class AlertaEstado(Base):
 
     Nunca cria nem mantem alerta: a projecao (id estavel) decide se a situacao
     existe; quando deixa de gerar o id, o estado aberto vira ``resolvido`` pela
-    fonte. Um estado aberto por (ILPI, alerta_id); fechado, fica como historico.
+    fonte — ou ``expirado`` (#132), se cuidado/dose saiu da janela de 24 h sem
+    registro. Um estado aberto por (ILPI, alerta_id); fechado, fica como historico.
     """
 
     __tablename__ = "alerta_estados"
@@ -1331,11 +1332,13 @@ class AlertaEstado(Base):
                              name="fk_alerta_estados_residente", ondelete="RESTRICT"),
         ForeignKeyConstraint(["assumido_por_funcionario_id", "ilpi_id"], ["funcionarios.id", "funcionarios.ilpi_id"],
                              name="fk_alerta_estados_funcionario", ondelete="RESTRICT"),
-        CheckConstraint("situacao IN ('assumido','em_atendimento','resolvido','liberado')", name="ck_alerta_estados_situacao"),
+        CheckConstraint("situacao IN ('assumido','em_atendimento','resolvido','liberado','expirado')",
+                        name="ck_alerta_estados_situacao"),
         CheckConstraint(
             "(situacao IN ('assumido','em_atendimento') AND encerrado_em IS NULL AND encerramento IS NULL) OR "
             "(situacao = 'resolvido' AND encerramento = 'fonte' AND encerrado_em IS NOT NULL) OR "
-            "(situacao = 'liberado' AND encerramento = 'liberado' AND encerrado_em IS NOT NULL)",
+            "(situacao = 'liberado' AND encerramento = 'liberado' AND encerrado_em IS NOT NULL) OR "
+            "(situacao = 'expirado' AND encerramento = 'janela' AND encerrado_em IS NOT NULL)",
             name="ck_alerta_estados_encerramento"),
         CheckConstraint("situacao != 'em_atendimento' OR em_atendimento_em IS NOT NULL", name="ck_alerta_estados_atendimento"),
         Index("uq_alerta_estados_aberto", "ilpi_id", "alerta_id", unique=True,
