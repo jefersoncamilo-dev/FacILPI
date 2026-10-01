@@ -168,8 +168,15 @@ textarea.input { min-height: 64px; resize: vertical; }
 
 /* ---------- Lista do plantão ---------- */
 .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: hsl(var(--muted-foreground)); margin: 14px 2px 6px; }
-.toolbar { display: grid; gap: 8px; margin-bottom: 10px; }
-.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px; }
+.toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 10px; }
+.chips-wrap { position: relative; margin: 0 -12px; min-width: 0; }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 0 12px; scroll-padding: 0 12px; }
+/* Indica que a faixa desliza: degradê e seta à direita só quando há opções fora da tela. */
+.chips-wrap::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 56px; pointer-events: none;
+  background: linear-gradient(to right, hsl(var(--background) / 0), hsl(var(--background)) 70%); opacity: 0; transition: opacity var(--dur); }
+.chips-seta { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); z-index: 1; display: flex; pointer-events: none;
+  color: hsl(var(--muted-foreground)); opacity: 0; transition: opacity var(--dur); }
+.chips-wrap.mais::after, .chips-wrap.mais .chips-seta { opacity: 1; }
 .chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: none; min-height: var(--touch); padding: 0 2px; border: 0; background: none; cursor: pointer; display: inline-flex; align-items: center;
@@ -348,3 +355,19 @@ dialog h2 { font-size: 18px; }
 
 /* Modo de captura estática (?captura) */
 .captura *, .captura *::before, .captura *::after { animation: none !important; transition: none !important; }
+
+/* Ajustes finais */
+.sh-loc { font-size: 14px; color: hsl(var(--muted-foreground)); white-space: nowrap; }
+.row-static { cursor: default; }
+.row-static:hover, .row-static:active { background: hsl(var(--card)); }
+.row-note { flex: none; max-width: 104px; font-size: 11px; line-height: 1.25; color: hsl(var(--muted-foreground)); text-align: right; }
+.pass-item { padding: 12px 0; border-top: 1px solid hsl(var(--border)); }
+.section-title + .pass-item { border-top: 0; }
+.pass-head { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; }
+.kv { margin: 6px 0 0; display: grid; gap: 3px; }
+.kv > div { display: flex; gap: 8px; font-size: 14px; }
+.kv dt { flex: none; width: 92px; color: hsl(var(--muted-foreground)); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.pass-acoes { display: flex; justify-content: flex-end; margin-top: 8px; }
+.btn-receber { width: 100%; }
+@media (min-width: 640px) { .btn-receber { width: auto; justify-self: start; } }

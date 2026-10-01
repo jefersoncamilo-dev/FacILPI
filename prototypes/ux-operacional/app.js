@@ -38,12 +38,13 @@
   // ---------- utilidades ----------
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const hhmm = (d) => d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const agoraHHMM = () => hhmm(new Date());
+  const agora = () => D.relogio(); // relógio simulado (data.js)
+  const agoraHHMM = () => hhmm(agora());
   function fromHHMM(v) {
     if (!/^\d{2}:\d{2}$/.test(v || '')) return null;
-    const d = new Date(); const [h, m] = v.split(':').map(Number); d.setHours(h, m, 0, 0); return d;
+    const d = agora(); const [h, m] = v.split(':').map(Number); d.setHours(h, m, 0, 0); return d;
   }
-  const noFuturo = (d) => d && d.getTime() <= Date.now() + 60000;
+  const noFuturo = (d) => d && d.getTime() <= agora().getTime() + 60000;
   const res = (id) => D.residentes.find((r) => r.id === id);
   const pessoa = (id) => D.equipe.find((p) => p.id === id);
   const item = (id) => db.itens.find((i) => i.id === id);
@@ -71,7 +72,7 @@
   function status(i) {
     const r = db.registros[i.id];
     if (r) return { tipo: 'registrado', reg: r };
-    return { tipo: i.prevista.getTime() < Date.now() ? 'atrasado' : 'pendente' };
+    return { tipo: i.prevista.getTime() < agora().getTime() ? 'atrasado' : 'pendente' };
   }
   function estadoTexto(i) {
     const s = status(i);
@@ -124,7 +125,7 @@
           if (modo === 'antes') return reject(new Error('rede'));
           const existente = db.registros[itemId];
           if (existente) return resolve({ jaExistia: true, reg: existente });
-          const reg = Object.assign({}, payload, { registradoEm: new Date(), executor: 'f1', idem });
+          const reg = Object.assign({}, payload, { registradoEm: agora(), executor: 'f1', idem });
           db.registros[itemId] = reg;
           if (modo === 'resposta') return reject(new Error('rede'));
           resolve({ jaExistia: false, reg });
@@ -176,6 +177,8 @@
   function renderCromo(r, base) {
     const titulos = { plantao: 'Meu Plantão', residentes: 'Residentes', passagem: 'Passagem de plantão' };
     $('#page-title').textContent = titulos[base] || 'Meu Plantão';
+    $('#page-sub').textContent = `Manhã 07–13 · Ala B · ${agoraHHMM()}`;
+    $('#page-sub').title = 'Relógio simulado do protótipo';
     document.title = (titulos[base] || 'Meu Plantão') + ' · Protótipo FacILPI';
     const n = notificacoes().total;
     const sino = $('#btn-sino');
@@ -217,7 +220,7 @@
   function listaHTML() {
     const nExtra = filtrosExtras();
     let html = `<div class="toolbar">
-      <div class="chips" id="chips" role="group" aria-label="Filtros rápidos">${chipsHTML()}</div>
+      <div class="chips-wrap" id="chips-wrap"><div class="chips" id="chips" role="group" aria-label="Filtros rápidos (deslize para ver mais)">${chipsHTML()}</div><span class="chips-seta" aria-hidden="true">${icon('chevron')}</span></div>
       <div class="toolbar-row">
         <div class="seg" role="group" aria-label="Organizar lista">
           <button type="button" id="vis-residente" data-visao="residente" aria-pressed="${ui.visao === 'residente'}">Por residente</button>
@@ -252,7 +255,7 @@
       lista.filter((i) => i.origem === 'cuidado').forEach((i) => { (grupos[grupoKey(i)] = grupos[grupoKey(i)] || []).push(i); });
       html += Object.entries(grupos).map(([k, its]) => grupoHTML(k, its)).join('');
       const meds = lista.filter((i) => i.origem === 'medicacao');
-      if (meds.length) html += `<h2 class="section-title">Medicação · fluxo próprio</h2><div class="rcard">${meds.map((i) => rowHTML(i, true)).join('')}</div>`;
+      if (meds.length) html += `<h2 class="section-title">Medicação · registro em módulo específico</h2><div class="rcard">${meds.map((i) => rowHTML(i, true)).join('')}</div>`;
     }
     return html;
   }
@@ -263,14 +266,15 @@
     const sub = [];
     if (comNome) sub.push(`${r.nome} · Q${r.quarto}·${r.leito}`);
     if (i.herdada) sub.push(`Herdada da ${i.herdada}`);
-    const alvo = med ? `data-med="${i.id}"` : `data-open="${i.id}"`;
-    const rotulo = `${i.atividade}, ${r.nome}, previsto ${hhmm(i.prevista)}, ${estadoTexto(i)}${med ? ', medicação: fluxo próprio' : ''}`;
-    return `<button type="button" class="row" id="row-${i.id}" ${alvo} aria-label="${esc(rotulo)}">
+    const rotulo = `${i.atividade}, ${r.nome}, previsto ${hhmm(i.prevista)}, ${estadoTexto(i)}${med ? ', registro em módulo específico' : ''}`;
+    const abre = med
+      ? `<div class="row row-static" id="row-${i.id}" role="group" aria-label="${esc(rotulo)}">`
+      : `<button type="button" class="row" id="row-${i.id}" data-open="${i.id}" aria-label="${esc(rotulo)}">`;
+    return `${abre}
       <span class="row-time">${hhmm(i.prevista)}</span>
       <span class="row-main"><span class="row-title">${med ? icon('pill') : ''}${esc(i.atividade)}</span>
         ${sub.length ? `<span class="row-sub">${esc(sub.join(' · '))}</span>` : ''}<span>${badge(i)}</span></span>
-      ${med ? '<span class="row-tag">Fluxo próprio</span>' : icon('chevron', 'chev')}
-    </button>`;
+      ${med ? '<span class="row-note">Registro em módulo específico</span></div>' : icon('chevron', 'chev') + '</button>'}`;
   }
 
   function grupoHTML(k, its) {
@@ -323,7 +327,7 @@
     return null;
   }
   function payloadDe(id, f) {
-    const p = { ocorrencia_id: id, resultado: f.resultado || '(escolha)', ocorrido_em: (fromHHMM(f.hora) || new Date()).toISOString() };
+    const p = { ocorrencia_id: id, resultado: f.resultado || '(escolha)', ocorrido_em: (fromHHMM(f.hora) || agora()).toISOString() };
     const j = justificativa(f); if (j) p.justificativa = j;
     if (f.obs.trim()) p.observacao = f.obs.trim();
     return p;
@@ -331,7 +335,8 @@
   function cabecalho(r, titulo, sub) {
     return `<div class="sh-id"><span class="avatar" aria-hidden="true">${iniciais(r.nome)}</span>
       <div class="sh-txt"><h2 id="sheet-title" tabindex="-1">${esc(titulo)}</h2>
-        <div class="sh-res"><strong>${esc(r.nome)}</strong> · Quarto ${r.quarto} · Leito ${r.leito}</div>
+        <div class="sh-res"><strong>${esc(r.nome)}</strong></div>
+        <div class="sh-loc">Quarto ${r.quarto} · Leito ${r.leito}</div>
         <div class="sh-sub">${sub}</div></div></div>`;
   }
 
@@ -354,7 +359,7 @@
         head,
         body: `<div class="alert alert-ok">${icon('check')}<div><strong>Registrado: ${R.label}</strong>
           <p>Horário real: <strong>${hhmm(reg.ocorridoEm)}</strong> · Registro gravado às ${hhmm(reg.registradoEm)} por ${esc(ex ? ex.nome : '—')}${ex && ex.voce ? ' (você)' : ''}</p>
-          ${reg.justificativa ? `<p>Motivo: ${esc(reg.justificativa)}</p>` : ''}${reg.ajudante ? `<p>Ajudante: ${esc(pessoa(reg.ajudante).nome)}</p>` : ''}${reg.observacao ? `<p>Observação: ${esc(reg.observacao)}</p>` : ''}</div></div>
+          ${reg.justificativa ? `<p>Motivo: ${esc(reg.justificativa)}</p>` : ''}${reg.ajudante ? `<p>Auxiliado por: ${esc(pessoa(reg.ajudante).nome)}</p>` : ''}${reg.observacao ? `<p>Observação: ${esc(reg.observacao)}</p>` : ''}</div></div>
           <p class="hint" style="margin:0">Correção: estorno com motivo, que mantém o registro original visível. ${insp('existe', 'POST /api/execucoes-cuidado/{id}/estornar')} ${insp('proposta', 'tela de estorno')}</p>`,
         foot: `<button type="button" class="btn btn-outline" data-close>Fechar</button>${prox ? `<button type="button" class="btn btn-primary" data-ir="${prox.id}">Próximo pendente</button>` : ''}`,
       };
@@ -368,7 +373,7 @@
     const body = `
       ${f.erro ? `<div class="alert alert-err" id="erro-envio" tabindex="-1" role="alert">${icon('wifiOff')}<div><strong>Não foi possível salvar.</strong><p>${esc(f.erro)} O que você preencheu continua aqui.</p></div></div>` : ''}
       <fieldset>
-        <legend class="legend">Resultado <span class="hint">(obrigatório, nada vem marcado)</span></legend>
+        <legend class="legend">Resultado obrigatório</legend>
         <div class="opts">${opt('executada')}${opt('recusada', 'recusa')}${opt('omitida', 'nao')}</div>
         ${f.erros.resultado ? `<div class="err-txt" id="e-res">${f.erros.resultado}</div>` : ''}
         ${insp('existe', 'executada | recusada | omitida; justificativa obrigatória fora de executada')}
@@ -388,11 +393,11 @@
         <div class="field"><label for="f-hora">Horário real do cuidado</label>
           <div class="time-row"><input type="time" class="input" id="f-hora" data-campo="hora" value="${esc(f.hora)}" ${f.erros.hora ? 'aria-invalid="true" aria-describedby="e-hora"' : 'aria-describedby="h-hora"'} ${dis}>
           <button type="button" class="btn btn-outline btn-sm" id="btn-agora" data-agora ${dis}>Agora</button></div>
-          ${f.erros.hora ? `<div class="err-txt" id="e-hora">${f.erros.hora}</div>` : `<span class="hint" id="h-hora">Quando aconteceu. O horário do registro é gravado pelo servidor.</span>`}
+          ${f.erros.hora ? `<div class="err-txt" id="e-hora">${f.erros.hora}</div>` : `<span class="hint" id="h-hora">Informe quando o cuidado aconteceu.</span>`}
           ${insp('existe', 'ocorrido_em ≠ registrado_em; futuro = 422')}
         </div>
-        <div class="field"><label for="f-ajudante">Ajudante (opcional)</label>
-          <select class="input" id="f-ajudante" data-campo="ajudante" ${dis}><option value="">Sem ajudante</option>
+        <div class="field"><label for="f-ajudante">Profissional que auxiliou (opcional)</label>
+          <select class="input" id="f-ajudante" data-campo="ajudante" ${dis}><option value="">Sem auxílio</option>
           ${ajudantes.map((p) => `<option value="${p.id}" ${f.ajudante === p.id ? 'selected' : ''}>${esc(p.nome)} · ${esc(p.funcao)}</option>`).join('')}</select>
           ${insp('proposta', 'campo novo; exige migration (ExecucaoCuidado não tem ajudante)')}
         </div>
@@ -511,7 +516,7 @@
           ${l.motivoCod === 'outro' ? `<div class="field"><label for="md-${i.id}">Detalhe (obrigatório)</label><input class="input" id="md-${i.id}" data-linha-campo="detalhe" data-linha="${i.id}" value="${esc(l.detalhe)}" ${l.erros.detalhe ? 'aria-invalid="true"' : ''} ${dis}>${l.erros.detalhe ? `<div class="err-txt">${l.erros.detalhe}</div>` : ''}</div>` : ''}` : ''}
         ${l.resultado ? `<div class="crow-extra">
           <div class="field"><label for="h-${i.id}">Horário</label><input type="time" class="input" id="h-${i.id}" data-linha-campo="hora" data-linha="${i.id}" value="${esc(l.hora || c.padrao)}" ${l.erros.hora ? 'aria-invalid="true"' : ''} ${dis}>${l.erros.hora ? `<div class="err-txt">${l.erros.hora}</div>` : ''}</div>
-          <div class="field"><label for="a-${i.id}">Ajudante</label><select class="input" id="a-${i.id}" data-linha-campo="ajudante" data-linha="${i.id}" ${dis}><option value="">Sem ajudante</option>${ajudantes.map((p) => `<option value="${p.id}" ${l.ajudante === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select></div>
+          <div class="field"><label for="a-${i.id}">Profissional que auxiliou</label><select class="input" id="a-${i.id}" data-linha-campo="ajudante" data-linha="${i.id}" ${dis}><option value="">Sem auxílio</option>${ajudantes.map((p) => `<option value="${p.id}" ${l.ajudante === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select></div>
         </div>
         <div><button type="button" class="link-btn" id="limpar-${i.id}" data-limpar="${i.id}" ${dis}>Limpar resultado</button> ${insp('proposta', 'ajudante por residente; exige migration')}</div>` : ''}
       </fieldset>`;
@@ -565,6 +570,7 @@
     const P = passagem;
     const recebida = P.situacao === 'recebida';
     const linhaRes = (rid) => { const r = res(rid); return `<span class="row-title">${esc(r.nome)}</span><span class="row-sub">Quarto ${r.quarto} · Leito ${r.leito}</span>`; };
+    const kv = (pares) => `<dl class="kv">${pares.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
     const pendAbertas = P.pendencias.filter((p) => !db.registros[p.itemId]).length;
     let html = `<h2 class="section-title" style="margin-top:4px">Passagem a receber</h2>
       <section class="card pass-card" aria-label="Passagem da ${esc(P.turno)}">
@@ -572,29 +578,29 @@
           <div><div class="rname">${esc(P.turno)} · ${esc(P.area)}</div><div class="rmeta">Entregue por ${esc(pessoa(P.entreguePor).nome)} às ${hhmm(P.entregueEm)}</div></div>
           ${recebida ? `<span class="badge b-ok">${icon('check')}Recebida às ${hhmm(P.recebidaEm)}</span>` : `<span class="badge b-atrasado">${icon('clock')}Aguardando recebimento</span>`}
         </div>
+        <div class="receipt">
+          ${recebida
+            ? `<div class="alert alert-ok" id="recibo" tabindex="-1">${icon('check')}<div><strong>Recebimento confirmado às ${hhmm(P.recebidaEm)}.</strong><p>${pendAbertas ? `${pendAbertas} pendência${pendAbertas > 1 ? 's continuam abertas' : ' continua aberta'} no seu Meu Plantão. Receber não conclui cuidados.` : 'Todas as pendências herdadas já têm registro.'}</p></div></div>`
+            : `<p style="margin:0;font-size:14px">Leia a passagem e confirme o recebimento. <strong>Confirmar não conclui</strong> nenhuma pendência: elas continuam no seu Meu Plantão.</p>
+               <button type="button" class="btn btn-primary btn-receber" id="btn-receber" data-receber>${icon('check')}Confirmar recebimento</button>`}
+          ${insp('existe', 'POST /api/passagens/{id}/receber · quem entregou não recebe · 2º recebimento = 409')}
+        </div>
         ${insp('existe', 'GET /api/passagens/ (itens automáticos + notas)')}
         <h3 class="section-title">Pendências herdadas</h3>
         ${P.pendencias.map((p) => {
           const i = item(p.itemId); const reg = db.registros[p.itemId];
-          return `<div class="pass-line"><div class="row-main">${linhaRes(p.residenteId)}<span>${esc(i.atividade)} · prevista ${hhmm(i.prevista)} · ${esc(p.texto)}</span>
-            <span class="row-sub">Responsável: ${esc(p.responsavel)} · Prazo: ${esc(p.prazo)}</span></div>
-            ${reg ? `<span class="badge ${RESULTADOS[reg.resultado].cls}">${icon('check')}Registrado ${hhmm(reg.ocorridoEm)}</span>`
-              : `<span class="badge b-atrasado">${icon('alert')}Continua pendente</span><button type="button" class="btn btn-outline btn-sm" data-open="${p.itemId}" id="pass-reg-${p.itemId}">Registrar</button>`}</div>`;
+          return `<div class="pass-item"><div class="pass-head"><div class="row-main">${linhaRes(p.residenteId)}</div>
+              ${reg ? `<span class="badge ${RESULTADOS[reg.resultado].cls}">${icon('check')}Registrado ${hhmm(reg.ocorridoEm)}</span>` : `<span class="badge b-atrasado">${icon('alert')}Continua pendente</span>`}</div>
+            ${kv([['Atividade', esc(i.atividade)], ['Previsto', `${hhmm(i.prevista)} · ${esc(p.texto)}`], ['Responsável', esc(p.responsavel)], ['Prazo', esc(p.prazo)]])}
+            ${reg ? '' : `<div class="pass-acoes"><button type="button" class="btn btn-outline btn-sm" data-open="${p.itemId}" id="pass-reg-${p.itemId}">Registrar cuidado</button></div>`}</div>`;
         }).join('')}
         <h3 class="section-title">Intercorrências em aberto</h3>
-        ${P.intercorrencias.map((x) => `<div class="pass-line"><div class="row-main">${linhaRes(x.residenteId)}<span>${esc(x.texto)}</span>
-          <span class="row-sub">Responsável: ${esc(x.responsavel)} · ${esc(x.prazo)}</span></div><span class="badge b-crit">${icon('alert')}Em aberto</span></div>`).join('')}
+        ${P.intercorrencias.map((x) => `<div class="pass-item"><div class="pass-head"><div class="row-main">${linhaRes(x.residenteId)}</div><span class="badge b-crit">${icon('alert')}Em aberto</span></div>
+          ${kv([['Ocorrência', `${esc(x.texto)} · ${esc(x.quando)}`], ['Situação', esc(x.detalhe)], ['Responsável', esc(x.responsavel)], ['Prazo', esc(x.prazo)]])}</div>`).join('')}
         <h3 class="section-title">Ausências</h3>
         ${P.ausencias.map((x) => `<div class="pass-line"><div class="row-main">${linhaRes(x.residenteId)}<span>${esc(x.texto)}</span></div><span class="badge b-info">${icon('away')}Ausente</span></div>`).join('')}
         <h3 class="section-title">Notas do turno</h3>
         ${P.notas.map((n) => `<div class="pass-line"><div class="row-main"><span><span class="badge b-pendente">${esc(n.categoria)}</span> ${esc(n.texto)}</span></div></div>`).join('')}
-        <div class="receipt">
-          ${recebida
-            ? `<div class="alert alert-ok" id="recibo" tabindex="-1">${icon('check')}<div><strong>Recebimento confirmado às ${hhmm(P.recebidaEm)}.</strong><p>${pendAbertas ? `${pendAbertas} pendência${pendAbertas > 1 ? 's continuam abertas' : ' continua aberta'} no seu Meu Plantão. Receber não conclui cuidados.` : 'Todas as pendências herdadas já têm registro.'}</p></div></div>`
-            : `<p style="margin:0;font-size:14px"><strong>Confirmar recebimento</strong> registra que você leu esta passagem. <strong>Não conclui</strong> nenhuma pendência: elas continuam no seu Meu Plantão.</p>
-               <div><button type="button" class="btn btn-primary" id="btn-receber" data-receber>Confirmar recebimento</button></div>`}
-          ${insp('existe', 'POST /api/passagens/{id}/receber · quem entregou não recebe · 2º recebimento = 409')}
-        </div>
       </section>`;
     const meus = db.itens.filter((i) => i.origem === 'cuidado' && !db.registros[i.id]).sort((a, b) => a.prevista - b.prevista);
     const atras = meus.filter((i) => status(i).tipo === 'atrasado').length;
@@ -709,6 +715,7 @@
     if (nome === 'passagem') view.innerHTML = passagemHTML();
     else if (nome === 'residentes') view.innerHTML = residentesHTML();
     else view.innerHTML = `<div class="split"><div class="split-list" id="lista" aria-label="Lista do plantão">${listaHTML()}</div><div class="split-detail" id="detalhe"></div></div>`;
+    requestAnimationFrame(marcarChips);
   }
   function render() {
     const r = rota();
@@ -752,7 +759,11 @@
     window.scrollTo(0, y);
     if (ativo && !sheetTipo) { const el = document.getElementById(ativo); if (el) el.focus({ preventScroll: true }); }
   }
-  const rerenderLista = () => preservando(() => { const el = $('#lista'); if (el) el.innerHTML = listaHTML(); });
+  function marcarChips() {
+    const c = $('#chips'); const w = $('#chips-wrap'); if (!c || !w) return;
+    w.classList.toggle('mais', c.scrollLeft + c.clientWidth < c.scrollWidth - 4);
+  }
+  const rerenderLista = () => { preservando(() => { const el = $('#lista'); if (el) el.innerHTML = listaHTML(); }); marcarChips(); };
   const rerenderBase = () => preservando(() => renderBase(renderedBase));
 
   // Atualiza só o que depende do item salvo: linha, grupo, contadores, sino. A posição da lista não muda.
@@ -760,7 +771,7 @@
   function atualizarItem(id) {
     renderCromo(rota(), renderedBase);
     if (renderedBase !== 'plantao') { rerenderBase(); return; }
-    const chips = $('#chips'); if (chips) chips.innerHTML = chipsHTML();
+    const chips = $('#chips'); if (chips) { chips.innerHTML = chipsHTML(); marcarChips(); }
     const i = item(id);
     const row = $('#row-' + id);
     if (row) { row.outerHTML = rowHTML(i, ui.visao === 'atividade'); flash($('#row-' + id)); }
@@ -857,12 +868,12 @@
     if (b.hasAttribute('data-receber')) {
       const abertas = passagem.pendencias.filter((p) => !db.registros[p.itemId]).length;
       const ok = await dialogo('Confirmar recebimento?', `<p>Você confirma que leu a passagem da <strong>${esc(passagem.turno)}</strong>.</p><p>${abertas ? `${abertas} pendência${abertas > 1 ? 's continuam abertas' : ' continua aberta'} e sob responsabilidade do seu turno.` : ''} Nenhum cuidado será marcado como realizado.</p>`, 'Confirmar recebimento');
-      if (ok) { passagem.situacao = 'recebida'; passagem.recebidaEm = new Date(); rerenderBase(); renderCromo(rota(), renderedBase); const rc = $('#recibo'); if (rc) rc.focus(); }
+      if (ok) { passagem.situacao = 'recebida'; passagem.recebidaEm = agora(); rerenderBase(); renderCromo(rota(), renderedBase); const rc = $('#recibo'); if (rc) rc.focus(); }
       return;
     }
     if (b.hasAttribute('data-entregar')) {
       minhaPassagem.status = 'saving'; rerenderBase();
-      setTimeout(() => { minhaPassagem.status = 'idle'; minhaPassagem.entregueEm = new Date(); rerenderBase(); anunciar('Passagem entregue.'); }, 700);
+      setTimeout(() => { minhaPassagem.status = 'idle'; minhaPassagem.entregueEm = agora(); rerenderBase(); anunciar('Passagem entregue.'); }, 700);
     }
   });
 
@@ -918,6 +929,10 @@
       setTimeout(() => e.target.scrollIntoView({ block: 'nearest' }), 250);
     }
   });
+
+  document.addEventListener('scroll', (e) => { if (e.target && e.target.id === 'chips') marcarChips(); }, true);
+  window.addEventListener('resize', marcarChips);
+  setInterval(() => { if (!sheetTipo) renderCromo(rota(), renderedBase); }, 30000);
 
   // Controles do protótipo
   $('#btn-inspecao').addEventListener('click', (e) => { const on = document.body.classList.toggle('inspect'); e.currentTarget.setAttribute('aria-pressed', String(on)); });
