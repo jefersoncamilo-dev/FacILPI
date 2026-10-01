@@ -276,3 +276,11 @@ def test_027_concede_e_recusa_downgrade_com_historico(pre027_db):
     _run(pre027_db, depois)
     falha = _migrate(pre027_db, target="026_alerta_estados", command="downgrade", success=False)
     assert "passagens_plantao tem historico" in falha.stdout + falha.stderr
+
+
+def test_atividade_de_dose_na_passagem_exige_permissao_de_medicacao():
+    from src.application.passagem import _pode_ver
+    dose, cuidado = {"origem": "atividade", "regra": "medicacao"}, {"origem": "atividade", "regra": "cuidado"}
+    assert _pode_ver(cuidado, {"plantao:ler"})
+    assert not _pode_ver(dose, {"plantao:ler"}), "#131: plantao:ler sozinho nao ve dose"
+    assert _pode_ver(dose, {"plantao:ler", "administracoes:ler"})
