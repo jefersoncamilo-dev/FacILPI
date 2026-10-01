@@ -415,6 +415,21 @@ describe('MeuPlantao — filtros e visão', () => {
     expect(screen.getByRole('button', { name: 'Por residente' }).getAttribute('aria-pressed')).toBe('true')
   })
 
+  it('22. com a tela aberta, o item passa a "Atrasada" quando o horário chega', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const quase = { ...CUIDADO_2, previsto_em: new Date(Date.now() + 10_000).toISOString() }
+      respondeCom([quase])
+      renderPlantao()
+      expect(await screen.findByRole('region', { name: 'Próximas' })).toBeTruthy()
+      await vi.advanceTimersByTimeAsync(31_000)
+      await waitFor(() => expect(screen.getByRole('region', { name: 'Atrasadas' })).toBeTruthy())
+      expect(within(screen.getByRole('region', { name: 'Atrasadas' })).getByText('Atrasada')).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('21. não há botão de nova tarefa nem POST /tarefas/', async () => {
     respondeCom(TRES_ITENS)
     renderPlantao()

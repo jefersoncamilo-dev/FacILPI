@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Ban, Check, ChevronRight, Clock, Pill, SlidersHorizontal, TriangleAlert, WifiOff, X } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
@@ -209,9 +209,20 @@ export function MeuPlantao() {
   const locais = useMemo(() => Object.fromEntries((resumo?.residentes ?? []).map(r => [r.id, r.local ?? ''])), [resumo])
   const nomeDe = (id: string) => nomes[id] || id
 
-  // Rolagem: volta ao mesmo ponto ao retornar para a tela.
+  // Rolagem: volta ao mesmo ponto ao retornar para a tela. A posição é gravada
+  // enquanto a pessoa rola — na desmontagem a janela já reflete a tela seguinte.
   const rolagemRestaurada = useRef(false)
-  useLayoutEffect(() => () => { gravarSessao(CHAVE_ROLAGEM, { y: window.scrollY }) }, [])
+  useEffect(() => {
+    let quadro = 0
+    const aoRolar = () => {
+      cancelAnimationFrame(quadro)
+      quadro = requestAnimationFrame(() => {
+        if (rolagemRestaurada.current && window.location.pathname === '/plantao') gravarSessao(CHAVE_ROLAGEM, { y: window.scrollY })
+      })
+    }
+    window.addEventListener('scroll', aoRolar, { passive: true })
+    return () => { cancelAnimationFrame(quadro); window.removeEventListener('scroll', aoRolar) }
+  }, [])
   useEffect(() => {
     if (carregando || rolagemRestaurada.current) return
     rolagemRestaurada.current = true
@@ -225,6 +236,13 @@ export function MeuPlantao() {
     return () => clearTimeout(t)
   }, [aviso])
 
+  // A tela fica aberta durante o plantão: o "Atrasada" precisa aparecer quando o
+  // horário passa, sem esperar outra interação. Só re-renderiza; não chama a API.
+  const [, setRelogio] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setRelogio(n => n + 1), 30_000)
+    return () => clearInterval(id)
+  }, [])
   const agora = Date.now()
 
   // Pendências da projeção + o que foi registrado aqui (na mesma posição).
@@ -535,7 +553,9 @@ export function MeuPlantao() {
         <p className="font-semibold text-foreground">{nome}</p>
         {local && <p className="whitespace-nowrap text-muted-foreground">{local}</p>}
         <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {item.previsto_em ? `Previsto ${horaCurta(item.previsto_em)}` : 'Sem horário previsto'}
+          {item.previsto_em
+            ? `Previsto ${horaCurta(item.previsto_em)}${diaSeOutro(item.previsto_em, agora) ? ` · ${diaSeOutro(item.previsto_em, agora)}` : ''}`
+            : 'Sem horário previsto'}
           <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-semibold', estado.classe)}>{estado.icone}{estado.texto}</span>
         </p>
       </>
