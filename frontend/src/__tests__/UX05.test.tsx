@@ -69,20 +69,22 @@ describe('UX-05 — Meu Plantão', () => {
   it('sem permissão da ação, a pendência continua visível mas sem botão', async () => {
     renderCom(<MeuPlantao />, ['plantao:ler', 'execucoes:criar'])
     await screen.findByText('Intercorrência aberta: Queda sem lesão')
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Encerrar' })).toBeNull())
-    expect(screen.queryByRole('button', { name: 'Registrar administração' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Registrar execução' })).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Encerrar:/ })).toBeNull())
+    expect(screen.queryByRole('button', { name: /^Registrar administração:/ })).toBeNull()
+    expect(screen.getByRole('button', { name: /^Registrar execução:/ })).toBeTruthy()
   })
 
-  it('depois de registrar, mostra o sucesso e recarrega a projeção', async () => {
+  it('depois de registrar, mostra o sucesso e o item fica registrado, sem ação nova (#136)', async () => {
     const user = userEvent.setup()
     mockPost.mockResolvedValueOnce({ data: {} } as any)
     renderCom(<MeuPlantao />, TUDO)
-    await user.click(await screen.findByRole('button', { name: 'Registrar execução' }))
+    await user.click(await screen.findByRole('button', { name: /^Registrar execução:/ }))
     responde([PROXIMO, SEM_HORA])
-    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
-    expect(await screen.findByText('Execução registrada.')).toBeTruthy()
-    await waitFor(() => expect(screen.queryByText('Banho assistido')).toBeNull())
+    await user.click(screen.getByRole('radio', { name: 'Realizado' }))
+    await user.click(screen.getByRole('button', { name: 'Salvar' }))
+    expect(await screen.findByText(/^Execução registrada: Banho assistido/)).toBeTruthy()
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Registrar execução:/ })).toBeNull())
+    expect(screen.getByText(/^Realizado às/)).toBeTruthy()
   })
 })
 
