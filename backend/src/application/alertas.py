@@ -282,11 +282,12 @@ async def _planos(db, ilpi, agora, cal: _Calendario, ativos, c: _Coletor):
                   detalhe=f"Data final: {_data_br(plano.data_final)}.", desde=prazo, prazo=prazo)
 
 
-async def _plantao(db, ilpi, agora, c: _Coletor):
+async def _plantao(db, ilpi, agora, c: _Coletor, *, doses: bool):
     inicio = agora - timedelta(hours=HORAS_JANELA_PLANTAO)
     fontes = (
         ("cuidados_sem_registro", "atencao", m.OcorrenciaCuidado, _has_execucao_vigente, ("cuidado", "cuidados")),
-        ("doses_sem_registro", "critico", m.DosePrevista, _has_admin_vigente, ("dose de medicação", "doses de medicação")),
+        *((("doses_sem_registro", "critico", m.DosePrevista, _has_admin_vigente,
+            ("dose de medicação", "doses de medicação")),) if doses else ()),
     )
     for regra, gravidade, modelo, registrado, (um, varios) in fontes:
         linhas = (await db.execute(
@@ -423,9 +424,11 @@ async def projetar(db: AsyncSession, context: SecurityContext) -> _Projecao:
         await _planos(db, ilpi, agora, cal, ativos, c)
         c.avaliou("pais_parado", "pais_vencido", *(("pais_ausente",) if ativos is not None else ()))
     if "plantao:ler" in chaves:
-        # Mesma origem do Meu Plantao: plantao:ler projeta cuidados e doses pendentes.
-        await _plantao(db, ilpi, agora, c)
-        c.avaliou("cuidados_sem_registro", "doses_sem_registro")
+        # Mesma origem do Meu Plantao. Doses so com permissao de medicacao (#131): plantao:ler
+        # sozinho nao concede informacao de medicacao (o cuidador e "sem medicacao", 015).
+        doses = "administracoes:ler" in chaves
+        await _plantao(db, ilpi, agora, c, doses=doses)
+        c.avaliou("cuidados_sem_registro", *(("doses_sem_registro",) if doses else ()))
     if "intercorrencias:ler" in chaves:
         await _intercorrencias(db, ilpi, agora, c)
         c.avaliou("intercorrencia_grave_aberta", "intercorrencia_aberta_prolongada")
@@ -461,7 +464,7 @@ ORIGEM_DA_REGRA = {
     "pais_parado": {"planos_cuidados:ler"},
     "pais_vencido": {"planos_cuidados:ler"},
     "cuidados_sem_registro": {"plantao:ler"},
-    "doses_sem_registro": {"plantao:ler"},
+    "doses_sem_registro": {"plantao:ler", "administracoes:ler"},
     "intercorrencia_grave_aberta": {"intercorrencias:ler"},
     "intercorrencia_aberta_prolongada": {"intercorrencias:ler"},
     "residente_sem_leito": {"quartos_leitos:ler", "residentes:ler"},

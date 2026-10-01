@@ -43,9 +43,9 @@ ORIGEM = {
     "pais_ausente": {"planos_cuidados:ler", "residentes:ler"},
     "pais_parado": {"planos_cuidados:ler"},
     "pais_vencido": {"planos_cuidados:ler"},
-    # Mesma origem do Meu Plantao: plantao:ler projeta cuidados e doses pendentes.
+    # Mesma origem do Meu Plantao; doses so com permissao de medicacao (#131).
     "cuidados_sem_registro": {"plantao:ler"},
-    "doses_sem_registro": {"plantao:ler"},
+    "doses_sem_registro": {"plantao:ler", "administracoes:ler"},
     "intercorrencia_grave_aberta": {"intercorrencias:ler"},
     "intercorrencia_aberta_prolongada": {"intercorrencias:ler"},
     "residente_sem_leito": {"quartos_leitos:ler", "residentes:ler"},
@@ -165,17 +165,27 @@ def test_perfis_operacionais_veem_so_origens_autorizadas(alertas_db):
         todas = {a["regra"] for a in (await _alertas(client, h_gestor))["alertas"]}
         assert set(ORIGEM) <= todas, set(ORIGEM) - todas
 
-        vistas = {}
+        vistas, perfis_h = {}, {}
         for chave in PERFIS_REAIS:
             permissoes, h, _ = await _institucional(db, ilpi, chave)
+            perfis_h[chave] = h
             payload = await _alertas(client, h)
             regras = {a["regra"] for a in payload["alertas"]}
             esperadas = {regra for regra, exige in ORIGEM.items() if exige <= permissoes}
             assert regras & set(ORIGEM) == esperadas, (chave, regras, esperadas)
             vistas[chave] = regras
 
-        # O Administrador da ILPI real continua recebendo o que recebia (inclusive doses, critico).
-        assert {"doses_sem_registro", "cuidados_sem_registro", "admissao_parada", "pais_ausente"} <= vistas["ilpi_admin"]
+        # O Administrador da ILPI real continua recebendo o que recebia — menos doses (#131): sem
+        # permissao de medicacao, plantao:ler nao concede informacao de medicacao.
+        assert {"cuidados_sem_registro", "admissao_parada", "pais_ausente"} <= vistas["ilpi_admin"]
+        assert "doses_sem_registro" not in vistas["ilpi_admin"]
+        assert "doses_sem_registro" not in vistas["cuidador"], "cuidador e 'sem medicacao' (015)"
+        # Mesma regra na lista do Meu Plantao (#131): doses previstas so com permissao de medicacao.
+        desde = {"a_partir_de": (_agora() - timedelta(hours=24)).isoformat()}
+        for chave, ve in (("cuidador", False), ("enfermagem", True)):
+            h = perfis_h[chave]
+            lista = (await client.get("/api/plantao/", headers=h, params=desde)).json()
+            assert any(i["origem"] == "medicacao" for i in lista) is ve, (chave, [i["origem"] for i in lista])
         # Cuidador: sem admissao, documentos, acessos, leitos e ausencias.
         for proibida in ("admissao_parada", "documento_aguardando_validacao", "documento_vencido",
                          "acesso_nao_utilizado", "residente_sem_leito", "ausencia_prolongada", "avaliacao_vencida"):
@@ -351,4 +361,24 @@ def test_prazo_no_fuso_da_ilpi(alertas_db):
         # Validade D vale ate o fim do dia D no fuso DA ILPI (nao no de Sao Paulo).
         esperado = datetime.combine(doc.validade + timedelta(days=1), time.min, tzinfo=manaus).astimezone(timezone.utc)
         assert _dt(item["prazo"]) == esperado
+    _run(alertas_db, op)
+
+
+def test_consulta_sem_permissao_de_medicacao_nao_fecha_estado_de_dose(alertas_db):
+    async def op(client, db):
+        ilpi, h_gestor, x = await _cenario(client, db)
+        _, h_enf, _ = await _institucional(db, ilpi, "enfermagem")
+        dose = f"doses_sem_registro:{x['hilda'].id}"
+        r = await client.post("/api/central-alertas/assumir", headers=h_enf, json={"alerta_id": dose})
+        assert r.status_code == 200, r.text
+        # Quem nao le medicacao consulta a central: a regra de dose nao e avaliada, entao o estado segue aberto (#131).
+        for chave in ("cuidador", "ilpi_admin"):
+            _, h, _ = await _institucional(db, ilpi, chave)
+            payload = await _alertas(client, h)
+            assert dose not in {a["id"] for a in payload["alertas"]}, chave
+        situacao = await db.scalar(select(m.AlertaEstado.situacao).where(m.AlertaEstado.alerta_id == dose)
+                                   .execution_options(populate_existing=True))
+        assert situacao == "assumido"
+        estado = next(a for a in (await _alertas(client, h_enf))["alertas"] if a["id"] == dose)["estado"]
+        assert estado["situacao"] == "assumido" and estado["por_mim"] is True
     _run(alertas_db, op)
