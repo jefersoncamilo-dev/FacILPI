@@ -71,6 +71,36 @@ export async function registrarExecucaoCuidado(payload: ExecucaoCuidadoPayload) 
   return data
 }
 
+// UX-01A: rótulos operacionais; o enum do backend não muda.
+export const ROTULO_RESULTADO_CUIDADO: Record<ResultadoCuidado, string> = {
+  executada: 'Realizado',
+  recusada: 'Recusado',
+  omitida: 'Não realizado',
+}
+
+export interface RegistroCuidado {
+  resultado: ResultadoCuidado
+  justificativa?: string
+  observacao?: string
+}
+
+/**
+ * Registro de UM cuidado do plantão, no instante atual. Ponto único de escrita
+ * da tela: o registro em lote (UX-01C) chama esta função item a item — o banco
+ * continua recebendo uma execução por ocorrência.
+ */
+export async function registrarCuidado(item: Pick<PlantaoItem, 'registro_id'>, registro: RegistroCuidado) {
+  const justificativa = registro.justificativa?.trim()
+  const observacao = registro.observacao?.trim()
+  return registrarExecucaoCuidado({
+    ocorrencia_id: item.registro_id,
+    resultado: registro.resultado,
+    ocorrido_em: new Date().toISOString(),
+    ...(registro.resultado !== 'executada' && justificativa ? { justificativa } : {}),
+    ...(observacao ? { observacao } : {}),
+  })
+}
+
 // C5AdministracaoCreate: quantidade obrigatória quando "administrada";
 // justificativa obrigatória nos demais resultados.
 export type ResultadoDose = 'administrada' | 'recusada' | 'omitida'

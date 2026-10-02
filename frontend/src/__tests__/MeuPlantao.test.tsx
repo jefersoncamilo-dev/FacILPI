@@ -90,7 +90,7 @@ describe('MeuPlantao — leitura da projeção oficial', () => {
     expect(await screen.findByText('Banho assistido')).toBeTruthy()
     expect(screen.getByText('Dose prevista de medicação')).toBeTruthy()
     expect(screen.getByText('Intercorrência aberta: queda')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Registrar execução' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Registrar' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Registrar administração' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Encerrar' })).toBeTruthy()
   })
@@ -138,8 +138,9 @@ describe('MeuPlantao — ações usam o endpoint oficial de cada origem', () => 
     mockPost.mockResolvedValueOnce({ data: {} } as any)
     renderPlantao()
 
-    await user.click(await screen.findByRole('button', { name: 'Registrar execução' }))
-    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await user.click(await screen.findByRole('button', { name: 'Registrar' }))
+    // UX-01A.1: Realizado salva com um toque, sem Confirmar.
+    await user.click(screen.getByRole('button', { name: 'Realizado' }))
 
     await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1))
     const [url, payload] = mockPost.mock.calls[0]
@@ -194,16 +195,16 @@ describe('MeuPlantao — ações usam o endpoint oficial de cada origem', () => 
 })
 
 describe('MeuPlantao — validações condicionais espelham o backend', () => {
-  it('10. cuidado recusado exige justificativa antes de chamar a API', async () => {
+  it('10. cuidado recusado exige motivo antes de chamar a API', async () => {
     const user = userEvent.setup()
     respondeCom(TRES_ITENS)
     renderPlantao()
 
-    await user.click(await screen.findByRole('button', { name: 'Registrar execução' }))
-    await user.selectOptions(screen.getByLabelText('Resultado'), 'recusada')
-    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await user.click(await screen.findByRole('button', { name: 'Registrar' }))
+    await user.click(screen.getByRole('button', { name: 'Recusado' }))
+    await user.click(screen.getByRole('button', { name: 'Salvar como recusado' }))
 
-    expect(await screen.findByText('Justificativa obrigatória para recusa ou omissão.')).toBeTruthy()
+    expect(await screen.findByText('Informe o motivo.')).toBeTruthy()
     expect(mockPost).not.toHaveBeenCalled()
   })
 
@@ -241,8 +242,8 @@ describe('MeuPlantao — conflito de concorrência', () => {
     })
     renderPlantao()
 
-    await user.click(await screen.findByRole('button', { name: 'Registrar execução' }))
-    await user.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await user.click(await screen.findByRole('button', { name: 'Registrar' }))
+    await user.click(screen.getByRole('button', { name: 'Realizado' }))
 
     expect(await screen.findByText('Ocorrencia ja possui execucao vigente')).toBeTruthy()
     await waitFor(() => expect(urlsChamadas().filter(u => u === '/plantao/').length).toBeGreaterThanOrEqual(2))
