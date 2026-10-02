@@ -7,6 +7,7 @@ import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { Alert } from '../components/ui/feedback'
 import { MeuTurno } from '../components/plantao/MeuTurno'
 import { MinhaArea } from '../components/plantao/MinhaArea'
+import { RegistrarCuidado } from '../components/plantao/RegistrarCuidado'
 import { meuPlantaoApi, type MeuPlantaoResumo } from '../services/meuPlantao'
 import { cn } from '../lib/utils'
 import {
@@ -16,11 +17,9 @@ import {
   getPlantao,
   getResidentesResumo,
   registrarAdministracao,
-  registrarExecucaoCuidado,
   rotuloDoItem,
   type PlantaoItem,
   type PlantaoOrigem,
-  type ResultadoCuidado,
   type ResultadoDose,
 } from '../services/plantao'
 
@@ -45,23 +44,22 @@ const PERMISSAO_ACAO: Record<PlantaoOrigem, string> = {
 }
 
 const SUCESSO_ACAO: Record<PlantaoOrigem, string> = {
-  cuidado: 'Execução registrada.',
+  cuidado: 'Registro salvo.',
   medicacao: 'Administração registrada.',
   intercorrencia: 'Intercorrência encerrada.',
 }
 
 const ACAO_ORIGEM: Record<PlantaoOrigem, string> = {
-  cuidado: 'Registrar execução',
+  cuidado: 'Registrar',
   medicacao: 'Registrar administração',
   intercorrencia: 'Encerrar',
 }
 
 type Filtro = 'todos' | PlantaoOrigem
 
-// Estado do formulário da ação. Um só objeto porque os três formulários são
-// pequenos e mutuamente exclusivos — só um modal fica aberto por vez.
+// Estado do formulário de medicação/intercorrência. O cuidado tem o próprio
+// Registrar rápido (UX-01A.1); só um diálogo fica aberto por vez.
 interface FormAcao {
-  resultadoCuidado: ResultadoCuidado
   resultadoDose: ResultadoDose
   quantidade: string
   justificativa: string
@@ -70,7 +68,6 @@ interface FormAcao {
 }
 
 const FORM_VAZIO: FormAcao = {
-  resultadoCuidado: 'executada',
   resultadoDose: 'administrada',
   quantidade: '',
   justificativa: '',
@@ -109,12 +106,17 @@ export function MeuPlantao() {
   const [filtro, setFiltro] = useState<Filtro>('todos')
 
   const [itemAberto, setItemAberto] = useState<PlantaoItem | null>(null)
+  const [cuidadoAberto, setCuidadoAberto] = useState<PlantaoItem | null>(null)
+  // Depois de salvar, o foco vai para o "Registrar" do próximo item da lista.
+  const focarApos = useRef<string | null>(null)
   const [form, setForm] = useState<FormAcao>(FORM_VAZIO)
   const [erroAcao, setErroAcao] = useState('')
   const [salvando, setSalvando] = useState(false)
 
-  const carregar = useCallback(async () => {
-    setCarregando(true)
+  // `silencioso`: recarga depois de um registro — sem trocar a lista pelo
+  // "Carregando…", para não perder rolagem, filtro e posição na fila.
+  const carregar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
+    if (!silencioso) setCarregando(true)
     try {
       const data = await getPlantao(desde ? { a_partir_de: desde } : {})
       setItens(data)
@@ -130,6 +132,12 @@ export function MeuPlantao() {
   }, [desde])
 
   useEffect(() => { carregar() }, [carregar])
+
+  useEffect(() => {
+    if (!focarApos.current) return
+    document.querySelector<HTMLElement>(`[data-acao-plantao="${focarApos.current}"]`)?.focus()
+    focarApos.current = null
+  }, [itens])
 
   // #126: recorte do plantão pela área (só com plantão ativo e com o que o perfil lê).
   const [resumo, setResumo] = useState<MeuPlantaoResumo | null>(null)
@@ -164,6 +172,7 @@ export function MeuPlantao() {
 
   function abrir(item: PlantaoItem) {
     setSucesso('')
+    if (item.origem === 'cuidado') { setCuidadoAberto(item); return }
     setItemAberto(item)
     setForm(FORM_VAZIO)
     setErroAcao('')
@@ -177,12 +186,6 @@ export function MeuPlantao() {
   // Espelha as validações condicionais dos schemas do backend para não gastar
   // uma ida ao servidor com um 422 previsível.
   function validar(item: PlantaoItem): string {
-    if (item.origem === 'cuidado') {
-      if (form.resultadoCuidado !== 'executada' && !form.justificativa.trim()) {
-        return 'Justificativa obrigatória para recusa ou omissão.'
-      }
-      return ''
-    }
     if (item.origem === 'medicacao') {
       if (form.resultadoDose === 'administrada') {
         const quantidade = Number(form.quantidade)
@@ -209,15 +212,7 @@ export function MeuPlantao() {
     // acabou de acontecer. Data retroativa exige a tela do próprio módulo.
     const ocorrido_em = new Date().toISOString()
     try {
-      if (itemAberto.origem === 'cuidado') {
-        await registrarExecucaoCuidado({
-          ocorrencia_id: itemAberto.registro_id,
-          resultado: form.resultadoCuidado,
-          ocorrido_em,
-          ...(form.observacao.trim() ? { observacao: form.observacao.trim() } : {}),
-          ...(form.justificativa.trim() ? { justificativa: form.justificativa.trim() } : {}),
-        })
-      } else if (itemAberto.origem === 'medicacao') {
+      if (itemAberto.origem === 'medicacao') {
         await registrarAdministracao({
           dose_prevista_id: itemAberto.registro_id,
           resultado: form.resultadoDose,
@@ -231,7 +226,7 @@ export function MeuPlantao() {
       }
       const origem = itemAberto.origem
       fechar()
-      await carregar()
+      await carregar({ silencioso: true })
       // #126: a fonte mudou — o resumo da área (prioridades, atrasadas) também.
       carregarResumo()
       setSucesso(SUCESSO_ACAO[origem])
@@ -240,10 +235,23 @@ export function MeuPlantao() {
       // A projeção é recarregada para que a lista atrás do modal reflita a
       // realidade, e a mensagem do backend fica visível.
       setErroAcao(mensagemDeErro(e, 'Não foi possível registrar.'))
-      await carregar()
+      await carregar({ silencioso: true })
     } finally {
       setSalvando(false)
     }
+  }
+
+  function cuidadoSalvo(item: PlantaoItem) {
+    const chave = `${item.origem}:${item.registro_id}`
+    const botoes = [...document.querySelectorAll<HTMLElement>('[data-acao-plantao]')]
+    const atual = botoes.findIndex(b => b.dataset.acaoPlantao === chave)
+    focarApos.current = (botoes[atual + 1] ?? botoes[atual - 1])?.dataset.acaoPlantao ?? null
+    setCuidadoAberto(null)
+    // Some da fila na hora; a recarga silenciosa confirma com a projeção oficial.
+    setItens(atuais => atuais.filter(i => !(i.origem === item.origem && i.registro_id === item.registro_id)))
+    setSucesso(SUCESSO_ACAO.cuidado)
+    void carregar({ silencioso: true })
+    carregarResumo()
   }
 
   return (
@@ -298,7 +306,7 @@ export function MeuPlantao() {
         <div className="card py-10 text-center" role="alert">
           <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
           <p className="text-sm font-medium text-red-700">{erro}</p>
-          <button onClick={carregar} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
+          <button onClick={() => carregar()} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
       ) : lista.length === 0 ? (
         <div className="card py-16 text-center text-muted-foreground">Nenhuma pendência neste filtro</div>
@@ -342,7 +350,11 @@ export function MeuPlantao() {
                       )}
                     </div>
                     {podeAgir && (
-                      <button onClick={() => abrir(item)} className="btn-primary w-full px-4 py-2 text-sm sm:w-auto">
+                      <button
+                        data-acao-plantao={`${item.origem}:${item.registro_id}`}
+                        onClick={() => abrir(item)}
+                        className="btn-primary min-h-[48px] w-full px-5 text-sm sm:w-auto"
+                      >
                         {ACAO_ORIGEM[item.origem]}
                       </button>
                     )}
@@ -358,36 +370,6 @@ export function MeuPlantao() {
         {itemAberto && (
           <div className="space-y-3">
             <div className="text-sm text-textMuted">{rotuloDoItem(itemAberto)}</div>
-
-            {itemAberto.origem === 'cuidado' && (
-              <>
-                <label className="block text-sm font-medium" htmlFor="resultado-cuidado">Resultado</label>
-                <select
-                  id="resultado-cuidado"
-                  className="input"
-                  value={form.resultadoCuidado}
-                  onChange={e => setForm({ ...form, resultadoCuidado: e.target.value as ResultadoCuidado })}
-                >
-                  <option value="executada">Executada</option>
-                  <option value="recusada">Recusada</option>
-                  <option value="omitida">Omitida</option>
-                </select>
-                {form.resultadoCuidado !== 'executada' && (
-                  <input
-                    className="input"
-                    placeholder="Justificativa (obrigatória)"
-                    value={form.justificativa}
-                    onChange={e => setForm({ ...form, justificativa: e.target.value })}
-                  />
-                )}
-                <input
-                  className="input"
-                  placeholder="Observação (opcional)"
-                  value={form.observacao}
-                  onChange={e => setForm({ ...form, observacao: e.target.value })}
-                />
-              </>
-            )}
 
             {itemAberto.origem === 'medicacao' && (
               <>
@@ -446,6 +428,14 @@ export function MeuPlantao() {
           </div>
         )}
       </Modal>
+
+      <RegistrarCuidado
+        item={cuidadoAberto}
+        nomeResidente={cuidadoAberto ? nomes[cuidadoAberto.residente_id] : undefined}
+        onFechar={() => setCuidadoAberto(null)}
+        onSalvo={cuidadoSalvo}
+        onFalha={() => void carregar({ silencioso: true })}
+      />
     </div>
   )
 }

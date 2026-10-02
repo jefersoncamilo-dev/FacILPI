@@ -55,21 +55,32 @@ export function DialogContent({
   description,
   children,
   className,
+  focarConteudo = false,
 }: {
   title: string
   description?: string
   children: ReactNode
   className?: string
+  /** Abre com foco no próprio diálogo, não no primeiro botão (evita confirmar sem querer). */
+  focarConteudo?: boolean
 }) {
   const foco = useFocoDeRetorno()
+  const conteudo = useRef<HTMLDivElement>(null)
   return (
     <DialogPrimitive.Portal>
       <Overlay />
       <DialogPrimitive.Content
+        ref={conteudo}
         // O Radix isola o resto da página com aria-hidden; aria-modal declara a
         // modalidade também para leitores de tela que se guiam pelo atributo.
         aria-modal="true"
-        onOpenAutoFocus={foco.guardar}
+        onOpenAutoFocus={event => {
+          foco.guardar()
+          if (focarConteudo) {
+            event.preventDefault()
+            conteudo.current?.focus()
+          }
+        }}
         onCloseAutoFocus={foco.devolver}
         className={cn(
           'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-xl focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
