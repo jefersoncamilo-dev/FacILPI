@@ -197,6 +197,6 @@ describe('Meu Plantão — ?desde= vindo da passagem', () => {
     renderTela(<MeuPlantao />, TUDO, `/plantao?desde=${encodeURIComponent(desde)}`)
     expect(await screen.findByText('Mudança de decúbito')).toBeTruthy()
     expect(mockGet).toHaveBeenCalledWith('/plantao/', { params: { a_partir_de: new Date(Date.parse(desde)).toISOString() } })
-    expect(screen.getByRole('link', { name: 'ver só a partir de agora' }).getAttribute('href')).toBe('/plantao')
+    expect(screen.getByRole('link', { name: 'voltar à fila padrão' }).getAttribute('href')).toBe('/plantao')
   })
 })

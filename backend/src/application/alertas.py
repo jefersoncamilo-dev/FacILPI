@@ -44,7 +44,7 @@ from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
 from .audit import add_audit
-from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc, garantir_horizonte
+from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc, garantir_horizonte, local_do_leito
 from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_permission
 
 central_alertas_router = APIRouter(prefix="/central-alertas", tags=["alertas"])
@@ -107,10 +107,7 @@ def _hash(*partes: str | None) -> str:
     return hashlib.sha1("\x1f".join("\x00" if p is None else p for p in partes).encode("utf-8")).hexdigest()[:12]
 
 
-def _local(unidade: str | None, quarto: str | None, leito: str | None) -> str | None:
-    # Mesmo formato do rotuloLeito do frontend: "Ala B · Quarto 12 · Leito A".
-    partes = [unidade, f"Quarto {quarto}" if quarto else None, f"Leito {leito}" if leito else None]
-    return " · ".join(p for p in partes if p) or None
+_local = local_do_leito
 
 
 class _Coletor:

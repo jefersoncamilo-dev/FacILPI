@@ -59,6 +59,12 @@ def _data(obj):
     }
 
 
+def local_do_leito(unidade, quarto, leito):
+    # Mesmo formato do rotuloLeito do frontend: "Ala B · Quarto 12 · Leito A".
+    partes = [unidade, f"Quarto {quarto}" if quarto else None, f"Leito {leito}" if leito else None]
+    return " · ".join(p for p in partes if p) or None
+
+
 def _fail(message, status=409):
     raise HTTPException(status_code=status, detail={"code": ROTINA_CONFLITO if status == 409 else ROTINA_INVALIDA, "message": message})
 
@@ -646,4 +652,12 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
             "prioridade": None,
         })
     items.sort(key=lambda item: (item["previsto_em"] is None, item["previsto_em"] or now, item["registro_id"]))
-    return items[:limit]
+    items = items[:limit]
+    # G3: quarto/leito atual como contexto operacional do item (mesma regra dos alertas).
+    residentes = {item["residente_id"] for item in items}
+    leitos = {row.residente_atual_id: local_do_leito(row.unidade, row.quarto, row.leito) for row in (await db.execute(
+        select(m.QuartoLeito.residente_atual_id, m.QuartoLeito.unidade, m.QuartoLeito.quarto, m.QuartoLeito.leito).where(
+            m.QuartoLeito.instituicao_id == context.ilpi_id, m.QuartoLeito.residente_atual_id.in_(residentes)))).all()} if residentes else {}
+    for item in items:
+        item["local"] = leitos.get(item["residente_id"])
+    return items
