@@ -25,6 +25,7 @@ from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
 from .audit import add_audit
+from .medicacao import garantir_horizonte_doses
 from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_ilpi_context, require_permission
 
 
@@ -36,6 +37,8 @@ plantao_router = APIRouter(prefix="/plantao", tags=["plantao"], dependencies=[De
 ROTINA_CONFLITO = "ROTINA_CONFLITO"
 ROTINA_INVALIDA = "ROTINA_INVALIDA"
 HORIZONTE_DIAS = 7
+# G1: abaixo disso de cobertura à frente, a leitura do plantão renova o horizonte.
+LIMIAR_RENOVACAO = timedelta(days=3)
 
 
 def _now():
@@ -183,20 +186,28 @@ def _local_time(day, clock, zone):
     return candidates.pop()
 
 
-async def _materialize(db, programacao, plano, context, request, now):
-    # Programações da versão anterior do PAIS deixam de gerar futuro.
-    if plano.situacao != "vigente":
-        _fail("PAIS fora de vigencia nao gera ocorrencias")
-    if programacao.situacao != "ativa":
-        _fail("Somente programacao ativa gera ocorrencias")
+def _janela(programacao, plano, now, desde=None):
     zone = ZoneInfo(programacao.timezone)
     start = _utc(programacao.cobertura_ate) or max(now, _utc(programacao.vigencia_inicio))
+    if desde is not None:
+        start = max(start, desde)
     end = now + timedelta(days=HORIZONTE_DIAS)
     if programacao.vigencia_fim is not None:
         end = min(end, _utc(programacao.vigencia_fim))
     if plano.data_final is not None:
         bound = _local_time(plano.data_final + timedelta(days=1), "00:00", zone)
         end = min(end, bound)
+    return start, end
+
+
+async def _materialize(db, programacao, plano, context, request, now, desde=None):
+    # Programações da versão anterior do PAIS deixam de gerar futuro.
+    if plano.situacao != "vigente":
+        _fail("PAIS fora de vigencia nao gera ocorrencias")
+    if programacao.situacao != "ativa":
+        _fail("Somente programacao ativa gera ocorrencias")
+    zone = ZoneInfo(programacao.timezone)
+    start, end = _janela(programacao, plano, now, desde)
     if end <= start:
         return
     occurrences = []
@@ -223,6 +234,47 @@ async def _materialize(db, programacao, plano, context, request, now):
     before = _data(programacao)
     programacao.cobertura_ate = end
     await _audit(db, programacao, context, request, "reconciliar", before)
+
+
+async def garantir_horizonte(db, context, request):
+    """G1: mantém o horizonte materializado de cuidados e doses na leitura do plantão.
+
+    Sem isso a cobertura só nasce na criação/reconciliação manual e o plantão
+    esvazia após HORIZONTE_DIAS. Reaproveita _materialize (idempotente, unique
+    por horário, auditoria), nunca retroativo (desde=agora), escopo da sessão.
+    No caso comum é um SELECT; renova só o que tem menos de LIMIAR_RENOVACAO
+    à frente. Conflito concorrente desfaz o savepoint e não derruba a leitura.
+    """
+    now = _now()
+    candidatas = (await db.execute(select(m.ProgramacaoCuidado, m.PlanoCuidados).join(
+        m.PlanoCuidados, (m.PlanoCuidados.id == m.ProgramacaoCuidado.plano_id)
+        & (m.PlanoCuidados.ilpi_id == m.ProgramacaoCuidado.ilpi_id)).where(
+        m.ProgramacaoCuidado.ilpi_id == context.ilpi_id, m.ProgramacaoCuidado.situacao == "ativa",
+        m.PlanoCuidados.situacao == "vigente",
+        (m.ProgramacaoCuidado.cobertura_ate.is_(None)) | (m.ProgramacaoCuidado.cobertura_ate < now + LIMIAR_RENOVACAO),
+    ))).all()
+
+    def aberta(programacao, plano):
+        start, end = _janela(programacao, plano, now, now)
+        return start < end
+
+    renovou = False
+    for programacao_id in [p.id for p, plano in candidatas if aberta(p, plano)]:
+        savepoint = await db.begin_nested()
+        try:
+            programacao = await _lock_programacao(db, programacao_id, context)
+            plano = await _get_plano(db, programacao.plano_id, context)
+            if programacao.situacao != "ativa" or plano.situacao != "vigente" or not aberta(programacao, plano):
+                await savepoint.rollback()
+                continue
+            await _materialize(db, programacao, plano, context, request, now, desde=now)
+            await savepoint.commit()
+            renovou = True
+        except (IntegrityError, OperationalError, HTTPException):
+            await savepoint.rollback()
+    renovou = await garantir_horizonte_doses(db, context, request, LIMIAR_RENOVACAO) or renovou
+    if renovou:
+        await db.commit()
 
 
 async def _validate_programacao_base(db, payload, context):
@@ -517,8 +569,13 @@ def _has_admin_vigente():
 @plantao_router.get("/", response_model=list[s.PlantaoItem])
 async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDatetime | None = None,
     residente_id: str | None = None, limit: int = Query(200, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db), context: SecurityContext = Depends(require_permission("plantao:ler"))):
-    # PROJEÇÃO: nenhuma linha é criada ou duplicada aqui.
+    db: AsyncSession = Depends(get_db), context: SecurityContext = Depends(require_permission("plantao:ler")),
+    request: Request = None):
+    # PROJEÇÃO: nenhuma linha é criada ou duplicada aqui. G1: só a chamada HTTP
+    # (request presente) renova o horizonte antes; chamadas internas (Meu Plantão
+    # agregado, passagem) já renovaram no próprio endpoint ou estão em escrita.
+    if request is not None:
+        await garantir_horizonte(db, context, request)
     now = _now()
     inicio = _utc(a_partir_de) if a_partir_de is not None else now
     fim = _utc(ate) if ate is not None else now + timedelta(hours=24)
