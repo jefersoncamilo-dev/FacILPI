@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { TriangleAlert } from 'lucide-react'
+import { ListChecks, TriangleAlert } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
@@ -49,6 +49,8 @@ const ACAO_ORIGEM: Record<PlantaoOrigem, string> = {
 }
 
 const JANELA_ATRASO_MS = 24 * 60 * 60 * 1000
+
+const chaveDoItem = (item: PlantaoItem) => `${item.origem}:${item.registro_id}`
 
 // UX-01A.2: visão e filtros sobrevivem à navegação dentro da sessão do navegador.
 const CHAVE_VISAO = 'facilpi:plantao:visao'
@@ -118,6 +120,10 @@ export function MeuPlantao() {
 
   const [itemAberto, setItemAberto] = useState<PlantaoItem | null>(null)
   const [cuidadoAberto, setCuidadoAberto] = useState<PlantaoItem | null>(null)
+  // UX-01B: seleção múltipla só de cuidados de rotina (origem "cuidado"), para
+  // quem pode registrar execução. Medicação e intercorrência nunca entram.
+  const [selecionando, setSelecionando] = useState(false)
+  const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set())
   // Depois de salvar, o foco vai para o "Registrar" do próximo item da lista.
   const focarApos = useRef<string | null>(null)
   const [form, setForm] = useState<FormAcao>(FORM_VAZIO)
@@ -146,6 +152,15 @@ export function MeuPlantao() {
   }, [desde])
 
   useEffect(() => { carregar() }, [carregar])
+
+  // Item que saiu da fila (registrado por alguém, cancelado) sai da seleção.
+  useEffect(() => {
+    setSelecionados(atual => {
+      const presentes = new Set(itens.map(chaveDoItem))
+      const mantidos = [...atual].filter(k => presentes.has(k))
+      return mantidos.length === atual.size ? atual : new Set(mantidos)
+    })
+  }, [itens])
 
   useEffect(() => {
     if (!focarApos.current) return
@@ -184,6 +199,36 @@ export function MeuPlantao() {
   const residentesDaFila = useMemo(() => [...new Set(itens.map(i => i.residente_id))]
     .map(id => ({ id, nome: nomes[id] || id }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')), [itens, nomes])
+
+  const elegivel = (item: PlantaoItem) => item.origem === 'cuidado' && pode(PERMISSAO_ACAO.cuidado)
+  const haElegiveis = itens.some(elegivel)
+  const selecionadosNaFila = itens.filter(i => selecionados.has(chaveDoItem(i)))
+
+  function alternar(item: PlantaoItem) {
+    setSelecionados(atual => {
+      const novo = new Set(atual)
+      const k = chaveDoItem(item)
+      if (novo.has(k)) novo.delete(k)
+      else novo.add(k)
+      return novo
+    })
+  }
+
+  function alternarGrupo(itensDoGrupo: PlantaoItem[], marcar: boolean) {
+    setSelecionados(atual => {
+      const novo = new Set(atual)
+      for (const item of itensDoGrupo) {
+        if (marcar) novo.add(chaveDoItem(item))
+        else novo.delete(chaveDoItem(item))
+      }
+      return novo
+    })
+  }
+
+  function sairDaSelecao() {
+    setSelecionando(false)
+    setSelecionados(new Set())
+  }
 
   function abrir(item: PlantaoItem) {
     setSucesso('')
@@ -329,6 +374,26 @@ export function MeuPlantao() {
 
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
 
+      {haElegiveis && !carregando && !erro && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            {selecionando ? 'Toque nos cuidados para marcar.' : 'Vários cuidados iguais? Marque e registre juntos.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => (selecionando ? sairDaSelecao() : setSelecionando(true))}
+            aria-pressed={selecionando}
+            className={cn(
+              'inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium',
+              selecionando ? 'border-primary bg-brand-soft text-primary' : 'border-border bg-card hover:bg-muted',
+            )}
+          >
+            <ListChecks className="size-4" aria-hidden="true" />
+            {selecionando ? 'Cancelar seleção' : 'Selecionar'}
+          </button>
+        </div>
+      )}
+
       {itens.length >= PLANTAO_LIMIT_PADRAO && !erro && (
         <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
           <span className="text-sm text-muted-foreground">Exibindo as primeiras {PLANTAO_LIMIT_PADRAO} pendências. Pode haver mais no período.</span>
@@ -350,35 +415,69 @@ export function MeuPlantao() {
           {/* UX-01A.2: mesma fila, três leituras. Por horário mantém a pergunta do
               turno (atrasadas, próximas, sem horário); por cuidado e por residente
               agrupam sem mudar a ordem oficial dentro do grupo. */}
-          {grupos.map(grupo => (
-            <section key={grupo.chave} aria-label={grupo.titulo} className="space-y-2">
-              <h2 className="flex items-baseline gap-2">
-                <span className={visao === 'horario'
-                  ? 'text-xs font-semibold uppercase tracking-wide text-muted-foreground'
-                  : 'font-semibold text-foreground'}>
-                  {grupo.titulo}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {visao === 'horario'
-                    ? `(${grupo.itens.length})`
-                    : `${grupo.itens.length} ${grupo.itens.length === 1 ? 'pendente' : 'pendentes'}`}
-                </span>
-              </h2>
-              {grupo.itens.map(item => {
-                const podeAgir = pode(PERMISSAO_ACAO[item.origem])
-                return (
-                  <ItemPlantao
-                    key={`${item.origem}:${item.registro_id}`}
-                    item={item}
-                    nomeResidente={nomes[item.residente_id]}
-                    agora={agora}
-                    destaque={visao === 'cuidado' ? 'residente' : 'cuidado'}
-                    acao={podeAgir ? { rotulo: ACAO_ORIGEM[item.origem], onClick: () => abrir(item) } : undefined}
-                  />
-                )
-              })}
-            </section>
-          ))}
+          {grupos.map(grupo => {
+            const elegiveisDoGrupo = grupo.itens.filter(elegivel)
+            const todosMarcados = elegiveisDoGrupo.length > 0 && elegiveisDoGrupo.every(i => selecionados.has(chaveDoItem(i)))
+            return (
+              <section key={grupo.chave} aria-label={grupo.titulo} className="space-y-2">
+                <div className="flex min-h-[44px] items-center justify-between gap-2">
+                  <h2 className="flex items-baseline gap-2">
+                    <span className={visao === 'horario'
+                      ? 'text-xs font-semibold uppercase tracking-wide text-muted-foreground'
+                      : 'font-semibold text-foreground'}>
+                      {grupo.titulo}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {visao === 'horario'
+                        ? `(${grupo.itens.length})`
+                        : `${grupo.itens.length} ${grupo.itens.length === 1 ? 'pendente' : 'pendentes'}`}
+                    </span>
+                  </h2>
+                  {selecionando && elegiveisDoGrupo.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => alternarGrupo(elegiveisDoGrupo, !todosMarcados)}
+                      className="min-h-[44px] shrink-0 px-2 text-sm font-medium text-primary hover:underline"
+                    >
+                      {todosMarcados ? 'Desmarcar todos' : `Marcar todos (${elegiveisDoGrupo.length})`}
+                    </button>
+                  )}
+                </div>
+                {grupo.itens.map(item => {
+                  const podeAgir = pode(PERMISSAO_ACAO[item.origem])
+                  return (
+                    <ItemPlantao
+                      key={chaveDoItem(item)}
+                      item={item}
+                      nomeResidente={nomes[item.residente_id]}
+                      agora={agora}
+                      destaque={visao === 'cuidado' ? 'residente' : 'cuidado'}
+                      acao={podeAgir && !selecionando ? { rotulo: ACAO_ORIGEM[item.origem], onClick: () => abrir(item) } : undefined}
+                      selecao={selecionando && elegivel(item)
+                        ? { selecionado: selecionados.has(chaveDoItem(item)), onAlternar: () => alternar(item) }
+                        : undefined}
+                    />
+                  )
+                })}
+              </section>
+            )
+          })}
+        </div>
+      )}
+
+      {selecionando && (
+        // Fica acima da navegação inferior no mobile; no desktop, rente ao fim da tela.
+        <div className="sticky bottom-24 z-20 flex items-center gap-3 rounded-card border border-primary/40 bg-card p-3 shadow-lg xl:bottom-4" role="region" aria-label="Seleção">
+          <span className="flex-1 text-sm font-semibold" aria-live="polite">
+            {selecionadosNaFila.length === 0
+              ? 'Nenhum cuidado marcado'
+              : `${selecionadosNaFila.length} ${selecionadosNaFila.length === 1 ? 'cuidado marcado' : 'cuidados marcados'}`}
+          </span>
+          {selecionadosNaFila.length > 0 && (
+            <button type="button" onClick={() => setSelecionados(new Set())} className="min-h-[44px] px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Limpar
+            </button>
+          )}
         </div>
       )}
 
