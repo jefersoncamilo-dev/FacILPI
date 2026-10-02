@@ -112,9 +112,12 @@ describe('UX-01A.2 — tela', () => {
     responde(TELA)
     renderTela()
     const proximas = await screen.findByRole('region', { name: 'Próximas' })
-    expect(within(proximas).getByText('Ala B · Quarto 12 · Leito A')).toBeTruthy()
+    // Linha 2: residente · quarto/leito; linha 3: horário (secundário). Avatar com iniciais sem foto.
+    expect(within(proximas).getByText(/^Maria Souza · +Ala B · Quarto 12 · Leito A$/)).toBeTruthy()
     expect(within(proximas).getAllByText('Banho')).toHaveLength(2)
-    expect(within(proximas).getAllByText('Maria Souza')).toHaveLength(2)
+    expect(within(proximas).getAllByText(/Maria Souza/)).toHaveLength(2)
+    expect(within(proximas).getAllByText('MS')).toHaveLength(2)
+    expect(within(proximas).getAllByText(/^\d{2}:\d{2}/).length).toBeGreaterThanOrEqual(3)
   })
 
   it('"Por cuidado" agrupa com contagem e lembra a escolha na sessão', async () => {

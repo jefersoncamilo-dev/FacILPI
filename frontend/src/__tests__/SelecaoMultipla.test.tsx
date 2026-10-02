@@ -91,7 +91,7 @@ describe('UX-01B — seleção múltipla', () => {
     await user.click(primeiro)
     await user.click(segundo)
     expect(primeiro.getAttribute('aria-checked')).toBe('true')
-    expect(barra().getByText('2 cuidados marcados')).toBeTruthy()
+    expect(barra().getByText('2 marcados')).toBeTruthy()
 
     await user.click(barra().getByRole('button', { name: 'Limpar' }))
     expect(barra().getByText('Nenhum cuidado marcado')).toBeTruthy()
@@ -113,7 +113,7 @@ describe('UX-01B — seleção múltipla', () => {
     const banho = within(screen.getByRole('region', { name: 'Banho assistido' }))
     await user.click(banho.getByRole('button', { name: 'Marcar todos (2)' }))
 
-    expect(barra().getByText('2 cuidados marcados')).toBeTruthy()
+    expect(barra().getByText('2 marcados')).toBeTruthy()
     expect(within(screen.getByRole('region', { name: 'Hidratação' })).getByRole('checkbox').getAttribute('aria-checked')).toBe('false')
     expect(banho.getByRole('button', { name: 'Desmarcar todos' })).toBeTruthy()
   })

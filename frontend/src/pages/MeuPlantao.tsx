@@ -8,6 +8,7 @@ import { Alert } from '../components/ui/feedback'
 import { MeuTurno } from '../components/plantao/MeuTurno'
 import { MinhaArea } from '../components/plantao/MinhaArea'
 import { RegistrarCuidado } from '../components/plantao/RegistrarCuidado'
+import { RegistrarLote } from '../components/plantao/RegistrarLote'
 import { ItemPlantao } from '../components/plantao/ItemPlantao'
 import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
 import {
@@ -111,6 +112,7 @@ export function MeuPlantao() {
   // "nenhuma pendência" na tela do plantonista.
   const [erro, setErro] = useState('')
   const [nomes, setNomes] = useState<Record<string, string>>({})
+  const [fotos, setFotos] = useState<Record<string, string | null | undefined>>({})
   const [visao, setVisaoEstado] = useState<Visao>(() =>
     lerSessao(CHAVE_VISAO, 'horario', v => VISOES.some(o => o.valor === v)))
   const [filtros, setFiltrosEstado] = useState<Filtros>(() =>
@@ -124,6 +126,8 @@ export function MeuPlantao() {
   // quem pode registrar execução. Medicação e intercorrência nunca entram.
   const [selecionando, setSelecionando] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set())
+  // UX-01C: itens do lote em registro (cópia do momento em que o diálogo abriu).
+  const [lote, setLote] = useState<PlantaoItem[] | null>(null)
   // Depois de salvar, o foco vai para o "Registrar" do próximo item da lista.
   const focarApos = useRef<string | null>(null)
   const [form, setForm] = useState<FormAcao>(FORM_VAZIO)
@@ -184,7 +188,10 @@ export function MeuPlantao() {
   useEffect(() => {
     // Auxiliar: a falha aqui não vira erro de tela, só mantém o id como rótulo.
     getResidentesResumo()
-      .then(lista => setNomes(Object.fromEntries(lista.map(r => [r.id, r.nome]))))
+      .then(lista => {
+        setNomes(Object.fromEntries(lista.map(r => [r.id, r.nome])))
+        setFotos(Object.fromEntries(lista.map(r => [r.id, r.foto])))
+      })
       .catch(() => setNomes({}))
   }, [])
 
@@ -228,6 +235,22 @@ export function MeuPlantao() {
   function sairDaSelecao() {
     setSelecionando(false)
     setSelecionados(new Set())
+  }
+
+  // Salvos saem da fila e da seleção já; se algo falhou, o diálogo continua
+  // aberto só com o que falta e a seleção mantém esses itens.
+  function loteSalvo(salvos: PlantaoItem[], restantes: number) {
+    if (salvos.length) {
+      const feitos = new Set(salvos.map(chaveDoItem))
+      setItens(atuais => atuais.filter(i => !feitos.has(chaveDoItem(i))))
+      setSucesso(salvos.length === 1 ? '1 registro salvo.' : `${salvos.length} registros salvos.`)
+      void carregar({ silencioso: true })
+      carregarResumo()
+    }
+    if (restantes === 0) {
+      setLote(null)
+      sairDaSelecao()
+    }
   }
 
   function abrir(item: PlantaoItem) {
@@ -315,17 +338,17 @@ export function MeuPlantao() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="space-y-1">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Meu Plantão</h1>
           {/* Filtros secundários ficam no cabeçalho: a barra de situação cabe inteira em 360px. */}
           <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-sm text-muted-foreground max-sm:sr-only">
           {desde
             ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">voltar à fila padrão</Link></>
-            : 'Atrasos das últimas 24 horas e pendências das próximas 24 horas — cuidados, doses e intercorrências abertas'}
+            : 'Atrasos das últimas 24 h e pendências das próximas 24 h'}
         </p>
       </div>
 
@@ -375,8 +398,8 @@ export function MeuPlantao() {
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
 
       {haElegiveis && !carregando && !erro && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
+        <div className="flex items-center justify-end gap-3 sm:justify-between">
+          <p className="text-sm text-muted-foreground max-sm:sr-only">
             {selecionando ? 'Toque nos cuidados para marcar.' : 'Vários cuidados iguais? Marque e registre juntos.'}
           </p>
           <button
@@ -450,6 +473,7 @@ export function MeuPlantao() {
                       key={chaveDoItem(item)}
                       item={item}
                       nomeResidente={nomes[item.residente_id]}
+                      fotoResidente={fotos[item.residente_id]}
                       agora={agora}
                       destaque={visao === 'cuidado' ? 'residente' : 'cuidado'}
                       acao={podeAgir && !selecionando ? { rotulo: ACAO_ORIGEM[item.origem], onClick: () => abrir(item) } : undefined}
@@ -468,18 +492,25 @@ export function MeuPlantao() {
       {selecionando && (
         // Fica acima da navegação inferior no mobile; no desktop, rente ao fim da tela.
         <div className="sticky bottom-24 z-20 flex items-center gap-3 rounded-card border border-primary/40 bg-card p-3 shadow-lg xl:bottom-4" role="region" aria-label="Seleção">
-          <span className="flex-1 text-sm font-semibold" aria-live="polite">
+          <span className="min-w-0 flex-1 text-sm font-semibold" aria-live="polite">
             {selecionadosNaFila.length === 0
               ? 'Nenhum cuidado marcado'
-              : `${selecionadosNaFila.length} ${selecionadosNaFila.length === 1 ? 'cuidado marcado' : 'cuidados marcados'}`}
+              : `${selecionadosNaFila.length} ${selecionadosNaFila.length === 1 ? 'marcado' : 'marcados'}`}
           </span>
           {selecionadosNaFila.length > 0 && (
-            <button type="button" onClick={() => setSelecionados(new Set())} className="min-h-[44px] px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Limpar
-            </button>
+            <>
+              <button type="button" onClick={() => setSelecionados(new Set())} className="min-h-[44px] px-2 text-sm font-medium text-muted-foreground hover:text-foreground max-[400px]:hidden">
+                Limpar
+              </button>
+              <button type="button" onClick={() => { setSucesso(''); setLote(selecionadosNaFila) }} className="btn-primary min-h-[48px] shrink-0 whitespace-nowrap px-4 text-sm">
+                Registrar em lote ({selecionadosNaFila.length})
+              </button>
+            </>
           )}
         </div>
       )}
+
+      <RegistrarLote itens={lote} nomes={nomes} onFechar={() => setLote(null)} onSalvos={loteSalvo} />
 
       <Modal open={itemAberto !== null} onClose={fechar} title={itemAberto ? ACAO_ORIGEM[itemAberto.origem] : ''}>
         {itemAberto && (

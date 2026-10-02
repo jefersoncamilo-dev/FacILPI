@@ -2,6 +2,7 @@ import { Check, Clock, MapPin, TriangleAlert } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { rotuloDoItem, type PlantaoItem } from '../../services/plantao'
 import { estaAtrasado, tempoDeAtraso } from './visoes'
+import { AvatarResidente } from '../residente/AvatarResidente'
 
 const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
 const DIA = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
@@ -11,14 +12,16 @@ function mesmoDia(a: Date, b: Date) {
 }
 
 /**
- * UX-01A.2 — card da fila: horário · cuidado · residente · quarto/leito ·
- * situação · Registrar. A situação é texto + ícone (não só cor). `destaque`
+ * UX-01A.2/C — card compacto da fila: foto (ou iniciais) · cuidado · residente ·
+ * quarto/leito · horário e situação · Registrar. A situação é texto + ícone
+ * (não só cor); o horário é secundário, mas sempre visível. `destaque`
  * escolhe a linha principal: o cuidado (padrão) ou o residente — no
  * agrupamento por cuidado o título do grupo já diz o cuidado.
  */
 export function ItemPlantao({
   item,
   nomeResidente,
+  fotoResidente,
   agora,
   destaque = 'cuidado',
   acao,
@@ -26,6 +29,7 @@ export function ItemPlantao({
 }: {
   item: PlantaoItem
   nomeResidente?: string
+  fotoResidente?: string | null
   agora: number
   destaque?: 'cuidado' | 'residente'
   acao?: { rotulo: string; onClick: () => void }
@@ -43,7 +47,7 @@ export function ItemPlantao({
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-card border bg-card p-3 shadow-sm sm:gap-4 sm:p-4',
+        'flex items-center gap-2.5 rounded-card border bg-card px-3 py-2.5 shadow-sm',
         selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado ? 'border-orange-300' : 'border-border',
       )}
     >
@@ -65,34 +69,28 @@ export function ItemPlantao({
           </span>
         </button>
       )}
-      <div className="w-14 shrink-0 text-center" aria-hidden={!previsto}>
-        {previsto ? (
-          <>
-            <div className={cn('text-lg font-bold tabular-nums leading-tight', atrasado ? 'text-orange-800' : 'text-foreground')}>
-              {HORA.format(previsto)}
-            </div>
-            {!mesmoDia(previsto, new Date(agora)) && <div className="text-xs text-muted-foreground">{DIA.format(previsto)}</div>}
-          </>
-        ) : (
-          <TriangleAlert className="mx-auto size-6 text-orange-700" />
-        )}
-      </div>
+      <AvatarResidente nome={residente} foto={fotoResidente} className="size-9 text-xs" />
 
       <div className="min-w-0 flex-1">
         <div className="line-clamp-2 font-semibold leading-snug text-foreground">{principal}</div>
-        <div className="mt-0.5 truncate text-sm text-muted-foreground">{secundario}</div>
-        {item.local && (
-          <div className="mt-0.5 flex items-start gap-1 text-sm leading-snug text-muted-foreground">
-            <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" /> <span className="min-w-0 break-words">{item.local}</span>
-          </div>
-        )}
-        <div className="mt-1.5">
-          {atrasado ? (
-            <span className="badge-warning inline-flex whitespace-nowrap"><Clock className="size-3" aria-hidden="true" /> Atrasado {tempoDeAtraso(item.previsto_em!, agora)}</span>
-          ) : previsto ? (
-            <span className="text-xs font-medium text-muted-foreground">Pendente</span>
+        <div className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+          {secundario}
+          {item.local && <> · <MapPin className="inline size-3.5 -translate-y-px" aria-hidden="true" /> {item.local}</>}
+        </div>
+        <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm">
+          {previsto ? (
+            <span className={cn('inline-flex items-center gap-1 tabular-nums', atrasado ? 'font-semibold text-orange-800' : 'text-muted-foreground')}>
+              {/* Atrasado: o selo ao lado já diz; sem o ícone, horário + selo cabem numa linha em 360px. */}
+              {!atrasado && <Clock className="size-3.5" aria-hidden="true" />}
+              {HORA.format(previsto)}{!mesmoDia(previsto, new Date(agora)) && ` · ${DIA.format(previsto)}`}
+            </span>
           ) : (
-            <span className="text-xs font-medium text-orange-800">Aberta, sem horário</span>
+            <span className="inline-flex items-center gap-1 font-medium text-orange-800">
+              <TriangleAlert className="size-3.5" aria-hidden="true" /> Aberta, sem horário
+            </span>
+          )}
+          {atrasado && (
+            <span className="badge-warning inline-flex whitespace-nowrap">Atrasado {tempoDeAtraso(item.previsto_em!, agora)}</span>
           )}
         </div>
       </div>
@@ -101,7 +99,7 @@ export function ItemPlantao({
         <button
           data-acao-plantao={`${item.origem}:${item.registro_id}`}
           onClick={acao.onClick}
-          className="btn-primary min-h-[48px] shrink-0 px-4 text-sm"
+          className="btn-primary min-h-[48px] shrink-0 px-3 text-sm sm:px-4"
         >
           {acao.rotulo}
         </button>

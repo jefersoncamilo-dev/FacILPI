@@ -10,6 +10,7 @@ import { Logo } from './brand/Logo'
 import { moduloDaRota } from './shell/navegacao'
 import { SecoesNavegacao } from './shell/SidebarNav'
 import { SinoAlertas, totalDoSino, useSinoAlertas, type EstadoSino } from './shell/SinoAlertas'
+import { Emergencia } from './shell/Emergencia'
 import { PasswordInput } from './auth/PasswordInput'
 import { Button } from './ui/button'
 import { Label } from './ui/input'
@@ -68,7 +69,8 @@ function Shell({ children }: { children: ReactNode }) {
           <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-slate-600 sm:block">
             {contextTitle(activeContext)}
           </span>
-          <div className="ml-auto sm:ml-0">
+          <div className="ml-auto flex items-center gap-1.5 sm:ml-0">
+            <Emergencia compacto />
             <SinoAlertas {...sino} />
           </div>
         </header>
@@ -77,6 +79,7 @@ function Shell({ children }: { children: ReactNode }) {
         <header className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-border bg-background/90 px-8 backdrop-blur xl:flex">
           <Trilha pathname={pathname} />
           <div className="ml-auto flex items-center gap-2">
+            <Emergencia />
             <SinoAlertas {...sino} />
             <ContextSwitcher compact />
           </div>
