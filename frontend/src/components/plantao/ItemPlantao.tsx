@@ -1,4 +1,4 @@
-import { Clock, MapPin, TriangleAlert } from 'lucide-react'
+import { Check, Clock, MapPin, TriangleAlert } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { rotuloDoItem, type PlantaoItem } from '../../services/plantao'
 import { estaAtrasado, tempoDeAtraso } from './visoes'
@@ -22,12 +22,15 @@ export function ItemPlantao({
   agora,
   destaque = 'cuidado',
   acao,
+  selecao,
 }: {
   item: PlantaoItem
   nomeResidente?: string
   agora: number
   destaque?: 'cuidado' | 'residente'
   acao?: { rotulo: string; onClick: () => void }
+  /** UX-01B: em modo seleção o card troca o Registrar por uma caixa de marcação. */
+  selecao?: { selecionado: boolean; onAlternar: () => void }
 }) {
   const atrasado = estaAtrasado(item, agora)
   const previsto = item.previsto_em ? new Date(item.previsto_em) : null
@@ -35,13 +38,33 @@ export function ItemPlantao({
   const cuidado = rotuloDoItem(item)
   const [principal, secundario] = destaque === 'residente' ? [residente, cuidado] : [cuidado, residente]
 
+  const quando = previsto ? `${DIA.format(previsto)} ${HORA.format(previsto)}` : 'sem horário'
+
   return (
     <div
       className={cn(
         'flex items-center gap-3 rounded-card border bg-card p-3 shadow-sm sm:gap-4 sm:p-4',
-        atrasado ? 'border-orange-300' : 'border-border',
+        selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado ? 'border-orange-300' : 'border-border',
       )}
     >
+      {selecao && (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={selecao.selecionado}
+          aria-label={`${cuidado} — ${residente}, ${quando}`}
+          onClick={selecao.onAlternar}
+          data-selecao-plantao={`${item.origem}:${item.registro_id}`}
+          className="-m-1 flex size-11 shrink-0 items-center justify-center rounded-lg"
+        >
+          <span className={cn(
+            'flex size-6 items-center justify-center rounded-md border-2',
+            selecao.selecionado ? 'border-primary bg-primary text-primary-foreground' : 'border-slate-400 bg-card',
+          )}>
+            {selecao.selecionado && <Check className="size-4" aria-hidden="true" />}
+          </span>
+        </button>
+      )}
       <div className="w-14 shrink-0 text-center" aria-hidden={!previsto}>
         {previsto ? (
           <>
@@ -74,7 +97,7 @@ export function ItemPlantao({
         </div>
       </div>
 
-      {acao && (
+      {acao && !selecao && (
         <button
           data-acao-plantao={`${item.origem}:${item.registro_id}`}
           onClick={acao.onClick}
