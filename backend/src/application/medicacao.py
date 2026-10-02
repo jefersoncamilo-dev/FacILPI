@@ -179,12 +179,19 @@ def _local_time(day, clock, zone):
     return candidates.pop()
 
 
-async def _materialize(db, prescricao, programacao, context, request, now):
-    zone = ZoneInfo(programacao.timezone)
+def _janela(programacao, now, desde=None):
     start = _utc(programacao.cobertura_ate) or max(now, _utc(programacao.vigencia_inicio))
+    if desde is not None:
+        start = max(start, desde)
     end = now + timedelta(days=7)
     if programacao.vigencia_fim is not None:
         end = min(end, _utc(programacao.vigencia_fim))
+    return start, end
+
+
+async def _materialize(db, prescricao, programacao, context, request, now, desde=None):
+    zone = ZoneInfo(programacao.timezone)
+    start, end = _janela(programacao, now, desde)
     if end <= start:
         return
     occurrences = []
@@ -210,6 +217,44 @@ async def _materialize(db, prescricao, programacao, context, request, now):
     before = _data(programacao)
     programacao.cobertura_ate = end
     await _audit(db, programacao, context, request, "reconciliar", before)
+
+
+async def garantir_horizonte_doses(db, context, request, limiar):
+    """G1: renova o horizonte de doses previstas na leitura do plantao.
+
+    Mesma materializacao do reconciliar manual, mas nunca retroativa (desde=agora):
+    lacuna antiga de cobertura nao vira dose "nao administrada" que ninguem viu.
+    Independe de quem le: materializar nao exibe dose (#131 segue na projecao).
+    Conflito concorrente desfaz so o savepoint daquela prescricao.
+    """
+    now = _now_utc()
+    candidatas = (await db.execute(select(m.ProgramacaoMedicacao).join(
+        m.Prescricao, (m.Prescricao.id == m.ProgramacaoMedicacao.prescricao_id)
+        & (m.Prescricao.ilpi_id == m.ProgramacaoMedicacao.ilpi_id)).where(
+        m.ProgramacaoMedicacao.ilpi_id == context.ilpi_id, m.ProgramacaoMedicacao.situacao == "ativa",
+        m.Prescricao.situacao == "ativa",
+        (m.ProgramacaoMedicacao.cobertura_ate.is_(None)) | (m.ProgramacaoMedicacao.cobertura_ate < now + limiar),
+    ))).scalars().all()
+    renovou = False
+    def aberta(programacao):
+        start, end = _janela(programacao, now, now)
+        return start < end
+
+    for prescricao_id in [p.prescricao_id for p in candidatas if aberta(p)]:
+        savepoint = await db.begin_nested()
+        try:
+            prescricao = await _lock_prescricao(db, prescricao_id, context)
+            programacao = await _programacao(db, prescricao, context)
+            if (prescricao.situacao != "ativa" or programacao is None or programacao.situacao != "ativa"
+                    or not aberta(programacao)):
+                await savepoint.rollback()
+                continue
+            await _materialize(db, prescricao, programacao, context, request, now, desde=now)
+            await savepoint.commit()
+            renovou = True
+        except (IntegrityError, OperationalError, HTTPException):
+            await savepoint.rollback()
+    return renovou
 
 
 async def _activate(db, obj, payload, context, request, now):

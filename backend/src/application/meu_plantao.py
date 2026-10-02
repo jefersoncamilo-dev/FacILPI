@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ from .operacao import (
     EscalaResposta, PlantaoResposta, _escalas_resposta, _fim_de_hoje, _plantoes_resposta, _responsabilidades,
     funcionario_da_sessao, residentes_das_areas,
 )
-from .rotina import meu_plantao as projecao_do_plantao
+from .rotina import garantir_horizonte, meu_plantao as projecao_do_plantao
 from .security import SecurityContext, allowed_permission_keys, require_ilpi_context
 
 meu_plantao_router = APIRouter(prefix="/meu-plantao", tags=["meu-plantao"], dependencies=[Depends(require_ilpi_context)])
@@ -81,7 +81,8 @@ class MeuPlantaoResposta(BaseModel):
 
 
 @meu_plantao_router.get("/", response_model=MeuPlantaoResposta)
-async def meu_plantao(db: AsyncSession = Depends(get_db), context: SecurityContext = Depends(require_ilpi_context)):
+async def meu_plantao(request: Request, db: AsyncSession = Depends(get_db), context: SecurityContext = Depends(require_ilpi_context)):
+    await garantir_horizonte(db, context, request)  # G1
     ilpi = context.ilpi_id
     agora = datetime.now(timezone.utc)
     chaves = set(await allowed_permission_keys(db, context))

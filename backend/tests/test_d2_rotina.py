@@ -632,3 +632,136 @@ def test_17_auditoria_rotina(rotina_db):
                          "execucoes_cuidado.registrar", "programacoes_cuidado.cancelar"):
             assert expected in rows, f"auditoria sem {expected}"
     asyncio.run(_with_client(rotina_db, op))
+
+
+# ---- G1: horizonte renovado na leitura do plantão ----
+
+def _relogio(monkeypatch, deslocamento):
+    from src.application import rotina
+    real = rotina._now
+    monkeypatch.setattr(rotina, "_now", lambda: real() + deslocamento)
+
+
+async def _g1_cenario(client, db):
+    ilpi = _new_institution()
+    user = await _create_ilpi_user(db, ilpi, permissions=PAIS6 | D2_ALL)
+    rev = await _create_funcionario(db, ilpi)
+    res = await _create_residente(db, ilpi.id)
+    await db.commit()
+    h = _headers(user, ilpi_id=ilpi.id)
+    pid, iid = await _setup_pais_vigente(client, h, res.id, rev.id)
+    r = await client.post("/api/programacoes-cuidado/", json=_prog_payload(pid, iid), headers=h)
+    assert r.status_code == 201, r.text
+    return ilpi, user, h, r.json()["id"]
+
+
+async def _ocorrencias(db, prog_id):
+    db.expire_all()
+    return (await db.scalars(select(m.OcorrenciaCuidado.previsto_em).where(
+        m.OcorrenciaCuidado.programacao_id == prog_id).order_by(m.OcorrenciaCuidado.previsto_em))).all()
+
+
+def _aware(value):
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
+def test_18_g1_plantao_renova_horizonte_idempotente(rotina_db, monkeypatch):
+    async def op(client, db):
+        _, user, h, prog_id = await _g1_cenario(client, db)
+        user_id = user.id
+        criadas = await _ocorrencias(db, prog_id)
+        # Dia 6: restou ~1 dia de cobertura; sem G1 o plantão esvaziaria no dia 7.
+        _relogio(monkeypatch, timedelta(days=6))
+        agora = datetime.now(timezone.utc) + timedelta(days=6)
+        r = await client.get("/api/plantao/", headers=h)
+        assert r.status_code == 200, r.text
+        renovadas = await _ocorrencias(db, prog_id)
+        assert len(renovadas) > len(criadas)
+        assert _aware(renovadas[-1]) > agora + timedelta(days=6)
+        assert len(set(renovadas)) == len(renovadas)
+        # Idempotente: nova leitura não cria nada.
+        assert (await client.get("/api/plantao/", headers=h)).status_code == 200
+        assert (await client.get("/api/meu-plantao/", headers=h)).status_code == 200
+        assert await _ocorrencias(db, prog_id) == renovadas
+        autores = (await db.execute(select(m.Auditoria.usuario_id).where(
+            m.Auditoria.acao == "ocorrencias_cuidado.materializar", m.Auditoria.registro_id.is_not(None)))).scalars().all()
+        assert set(autores) == {user_id}
+    asyncio.run(_with_client(rotina_db, op))
+
+
+def test_19_g1_lacuna_nao_e_retroativa(rotina_db, monkeypatch):
+    async def op(client, db):
+        _, _, h, prog_id = await _g1_cenario(client, db)
+        criadas = await _ocorrencias(db, prog_id)
+        _relogio(monkeypatch, timedelta(days=20))
+        agora = datetime.now(timezone.utc) + timedelta(days=20)
+        assert (await client.get("/api/plantao/", headers=h)).status_code == 200
+        novas = [o for o in await _ocorrencias(db, prog_id) if o not in criadas]
+        assert novas and all(_aware(o) >= agora - timedelta(minutes=1) for o in novas)
+    asyncio.run(_with_client(rotina_db, op))
+
+
+def test_20_g1_tenant_e_programacao_cancelada(rotina_db, monkeypatch):
+    async def op(client, db):
+        _, _, h_a, prog_a = await _g1_cenario(client, db)
+        _, _, h_b, prog_b = await _g1_cenario(client, db)
+        _, _, h_c, prog_c = await _g1_cenario(client, db)
+        assert (await client.post(f"/api/programacoes-cuidado/{prog_c}/cancelar", json={"motivo": "Alta"}, headers=h_c)).status_code == 200
+        antes_b, antes_c = await _ocorrencias(db, prog_b), await _ocorrencias(db, prog_c)
+        _relogio(monkeypatch, timedelta(days=6))
+        assert (await client.get("/api/plantao/", headers=h_a)).status_code == 200
+        assert (await client.get("/api/plantao/", headers=h_c)).status_code == 200
+        assert len(await _ocorrencias(db, prog_a)) > 0
+        assert await _ocorrencias(db, prog_b) == antes_b   # outra ILPI intocada
+        assert await _ocorrencias(db, prog_c) == antes_c   # cancelada não gera futuro
+    asyncio.run(_with_client(rotina_db, op))
+
+
+def test_21_g1_leituras_concorrentes_nao_falham(rotina_db, monkeypatch):
+    async def op(client, db):
+        _, _, h, prog_id = await _g1_cenario(client, db)
+        _relogio(monkeypatch, timedelta(days=6))
+        respostas = await asyncio.gather(*(client.get("/api/plantao/", headers=h) for _ in range(4)))
+        assert [r.status_code for r in respostas] == [200] * 4
+        ocorrencias = await _ocorrencias(db, prog_id)
+        assert len(set(ocorrencias)) == len(ocorrencias)
+    asyncio.run(_with_client(rotina_db, op))
+
+
+C5_KEYS = {"medicamentos:criar", "prescricoes:criar", "prescricoes:atualizar", "doses_previstas:ler"}
+
+
+def test_22_g1_doses_renovadas_sem_exibir_sem_permissao(rotina_db, monkeypatch):
+    from src.application import medicacao
+
+    async def op(client, db):
+        ilpi = _new_institution()
+        gestor = await _create_ilpi_user(db, ilpi, permissions=C5_KEYS)
+        res = await _create_residente(db, ilpi.id)
+        cuidador = await _create_ilpi_user(db, ilpi, permissions={"plantao:ler"}, profile_key="g1_cuidador")
+        await db.commit()
+        hg, hc = _headers(gestor, ilpi_id=ilpi.id), _headers(cuidador, ilpi_id=ilpi.id)
+        med = await client.post("/api/medicamentos/", json={"nome": "Med G1", "unidade": "comprimido"}, headers=hg)
+        assert med.status_code == 201, med.text
+        hoje = datetime.now(timezone.utc).date().isoformat()
+        pre = await client.post("/api/prescricoes/", headers=hg, json={
+            "residente_id": res.id, "medicamento_id": med.json()["id"], "prescritor_nome": "Dra G1",
+            "prescritor_categoria": "medico", "dose": "1", "unidade": "comprimido", "via": "oral", "inicio": hoje})
+        assert pre.status_code == 201, pre.text
+        pre_id = pre.json()["id"]
+        r = await client.post(f"/api/prescricoes/{pre_id}/ativar", headers=hg, json={
+            "horarios": ["12:00"], "timezone": "UTC", "vigencia_inicio": datetime.now(timezone.utc).isoformat()})
+        assert r.status_code == 200, r.text
+        doses = lambda: client.get("/api/doses-previstas/", headers=hg, params={"prescricao_id": pre_id})
+        criadas = len((await doses()).json())
+        real = medicacao.utcnow
+        monkeypatch.setattr(medicacao, "utcnow", lambda: real() + timedelta(days=6))
+        r = await client.get("/api/plantao/", headers=hc)
+        assert r.status_code == 200, r.text
+        assert all(i["origem"] != "medicacao" for i in r.json())  # #131: materializar não é exibir
+        renovadas = (await doses()).json()
+        assert len(renovadas) == criadas + 6
+        assert len({d["previsto_em"] for d in renovadas}) == len(renovadas)
+        assert (await client.get("/api/plantao/", headers=hc)).status_code == 200
+        assert len((await doses()).json()) == len(renovadas)
+    asyncio.run(_with_client(rotina_db, op))

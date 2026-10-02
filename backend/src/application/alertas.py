@@ -44,7 +44,7 @@ from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
 from .audit import add_audit
-from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc
+from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc, garantir_horizonte
 from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_permission
 
 central_alertas_router = APIRouter(prefix="/central-alertas", tags=["alertas"])
@@ -578,7 +578,9 @@ async def listar_alertas(
     context: SecurityContext = Depends(require_permission("alertas:ler")),
 ):
     # A projecao nao grava nada; a unica escrita possivel e encerrar, pela fonte,
-    # estado aberto de alerta que deixou de existir (#123).
+    # estado aberto de alerta que deixou de existir (#123) — e, antes, renovar o
+    # horizonte de cuidados/doses para nao perder "sem registro" (G1).
+    await garantir_horizonte(db, context, request)
     proj = await projetar(db, context)
     await _reconciliar(db, context, request, proj)
     abertos = await _estados_abertos(db, context.ilpi_id)

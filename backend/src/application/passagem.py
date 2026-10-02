@@ -29,7 +29,7 @@ from ..infrastructure.database import get_db
 from .alertas import HORAS_JANELA_PLANTAO, ORIGEM_DA_REGRA, projetar
 from .audit import add_audit
 from .operacao import _encerrar_plantao, _responsabilidades, _travar_plantao, funcionario_da_sessao, residentes_das_areas
-from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc, meu_plantao
+from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc, garantir_horizonte, meu_plantao
 from .security import (PERMISSION_DENIED, RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys,
                        require_ilpi_context, require_permission)
 
@@ -335,8 +335,9 @@ async def _nomes_residentes(db, context, chaves, itens) -> None:
 
 
 @passagens_router.get("/previa", response_model=Previa)
-async def previa(area_id: Optional[str] = None, db: AsyncSession = Depends(get_db),
+async def previa(request: Request, area_id: Optional[str] = None, db: AsyncSession = Depends(get_db),
                  context: SecurityContext = Depends(require_permission("passagem_plantao:registrar"))):
+    await garantir_horizonte(db, context, request)  # G1
     agora = _agora()
     chaves = set(await allowed_permission_keys(db, context))
     funcionario = await funcionario_da_sessao(db, context)
