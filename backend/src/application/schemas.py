@@ -1698,6 +1698,8 @@ class PlantaoItem(BaseModel):
     descricao: str
     previsto_em: Optional[datetime] = None
     prioridade: Optional[str] = None
+    # G3: "Ala B · Quarto 12 · Leito A" do leito ocupado; None sem leito.
+    local: Optional[str] = None
 
 
 # ---- Matriz institucional (S.1) ----

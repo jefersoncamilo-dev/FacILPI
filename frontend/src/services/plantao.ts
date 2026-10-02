@@ -15,6 +15,8 @@ export interface PlantaoItem {
   previsto_em?: string | null
   // Só `cuidado` carrega prioridade (vem da ProgramacaoCuidado).
   prioridade?: string | null
+  // G3: "Ala B · Quarto 12 · Leito A" do leito atual; null sem leito.
+  local?: string | null
 }
 
 export interface PlantaoConsultaParams {

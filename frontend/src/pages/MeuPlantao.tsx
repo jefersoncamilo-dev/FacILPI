@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AlarmClock, BellRing, Clock, Pill, TriangleAlert, type LucideIcon } from 'lucide-react'
+import { TriangleAlert } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
@@ -8,11 +8,16 @@ import { Alert } from '../components/ui/feedback'
 import { MeuTurno } from '../components/plantao/MeuTurno'
 import { MinhaArea } from '../components/plantao/MinhaArea'
 import { RegistrarCuidado } from '../components/plantao/RegistrarCuidado'
+import { ItemPlantao } from '../components/plantao/ItemPlantao'
+import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
+import {
+  FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar,
+  type Filtros, type Situacao, type Visao,
+} from '../components/plantao/visoes'
 import { meuPlantaoApi, type MeuPlantaoResumo } from '../services/meuPlantao'
 import { cn } from '../lib/utils'
 import {
   PLANTAO_LIMIT_PADRAO,
-  PLANTAO_ORIGENS,
   encerrarIntercorrencia,
   getPlantao,
   getResidentesResumo,
@@ -22,18 +27,6 @@ import {
   type PlantaoOrigem,
   type ResultadoDose,
 } from '../services/plantao'
-
-const ROTULO_ORIGEM: Record<PlantaoOrigem, string> = {
-  cuidado: 'Cuidado',
-  medicacao: 'Medicação',
-  intercorrencia: 'Intercorrência',
-}
-
-const ICONE_ORIGEM: Record<PlantaoOrigem, LucideIcon> = {
-  cuidado: BellRing,
-  medicacao: Pill,
-  intercorrencia: TriangleAlert,
-}
 
 // UX-05 (#91): permissão que cada ação exige no backend. Sem ela, a pendência
 // continua visível (informa o turno), mas o botão não é oferecido.
@@ -55,7 +48,25 @@ const ACAO_ORIGEM: Record<PlantaoOrigem, string> = {
   intercorrencia: 'Encerrar',
 }
 
-type Filtro = 'todos' | PlantaoOrigem
+const JANELA_ATRASO_MS = 24 * 60 * 60 * 1000
+
+// UX-01A.2: visão e filtros sobrevivem à navegação dentro da sessão do navegador.
+const CHAVE_VISAO = 'facilpi:plantao:visao'
+const CHAVE_FILTROS = 'facilpi:plantao:filtros'
+
+function lerSessao<T>(chave: string, padrao: T, valido: (v: unknown) => boolean): T {
+  try {
+    const bruto = sessionStorage.getItem(chave)
+    const valor: unknown = bruto ? JSON.parse(bruto) : null
+    return valor !== null && valido(valor) ? valor as T : padrao
+  } catch {
+    return padrao
+  }
+}
+
+function gravarSessao(chave: string, valor: unknown) {
+  try { sessionStorage.setItem(chave, JSON.stringify(valor)) } catch { /* sem sessão: só não persiste */ }
+}
 
 // Estado do formulário de medicação/intercorrência. O cuidado tem o próprio
 // Registrar rápido (UX-01A.1); só um diálogo fica aberto por vez.
@@ -87,11 +98,6 @@ export function lerDesde(valor: string | null, agora = Date.now()): string | nul
   return Number.isFinite(t) && t < agora ? new Date(t).toISOString() : null
 }
 
-function atrasado(item: PlantaoItem, agora: number): boolean {
-  if (!item.previsto_em) return false
-  return new Date(item.previsto_em).getTime() < agora
-}
-
 export function MeuPlantao() {
   const { pode } = usePermissoesOuPadrao()
   const [params] = useSearchParams()
@@ -103,7 +109,12 @@ export function MeuPlantao() {
   // "nenhuma pendência" na tela do plantonista.
   const [erro, setErro] = useState('')
   const [nomes, setNomes] = useState<Record<string, string>>({})
-  const [filtro, setFiltro] = useState<Filtro>('todos')
+  const [visao, setVisaoEstado] = useState<Visao>(() =>
+    lerSessao(CHAVE_VISAO, 'horario', v => VISOES.some(o => o.valor === v)))
+  const [filtros, setFiltrosEstado] = useState<Filtros>(() =>
+    lerSessao(CHAVE_FILTROS, FILTROS_PADRAO, v => SITUACOES.some(o => o.valor === (v as Filtros)?.situacao)))
+  const setVisao = (v: Visao) => { setVisaoEstado(v); gravarSessao(CHAVE_VISAO, v) }
+  const setFiltros = (f: Filtros) => { setFiltrosEstado(f); gravarSessao(CHAVE_FILTROS, f) }
 
   const [itemAberto, setItemAberto] = useState<PlantaoItem | null>(null)
   const [cuidadoAberto, setCuidadoAberto] = useState<PlantaoItem | null>(null)
@@ -118,7 +129,10 @@ export function MeuPlantao() {
   const carregar = useCallback(async ({ silencioso = false }: { silencioso?: boolean } = {}) => {
     if (!silencioso) setCarregando(true)
     try {
-      const data = await getPlantao(desde ? { a_partir_de: desde } : {})
+      // UX-01A.2: sem `?desde=`, a fila começa 24 h atrás (a mesma janela do alerta
+      // "sem registro", HORAS_JANELA_PLANTAO) — senão nada atrasado aparece.
+      const inicio = desde ?? new Date(Date.now() - JANELA_ATRASO_MS).toISOString()
+      const data = await getPlantao({ a_partir_de: inicio })
       setItens(data)
       setErro('')
     } catch (e) {
@@ -161,14 +175,15 @@ export function MeuPlantao() {
 
   const agora = Date.now()
 
-  const contagens = useMemo(() => {
-    const base: Record<Filtro, number> = { todos: itens.length, cuidado: 0, medicacao: 0, intercorrencia: 0 }
-    for (const item of itens) base[item.origem] += 1
-    return base
-  }, [itens])
-
-  const lista = filtro === 'todos' ? itens : itens.filter(item => item.origem === filtro)
-  const atrasados = itens.filter(item => atrasado(item, agora)).length
+  // Contagem de cada situação respeita os demais filtros (origem/residente).
+  const semSituacao = filtrar(itens, { ...filtros, situacao: 'todos' }, agora)
+  const contagens = Object.fromEntries(SITUACOES.map(s =>
+    [s.valor, semSituacao.filter(i => atendeSituacao(i, s.valor, agora)).length])) as Record<Situacao, number>
+  const lista = filtrar(itens, filtros, agora)
+  const grupos = agrupar(lista, visao, nomes, agora)
+  const residentesDaFila = useMemo(() => [...new Set(itens.map(i => i.residente_id))]
+    .map(id => ({ id, nome: nomes[id] || id }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')), [itens, nomes])
 
   function abrir(item: PlantaoItem) {
     setSucesso('')
@@ -257,11 +272,15 @@ export function MeuPlantao() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Meu Plantão</h1>
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Meu Plantão</h1>
+          {/* Filtros secundários ficam no cabeçalho: a barra de situação cabe inteira em 360px. */}
+          <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
+        </div>
         <p className="text-sm text-muted-foreground">
           {desde
-            ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">ver só a partir de agora</Link></>
-            : 'Pendências das próximas 24 horas — cuidados, doses e intercorrências abertas'}
+            ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">voltar à fila padrão</Link></>
+            : 'Atrasos das últimas 24 horas e pendências das próximas 24 horas — cuidados, doses e intercorrências abertas'}
         </p>
       </div>
 
@@ -269,30 +288,46 @@ export function MeuPlantao() {
       <MeuTurno onMudou={carregarResumo} />
       {resumo && <MinhaArea resumo={resumo} podeAssumir={pode('alertas:assumir')} onMudou={aoMudarAlerta} />}
 
-      <div className="flex gap-2 overflow-x-auto rounded-lg bg-muted p-1" role="group" aria-label="Filtrar por origem">
-        {([{ value: 'todos' as Filtro, label: 'Todos' }, ...PLANTAO_ORIGENS]).map(opcao => (
-          <button
-            key={opcao.value}
-            aria-pressed={filtro === opcao.value}
-            onClick={() => setFiltro(opcao.value as Filtro)}
-            className={cn(
-              'min-h-[40px] shrink-0 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors',
-              filtro === opcao.value ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
-            )}
-          >
-            {opcao.label} ({contagens[opcao.value as Filtro]})
-          </button>
-        ))}
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Organizar por">
+          {VISOES.map(opcao => (
+            <button
+              key={opcao.valor}
+              aria-label={opcao.rotulo}
+              aria-pressed={visao === opcao.valor}
+              onClick={() => setVisao(opcao.valor)}
+              className={cn(
+                'min-h-[44px] rounded-md px-2 text-sm font-medium transition-colors',
+                visao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+              )}
+            >
+              <span className="sm:hidden">{opcao.curto}</span>
+              <span className="max-sm:hidden">{opcao.rotulo}</span>
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-3 gap-2" role="group" aria-label="Situação">
+            {SITUACOES.map(opcao => (
+              <button
+                key={opcao.valor}
+                aria-pressed={filtros.situacao === opcao.valor}
+                onClick={() => setFiltros({ ...filtros, situacao: opcao.valor })}
+                className={cn(
+                  'inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-2 text-sm font-medium',
+                  filtros.situacao === opcao.valor
+                    ? 'border-primary bg-brand-soft text-primary'
+                    : opcao.valor === 'atrasados' && contagens.atrasados > 0
+                      ? 'border-orange-300 bg-card text-orange-900 hover:bg-orange-50'
+                      : 'border-border bg-card text-foreground hover:bg-muted',
+                )}
+              >
+                {opcao.rotulo} <span className="tabular-nums">{contagens[opcao.valor]}</span>
+              </button>
+            ))}
+        </div>
       </div>
 
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
-
-      {atrasados > 0 && !erro && (
-        <div className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
-          <AlarmClock className="size-4 text-orange-800" aria-hidden="true" />
-          <span className="text-sm font-medium text-orange-900">{atrasados} {atrasados === 1 ? 'pendência atrasada' : 'pendências atrasadas'}</span>
-        </div>
-      )}
 
       {itens.length >= PLANTAO_LIMIT_PADRAO && !erro && (
         <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
@@ -312,53 +347,34 @@ export function MeuPlantao() {
         <div className="card py-16 text-center text-muted-foreground">Nenhuma pendência neste filtro</div>
       ) : (
         <div className="space-y-6">
-          {/* UX-05: agrupado pela pergunta do turno — o que já passou da hora, o
-              que vem a seguir, e o que não tem horário (intercorrência aberta).
-              A ordem dentro de cada grupo é a da projeção oficial. */}
-          {[
-            { titulo: 'Atrasadas', itens: lista.filter(i => atrasado(i, agora)) },
-            { titulo: 'Próximas', itens: lista.filter(i => i.previsto_em && !atrasado(i, agora)) },
-            { titulo: 'Intercorrências abertas', itens: lista.filter(i => !i.previsto_em) },
-          ].filter(g => g.itens.length > 0).map(grupo => (
-            <section key={grupo.titulo} aria-label={grupo.titulo} className="space-y-3">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {grupo.titulo} <span className="font-normal">({grupo.itens.length})</span>
+          {/* UX-01A.2: mesma fila, três leituras. Por horário mantém a pergunta do
+              turno (atrasadas, próximas, sem horário); por cuidado e por residente
+              agrupam sem mudar a ordem oficial dentro do grupo. */}
+          {grupos.map(grupo => (
+            <section key={grupo.chave} aria-label={grupo.titulo} className="space-y-2">
+              <h2 className="flex items-baseline gap-2">
+                <span className={visao === 'horario'
+                  ? 'text-xs font-semibold uppercase tracking-wide text-muted-foreground'
+                  : 'font-semibold text-foreground'}>
+                  {grupo.titulo}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {visao === 'horario'
+                    ? `(${grupo.itens.length})`
+                    : `${grupo.itens.length} ${grupo.itens.length === 1 ? 'pendente' : 'pendentes'}`}
+                </span>
               </h2>
               {grupo.itens.map(item => {
-                const Icone = ICONE_ORIGEM[item.origem]
                 const podeAgir = pode(PERMISSAO_ACAO[item.origem])
                 return (
-                  <div
+                  <ItemPlantao
                     key={`${item.origem}:${item.registro_id}`}
-                    className={cn(
-                      'card flex flex-wrap items-start gap-4 border-l-4 sm:flex-nowrap',
-                      item.prioridade === 'alta' ? 'border-l-red-600' : item.prioridade === 'media' ? 'border-l-orange-500' : 'border-l-brand',
-                    )}
-                  >
-                    <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-primary" aria-hidden="true">
-                      <Icone className="size-5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{rotuloDoItem(item)}</div>
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {ROTULO_ORIGEM[item.origem]} • {nomes[item.residente_id] || item.residente_id}
-                        {item.previsto_em ? ` • ${formatDateTime(item.previsto_em)}` : ''}
-                        {item.prioridade ? ` • ${item.prioridade}` : ''}
-                      </div>
-                      {atrasado(item, agora) && (
-                        <span className="badge-warning mt-2 inline-flex"><Clock className="size-3" aria-hidden="true" /> Atrasada</span>
-                      )}
-                    </div>
-                    {podeAgir && (
-                      <button
-                        data-acao-plantao={`${item.origem}:${item.registro_id}`}
-                        onClick={() => abrir(item)}
-                        className="btn-primary min-h-[48px] w-full px-5 text-sm sm:w-auto"
-                      >
-                        {ACAO_ORIGEM[item.origem]}
-                      </button>
-                    )}
-                  </div>
+                    item={item}
+                    nomeResidente={nomes[item.residente_id]}
+                    agora={agora}
+                    destaque={visao === 'cuidado' ? 'residente' : 'cuidado'}
+                    acao={podeAgir ? { rotulo: ACAO_ORIGEM[item.origem], onClick: () => abrir(item) } : undefined}
+                  />
                 )
               })}
             </section>

@@ -765,3 +765,23 @@ def test_22_g1_doses_renovadas_sem_exibir_sem_permissao(rotina_db, monkeypatch):
         assert (await client.get("/api/plantao/", headers=hc)).status_code == 200
         assert len((await doses()).json()) == len(renovadas)
     asyncio.run(_with_client(rotina_db, op))
+
+
+def test_23_g3_local_do_leito_na_projecao(rotina_db):
+    async def op(client, db):
+        ilpi = _new_institution()
+        user = await _create_ilpi_user(db, ilpi, permissions=PAIS6 | D2_ALL)
+        rev = await _create_funcionario(db, ilpi)
+        com_leito = await _create_residente(db, ilpi.id, nome="Com leito")
+        sem_leito = await _create_residente(db, ilpi.id, nome="Sem leito")
+        db.add(m.QuartoLeito(id=_new_id(), instituicao_id=ilpi.id, unidade="Ala B", quarto="12", leito="A",
+                             capacidade=1, situacao="livre", residente_atual_id=com_leito.id))
+        await db.commit()
+        h = _headers(user, ilpi_id=ilpi.id)
+        for res in (com_leito, sem_leito):
+            pid, iid = await _setup_pais_vigente(client, h, res.id, rev.id)
+            assert (await client.post("/api/programacoes-cuidado/", json=_prog_payload(pid, iid), headers=h)).status_code == 201
+        itens = (await client.get("/api/plantao/", headers=h)).json()
+        locais = {i["residente_id"]: i["local"] for i in itens}
+        assert locais == {com_leito.id: "Ala B · Quarto 12 · Leito A", sem_leito.id: None}
+    asyncio.run(_with_client(rotina_db, op))
