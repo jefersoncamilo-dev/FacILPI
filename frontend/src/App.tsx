@@ -21,6 +21,7 @@ import { Avaliacoes } from './pages/Avaliacoes'
 import { PassagemPlantao } from './pages/PassagemPlantao'
 import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
+import { ModuleHub } from './pages/ModuleHub'
 import { ErrorBoundary } from './components/ui/states'
 import { Equipe } from './pages/Equipe'
 import { PlatformRoute } from './components/PlatformRoute'
@@ -78,6 +79,8 @@ export default function App() {
           <Route path="/config" element={<Protected><Placeholder title="Configurações" /></Protected>} />
           <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
           <Route path="/escala" element={<Protected><Escala /></Protected>} />
+          {/* UX-00C: página-hub de cada módulo (slug inválido volta ao Início). */}
+          <Route path="/modulos/:modulo" element={<Protected><ModuleHub /></Protected>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </ErrorBoundary>

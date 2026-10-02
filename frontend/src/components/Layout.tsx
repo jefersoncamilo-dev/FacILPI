@@ -1,13 +1,14 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Bell, ChevronRight, ClipboardList, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, Settings, Users } from 'lucide-react'
+import { Bell, ChevronRight, ClipboardList, KeyRound, Ellipsis, LayoutDashboard, Loader2, LogOut, Menu, Settings, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'
 import { mensagemDeErro } from '../services/api'
 import { cn } from '../lib/utils'
 import { ContextSwitcher, contextTitle } from './ContextSwitcher'
 import { Logo } from './brand/Logo'
-import { NAVEGACAO, itemDaRota } from './shell/navegacao'
+import { moduloDaRota } from './shell/navegacao'
+import { SecoesNavegacao } from './shell/SidebarNav'
 import { SinoAlertas, totalDoSino, useSinoAlertas, type EstadoSino } from './shell/SinoAlertas'
 import { PasswordInput } from './auth/PasswordInput'
 import { Button } from './ui/button'
@@ -85,7 +86,7 @@ function Shell({ children }: { children: ReactNode }) {
           <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
         </main>
 
-        <NavegacaoInferior onMenu={() => setMenuAberto(true)} sino={sino} />
+        <NavegacaoInferior onMenu={() => setMenuAberto(true)} menuAberto={menuAberto} sino={sino} />
       </div>
 
       <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
@@ -118,7 +119,7 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
         </div>
       )}
 
-      {/* UX-11: compacto para caber sem rolagem em 1080p (12 itens, 4 grupos). */}
+      {/* UX-00B: grupos em accordion (um aberto por vez) — cabe sem rolagem em 1080p. */}
       <nav aria-label="Navegação principal" className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
         {status === 'carregando' ? (
           <div className="space-y-3 px-3" aria-label="Carregando menu">
@@ -127,43 +128,7 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
             ))}
           </div>
         ) : (
-          NAVEGACAO.map(grupo => {
-            const itens = grupo.itens.filter(item => pode(item.permissao))
-            if (itens.length === 0) return null
-            return (
-              <div key={grupo.titulo}>
-                <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {grupo.titulo}
-                </p>
-                <ul className="space-y-0.5">
-                  {itens.map(item => (
-                    <li key={item.to}>
-                      <NavLink
-                        to={item.to}
-                        end={item.to === '/'}
-                        className={({ isActive }) =>
-                          cn(
-                            'group relative flex min-h-[40px] items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors',
-                            isActive
-                              ? 'bg-brand-soft font-semibold text-accent-foreground'
-                              : 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                          )
-                        }
-                      >
-                        <item.icon className="size-[18px] shrink-0" aria-hidden="true" />
-                        <span className="min-w-0 flex-1 py-1">
-                          <span className="block truncate">{item.label}</span>
-                          {item.emBreve && (
-                            <span className="block text-[11px] font-normal leading-tight text-muted-foreground">Em breve</span>
-                          )}
-                        </span>
-                      </NavLink>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )
-          })
+          <SecoesNavegacao pode={pode} />
         )}
       </nav>
 
@@ -204,47 +169,50 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
 }
 
 function Trilha({ pathname }: { pathname: string }) {
-  const atual = itemDaRota(pathname)
+  const atual = moduloDaRota(pathname)
   if (!atual) return <span />
-  const { grupo, item } = atual
-  const emDetalhe = item.to !== '/' && pathname !== item.to
+  const { modulo, item } = atual
+  // Módulo-link (Início, Alertas, Meu Plantão) ou hub: um nível só.
+  const destino = item ?? (modulo.tipo === 'link' ? modulo : null)
+  const emDetalhe = !!destino && destino.to !== '/' && pathname !== destino.to
   return (
     <nav aria-label="Trilha de navegação">
       <ol className="flex items-center gap-1.5 text-sm text-muted-foreground">
-        {grupo.titulo !== item.label && (
+        {modulo.tipo === 'grupo' && item && item.label !== modulo.label && (
           <>
-            <li>{grupo.titulo}</li>
+            <li>{modulo.label}</li>
             <ChevronRight className="size-3.5" aria-hidden="true" />
           </>
         )}
-        {emDetalhe ? (
+        {destino && emDetalhe ? (
           <>
             <li>
-              <Link to={item.to} className="rounded hover:text-foreground hover:underline">{item.label}</Link>
+              <Link to={destino.to} className="rounded hover:text-foreground hover:underline">{destino.label}</Link>
             </li>
             <ChevronRight className="size-3.5" aria-hidden="true" />
             <li aria-current="page" className="font-medium text-foreground">Detalhe</li>
           </>
         ) : (
-          <li aria-current="page" className="font-medium text-foreground">{item.label}</li>
+          <li aria-current="page" className="font-medium text-foreground">{destino?.label ?? modulo.label}</li>
         )}
       </ol>
     </nav>
   )
 }
 
-function NavegacaoInferior({ onMenu, sino }: { onMenu: () => void; sino: EstadoSino }) {
+function NavegacaoInferior({ onMenu, menuAberto, sino }: { onMenu: () => void; menuAberto: boolean; sino: EstadoSino }) {
   const { pode } = usePermissoes()
   // #117: Alertas entra só com alertas:ler confirmado (mesma regra do sino), com o mesmo número.
   const totalAlertas = totalDoSino(sino.central)
   const destinos = [
+    // UX-00D: Início · Alertas · Plantão · Residentes · Mais.
     { to: '/', label: 'Início', icon: LayoutDashboard },
-    { to: '/plantao', label: 'Plantão', icon: ClipboardList, permissao: 'plantao:ler' },
     ...(sino.permitido ? [{ to: '/alertas', label: 'Alertas', icon: Bell, badge: totalAlertas }] : []),
+    { to: '/plantao', label: 'Plantão', icon: ClipboardList, permissao: 'plantao:ler' },
     { to: '/residentes', label: 'Residentes', icon: Users, permissao: 'residentes:ler' },
   ].filter(d => !('permissao' in d) || pode(d.permissao))
 
-  // 56px: cinco destinos cabem em 320px sem cortar o Menu (#119).
+  // 56px: cinco destinos cabem em 320px sem cortar o Mais (#119).
   const estilo = 'flex min-h-[52px] min-w-[56px] flex-1 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-medium'
   return (
     <nav
@@ -278,9 +246,16 @@ function NavegacaoInferior({ onMenu, sino }: { onMenu: () => void; sino: EstadoS
           )}
         </NavLink>
       ))}
-      <button type="button" onClick={onMenu} className={cn(estilo, 'text-muted-foreground hover:text-foreground')}>
-        <Menu className="size-5" aria-hidden="true" />
-        Menu
+      {/* "Mais" abre o mesmo Sheet do ☰, com os módulos que a sessão pode abrir. */}
+      <button
+        type="button"
+        onClick={onMenu}
+        aria-haspopup="dialog"
+        aria-expanded={menuAberto}
+        className={cn(estilo, menuAberto ? 'text-primary' : 'text-muted-foreground hover:text-foreground')}
+      >
+        <Ellipsis className="size-5" aria-hidden="true" />
+        Mais
       </button>
     </nav>
   )

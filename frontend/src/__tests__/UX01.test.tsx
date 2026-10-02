@@ -41,10 +41,10 @@ function seedSessao() {
   localStorage.setItem(CONTEXT_KEY, JSON.stringify({ scope: 'ilpi', ilpi_id: 'ilpi1' }))
 }
 
-function renderShell(conteudo = <div>conteúdo</div>) {
+function renderShell(conteudo = <div>conteúdo</div>, rota = '/') {
   return render(
     <AuthProvider>
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={[rota]}>
         <Layout>{conteudo}</Layout>
       </MemoryRouter>
     </AuthProvider>,
@@ -112,12 +112,17 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', ilpi_id: 'ilpi1', permissoes: ['residentes:ler', 'sinais_vitais:ler'] } } as any)
     renderShell()
 
-    expect(await menu().findByRole('link', { name: /Residentes/ })).toBeTruthy()
+    // UX-00B: grupos recolhidos; `hidden: true` alcança itens de grupo fechado.
+    expect(await menu().findByRole('button', { name: 'Submenu de Residentes' })).toBeTruthy()
     expect(menu().getByRole('link', { name: /Início/ })).toBeTruthy()
-    expect(menu().getByRole('link', { name: /Sinais Vitais/ })).toBeTruthy()
-    expect(menu().queryByRole('link', { name: /Meu Plantão/ })).toBeNull()
-    expect(menu().queryByRole('link', { name: /Equipe/ })).toBeNull()
-    expect(menu().queryByRole('link', { name: /Admissões/ })).toBeNull()
+    expect(menu().getByRole('button', { name: 'Submenu de Assistencial' })).toBeTruthy()
+    // UX-00C: "Residentes" é o hub do módulo e também a lista.
+    expect(menu().getAllByRole('link', { name: 'Residentes', hidden: true }).map(l => l.getAttribute('href'))).toEqual(['/modulos/residentes', '/residentes'])
+    expect(menu().getByRole('link', { name: /Sinais Vitais/, hidden: true })).toBeTruthy()
+    expect(menu().queryByRole('link', { name: /Meu Plantão/, hidden: true })).toBeNull()
+    expect(menu().queryByRole('button', { name: 'Submenu de Equipe' })).toBeNull()
+    expect(menu().queryByRole('link', { name: /Funcionários/, hidden: true })).toBeNull()
+    expect(menu().queryByRole('link', { name: /Admissões/, hidden: true })).toBeNull()
   })
 
   it('jornadas entregues (UX-06..UX-09) não ficam marcadas "Em breve"', async () => {
@@ -128,7 +133,7 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     renderShell()
 
     for (const nome of [/Passagem de Plantão/, /Avaliações/, /Plano de Cuidados/, /Quartos/]) {
-      const link = await menu().findByRole('link', { name: nome })
+      const link = await menu().findByRole('link', { name: nome, hidden: true })
       expect(within(link).queryByText('Em breve')).toBeNull()
     }
   })
@@ -139,7 +144,7 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     renderShell()
 
     expect(await menu().findByRole('link', { name: /Meu Plantão/ })).toBeTruthy()
-    expect(menu().getByRole('link', { name: /Equipe/ })).toBeTruthy()
+    expect(menu().getByRole('link', { name: /Funcionários/, hidden: true })).toBeTruthy()
   })
 
   it('módulos sem tela nem jornada nesta fase não aparecem no menu', async () => {
@@ -147,10 +152,75 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     mockPermissoes.mockRejectedValue(new Error('offline'))
     renderShell()
 
-    await menu().findByRole('link', { name: /Residentes/ })
-    for (const nome of ['Financeiro', 'Estoque', 'Compliance e Fiscalização', 'Auditoria', 'Configurações']) {
-      expect(menu().queryByRole('link', { name: nome })).toBeNull()
+    await menu().findAllByRole('link', { name: /Residentes/, hidden: true })
+    for (const nome of ['Financeiro', 'Estoque', 'Compliance e Fiscalização', 'Auditoria', 'Configurações', 'Farmácia', 'Fisioterapia']) {
+      expect(menu().queryByRole('link', { name: nome, hidden: true })).toBeNull()
+      expect(menu().queryByRole('button', { name: `Submenu de ${nome}` })).toBeNull()
     }
+  })
+})
+
+describe('UX-00B — sidebar em accordion', () => {
+  const todas = ['residentes:ler', 'admissoes:ler', 'sinais_vitais:ler', 'intercorrencias:ler', 'plantao:ler', 'funcionarios:ler']
+
+  it('fora de um grupo começa recolhido e o chevron expande e recolhe', async () => {
+    const user = userEvent.setup()
+    seedSessao()
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: todas } } as any)
+    renderShell()
+
+    const residentes = await menu().findByRole('button', { name: 'Submenu de Residentes' })
+    expect(residentes.getAttribute('aria-expanded')).toBe('false')
+    expect(menu().queryByRole('link', { name: 'Admissões' })).toBeNull()
+
+    await user.click(residentes)
+    expect(residentes.getAttribute('aria-expanded')).toBe('true')
+    expect(menu().getByRole('link', { name: 'Admissões' })).toBeTruthy()
+
+    await user.click(residentes)
+    expect(residentes.getAttribute('aria-expanded')).toBe('false')
+    expect(menu().queryByRole('link', { name: 'Admissões' })).toBeNull()
+  })
+
+  it('só um grupo aberto por vez e a escolha fica na aba', async () => {
+    const user = userEvent.setup()
+    seedSessao()
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: todas } } as any)
+    renderShell()
+
+    await user.click(await menu().findByRole('button', { name: 'Submenu de Residentes' }))
+    await user.click(menu().getByRole('button', { name: 'Submenu de Assistencial' }))
+    expect(menu().getByRole('button', { name: 'Submenu de Residentes' }).getAttribute('aria-expanded')).toBe('false')
+    expect(menu().getByRole('button', { name: 'Submenu de Assistencial' }).getAttribute('aria-expanded')).toBe('true')
+    expect(sessionStorage.getItem('facilpi:nav:grupo')).toBe('assistencial')
+  })
+
+  it('o grupo da rota ativa abre sozinho e destaca módulo e item', async () => {
+    seedSessao()
+    sessionStorage.setItem('facilpi:nav:grupo', 'residentes')
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: todas } } as any)
+    renderShell(<div>conteúdo</div>, '/sinais')
+
+    const assistencial = await menu().findByRole('button', { name: 'Submenu de Assistencial' })
+    expect(assistencial.getAttribute('aria-expanded')).toBe('true')
+    expect(menu().getByRole('button', { name: 'Submenu de Residentes' }).getAttribute('aria-expanded')).toBe('false')
+    expect(menu().getByRole('link', { name: 'Sinais Vitais' }).getAttribute('aria-current')).toBe('page')
+  })
+
+  it('restaura o grupo salvo e ignora grupo que a sessão não vê', async () => {
+    seedSessao()
+    sessionStorage.setItem('facilpi:nav:grupo', 'residentes')
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: todas } } as any)
+    const primeira = renderShell()
+    expect((await menu().findByRole('button', { name: 'Submenu de Residentes' })).getAttribute('aria-expanded')).toBe('true')
+    primeira.unmount()
+
+    sessionStorage.setItem('facilpi:nav:grupo', 'multidisciplinar')
+    renderShell()
+    await menu().findByRole('button', { name: 'Submenu de Residentes' })
+    expect(menu().queryByRole('button', { name: 'Submenu de Multidisciplinar' })).toBeNull()
+    for (const botao of menu().getAllByRole('button', { expanded: false })) expect(botao).toBeTruthy()
+    expect(menu().queryAllByRole('button', { expanded: true })).toHaveLength(0)
   })
 })
 
