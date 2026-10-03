@@ -127,29 +127,22 @@ describe('UX-01B — seleção múltipla', () => {
   })
 })
 
-describe('Grau de dependência no card', () => {
-  it('com grau_dependencia:ler mostra o selo do grau ativo (texto + cor)', async () => {
-    responde([BANHO_1, BANHO_2])
-    const padrao = mockGet.getMockImplementation()!
-    mockGet.mockImplementation((url: string, ...resto: any[]) =>
-      url === '/graus-dependencia/'
-        ? Promise.resolve({ data: [
-            { residente_id: 'r1', classificacao: 'Grau III', situacao: 'ativo' },
-            { residente_id: 'r1', classificacao: 'Grau I', situacao: 'substituido' },
-          ] } as any)
-        : (padrao as any)(url, ...resto))
-    renderCom([...TUDO, 'grau_dependencia:ler'])
+describe('Grau de dependência no card (UX-01E, decisão C)', () => {
+  it('o grau ativo vem da fila: aparece para quem lê o plantão, sem consultar o histórico', async () => {
+    responde([{ ...BANHO_1, grau: 'Grau III' }, { ...BANHO_2, grau: null }])
+    renderCom(['plantao:ler'])  // sem grau_dependencia:ler
     const selo = await screen.findByLabelText('Grau de dependência III')
     expect(selo.textContent).toBe('Grau III')
-    expect(screen.queryByText('Grau I')).toBeNull()
+    expect(screen.getAllByLabelText(/Grau de dependência/)).toHaveLength(1)
+    expect(mockGet.mock.calls.some(c => c[0] === '/graus-dependencia/')).toBe(false)
   })
 
-  it('sem grau_dependencia:ler nem consulta os graus', async () => {
-    responde([BANHO_1])
-    renderCom(TUDO)
-    await screen.findAllByText('Banho assistido')
-    await waitFor(() => expect(mockPermissoes).toHaveBeenCalled())
-    expect(mockGet.mock.calls.some(c => c[0] === '/graus-dependencia/')).toBe(false)
-    expect(screen.queryByLabelText(/Grau de dependência/)).toBeNull()
+  it('cores por grau: I verde, II amarelo, III vermelho — sempre com o texto', async () => {
+    responde([{ ...BANHO_1, grau: 'Grau I' }, { ...BANHO_2, grau: 'Grau II' }, { ...HIDRATACAO, residente_id: 'r2', grau: 'Grau III' }])
+    renderCom(['plantao:ler'])
+    const classe = async (g: string) => (await screen.findAllByLabelText(`Grau de dependência ${g}`))[0].className
+    expect(await classe('I')).toMatch(/emerald/)
+    expect(await classe('II')).toMatch(/yellow/)
+    expect(await classe('III')).toMatch(/red/)
   })
 })

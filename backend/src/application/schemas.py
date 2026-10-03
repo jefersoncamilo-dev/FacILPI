@@ -1700,6 +1700,8 @@ class PlantaoItem(BaseModel):
     prioridade: Optional[str] = None
     # G3: "Ala B · Quarto 12 · Leito A" do leito ocupado; None sem leito.
     local: Optional[str] = None
+    # UX-01E: grau de dependência ATIVO ("Grau I" | "Grau II" | "Grau III"); None sem grau.
+    grau: Optional[str] = None
 
 
 # ---- Matriz institucional (S.1) ----

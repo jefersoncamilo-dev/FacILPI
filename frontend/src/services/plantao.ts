@@ -17,6 +17,8 @@ export interface PlantaoItem {
   prioridade?: string | null
   // G3: "Ala B · Quarto 12 · Leito A" do leito atual; null sem leito.
   local?: string | null
+  // UX-01E: grau de dependência ATIVO ('Grau I' | 'Grau II' | 'Grau III'); null sem grau.
+  grau?: string | null
 }
 
 export interface PlantaoConsultaParams {

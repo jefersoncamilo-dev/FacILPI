@@ -24,7 +24,6 @@ export function ItemPlantao({
   item,
   nomeResidente,
   fotoResidente,
-  grau,
   agora,
   acao,
   selecao,
@@ -32,8 +31,6 @@ export function ItemPlantao({
   item: PlantaoItem
   nomeResidente?: string
   fotoResidente?: string | null
-  /** Grau de dependência ativo ('Grau I' | 'Grau II' | 'Grau III'); só vem para quem pode lê-lo. */
-  grau?: string | null
   agora: number
   acao?: { rotulo: string; onClick: () => void }
   /** UX-01B: em modo seleção o card troca o Registrar por uma caixa de marcação. */
@@ -77,7 +74,7 @@ export function ItemPlantao({
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="truncate font-semibold leading-snug text-foreground">{residente}</span>
-          <SeloGrau classificacao={grau} />
+          <SeloGrau classificacao={item.grau} />
         </div>
         {item.local && <div className="truncate text-[11px] leading-tight text-muted-foreground">{item.local}</div>}
         <div className="mt-0.5 flex min-w-0 items-baseline gap-1 whitespace-nowrap text-xs leading-snug">

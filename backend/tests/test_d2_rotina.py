@@ -785,3 +785,31 @@ def test_23_g3_local_do_leito_na_projecao(rotina_db):
         locais = {i["residente_id"]: i["local"] for i in itens}
         assert locais == {com_leito.id: "Ala B · Quarto 12 · Leito A", sem_leito.id: None}
     asyncio.run(_with_client(rotina_db, op))
+
+
+def test_24_ux01e_grau_ativo_na_fila_sem_abrir_historico(rotina_db):
+    async def op(client, db):
+        ilpi = _new_institution()
+        user = await _create_ilpi_user(db, ilpi, permissions=PAIS6 | D2_ALL)  # sem grau_dependencia:ler
+        rev = await _create_funcionario(db, ilpi)
+        com_grau = await _create_residente(db, ilpi.id, nome="Com grau")
+        sem_grau = await _create_residente(db, ilpi.id, nome="Sem grau")
+        agora = datetime.now(timezone.utc)
+        db.add_all([
+            m.GrauDependencia(id=_new_id(), ilpi_id=ilpi.id, residente_id=com_grau.id, classificacao="Grau I",
+                              origem="manual", justificativa="antigo", confirmado_por=user.id,
+                              confirmado_em=agora - timedelta(days=30), situacao="substituido"),
+            m.GrauDependencia(id=_new_id(), ilpi_id=ilpi.id, residente_id=com_grau.id, classificacao="Grau III",
+                              origem="manual", justificativa="atual", confirmado_por=user.id,
+                              confirmado_em=agora, situacao="ativo"),
+        ])
+        await db.commit()
+        h = _headers(user, ilpi_id=ilpi.id)
+        for res in (com_grau, sem_grau):
+            pid, iid = await _setup_pais_vigente(client, h, res.id, rev.id)
+            assert (await client.post("/api/programacoes-cuidado/", json=_prog_payload(pid, iid), headers=h)).status_code == 201
+        itens = (await client.get("/api/plantao/", headers=h)).json()
+        assert {i["residente_id"]: i["grau"] for i in itens} == {com_grau.id: "Grau III", sem_grau.id: None}
+        # A fila mostra só o grau ativo; o histórico continua protegido.
+        assert (await client.get("/api/graus-dependencia/", params={"residente_id": com_grau.id}, headers=h)).status_code == 403
+    asyncio.run(_with_client(rotina_db, op))
