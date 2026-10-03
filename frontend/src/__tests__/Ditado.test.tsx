@@ -118,3 +118,29 @@ describe('UX-01D — ditado só no aparelho', () => {
     expect(instancia.processLocally).toBe(true)
   })
 })
+
+describe('UX-01D — fim do ditado sem fala', () => {
+  it('parar sem nada reconhecido limpa o "Ouvindo…" e avisa', async () => {
+    const user = userEvent.setup()
+    instalarMotor({ local: true })
+    const dialogo = await abrirObservacao(user)
+    await user.click(await dialogo.findByRole('button', { name: 'Ditar — observação' }))
+    expect(dialogo.getByText(/Ouvindo/)).toBeTruthy()
+
+    act(() => { instancia.onend() })
+    expect(dialogo.queryByText(/Ouvindo/)).toBeNull()
+    expect(dialogo.getByText('Nada foi reconhecido. Tente de novo ou digite.')).toBeTruthy()
+    expect(dialogo.getByRole('button', { name: 'Ditar — observação' })).toBeTruthy()
+    expect((dialogo.getByLabelText(/Observação/) as HTMLTextAreaElement).value).toBe('')
+  })
+
+  it('erro do microfone mantém a mensagem do erro, não a de "nada reconhecido"', async () => {
+    const user = userEvent.setup()
+    instalarMotor({ local: true })
+    const dialogo = await abrirObservacao(user)
+    await user.click(await dialogo.findByRole('button', { name: 'Ditar — observação' }))
+    act(() => { instancia.onerror({ error: 'not-allowed' }); instancia.onend() })
+    expect(dialogo.getByText('Permita o microfone para ditar.')).toBeTruthy()
+    expect(dialogo.queryByText(/Nada foi reconhecido/)).toBeNull()
+  })
+})

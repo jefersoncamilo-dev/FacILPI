@@ -97,13 +97,20 @@ export function BotaoDitar({ onTexto, rotulo }: { onTexto: (texto: string) => vo
         if (e.results[i].isFinal) texto += `${texto ? ' ' : ''}${e.results[i][0].transcript.trim()}`
       }
     }
-    r.onerror = e => setAviso(e.error === 'not-allowed' ? 'Permita o microfone para ditar.' : 'Não foi possível transcrever. Tente de novo ou digite.')
+    let falhou = false
+    r.onerror = e => {
+      falhou = true
+      setAviso(e.error === 'not-allowed' ? 'Permita o microfone para ditar.' : 'Não foi possível transcrever. Tente de novo ou digite.')
+    }
     r.onend = () => {
       setOuvindo(false)
       rec.current = null
       if (texto.trim()) {
         onTexto(texto.trim())
         setAviso('Texto ditado. Revise antes de salvar.')
+      } else if (!falhou) {
+        // Sem fala reconhecida: o "Ouvindo…" não pode ficar na tela depois de parar.
+        setAviso('Nada foi reconhecido. Tente de novo ou digite.')
       }
     }
     rec.current = r
