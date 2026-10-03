@@ -12,6 +12,17 @@ import {
 } from '../../services/plantao'
 
 const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
+const DIA = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
+
+// Hora sozinha só para hoje: "02:21" de hoje e de amanhã não podem parecer o mesmo item.
+function quando(iso: string, agora = new Date()): string {
+  const d = new Date(iso)
+  const amanha = new Date(agora); amanha.setDate(agora.getDate() + 1)
+  const mesmo = (a: Date, b: Date) => a.toDateString() === b.toDateString()
+  if (mesmo(d, agora)) return HORA.format(d)
+  if (mesmo(d, amanha)) return `amanhã ${HORA.format(d)}`
+  return `${DIA.format(d)} ${HORA.format(d)}`
+}
 const FALHA = 'Não foi possível salvar. Tentar novamente.'
 const EXCECOES: Exclude<ResultadoCuidado, 'executada'>[] = ['recusada', 'omitida']
 
@@ -118,7 +129,7 @@ function Lote({ itens, nomes, onSalvos }: { itens: PlantaoItem[]; nomes: Record<
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{nomes[item.residente_id] || item.residente_id}</div>
                   <div className="truncate text-sm text-muted-foreground">
-                    {rotuloDoItem(item)}{item.previsto_em ? ` • ${HORA.format(new Date(item.previsto_em))}` : ''}
+                    {rotuloDoItem(item)}{item.previsto_em ? ` • ${quando(item.previsto_em)}` : ''}
                   </div>
                   <div className={cn('mt-1 text-sm font-medium', linha.resultado === 'executada' ? 'text-emerald-700' : 'text-orange-800')}>
                     {ROTULO_RESULTADO_CUIDADO[linha.resultado]}{linha.resultado !== 'executada' && linha.motivo.trim() ? `: ${linha.motivo.trim()}` : ''}

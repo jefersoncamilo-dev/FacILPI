@@ -40,6 +40,8 @@ def test_sem_plantao_nada_novo_aparece(passagem_db):
         antes = await _ok(await client.get("/api/plantao/", headers=h_ana))
         visao = await _ok(await client.get(URL, headers=h_ana))
         assert visao["plantao"] is None and visao["areas"] == []
+        # Cabeçalho da tela: o nome do próprio funcionário da sessão, mesmo fora de plantão.
+        assert visao["funcionario_nome"] == (await db.get(m.Funcionario, f_ana)).nome
         assert [e["id"] for e in visao["escalas_pendentes"]] == [hoje["id"]]
         for bloco in ("residentes", "prioridades", "atividades", "passagens_a_receber"):
             assert visao[bloco] is None, bloco

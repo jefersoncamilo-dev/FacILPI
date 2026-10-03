@@ -103,7 +103,7 @@ describe('UX-01B — seleção múltipla', () => {
     expect(screen.getAllByRole('checkbox').every(c => c.getAttribute('aria-checked') === 'false')).toBe(true)
   })
 
-  it('Por cuidado: "Marcar todos" marca só o grupo e alterna para "Desmarcar todos"', async () => {
+  it('Por cuidado: "Marcar até 1 h" marca só o grupo e alterna para "Desmarcar todos"', async () => {
     const user = userEvent.setup()
     responde([BANHO_1, BANHO_2, HIDRATACAO])
     renderCom(TUDO)
@@ -111,7 +111,7 @@ describe('UX-01B — seleção múltipla', () => {
     await user.click(await screen.findByRole('button', { name: 'Por cuidado' }))
     await user.click(screen.getByRole('button', { name: 'Selecionar' }))
     const banho = within(screen.getByRole('region', { name: 'Banho assistido' }))
-    await user.click(banho.getByRole('button', { name: 'Marcar todos (2)' }))
+    await user.click(banho.getByRole('button', { name: 'Marcar até 1 h (2)' }))
 
     expect(barra().getByText('2 marcados')).toBeTruthy()
     expect(within(screen.getByRole('region', { name: 'Hidratação' })).getByRole('checkbox').getAttribute('aria-checked')).toBe('false')
@@ -124,5 +124,32 @@ describe('UX-01B — seleção múltipla', () => {
     renderCom(TUDO)
     await user.click(await screen.findByRole('button', { name: 'Selecionar' }))
     expect(screen.getByRole('checkbox', { name: /^Banho assistido — Maria Souza, \d{2}\/\d{2} \d{2}:\d{2}$/ })).toBeTruthy()
+  })
+})
+
+describe('Grau de dependência no card', () => {
+  it('com grau_dependencia:ler mostra o selo do grau ativo (texto + cor)', async () => {
+    responde([BANHO_1, BANHO_2])
+    const padrao = mockGet.getMockImplementation()!
+    mockGet.mockImplementation((url: string, ...resto: any[]) =>
+      url === '/graus-dependencia/'
+        ? Promise.resolve({ data: [
+            { residente_id: 'r1', classificacao: 'Grau III', situacao: 'ativo' },
+            { residente_id: 'r1', classificacao: 'Grau I', situacao: 'substituido' },
+          ] } as any)
+        : (padrao as any)(url, ...resto))
+    renderCom([...TUDO, 'grau_dependencia:ler'])
+    const selo = await screen.findByLabelText('Grau de dependência III')
+    expect(selo.textContent).toBe('Grau III')
+    expect(screen.queryByText('Grau I')).toBeNull()
+  })
+
+  it('sem grau_dependencia:ler nem consulta os graus', async () => {
+    responde([BANHO_1])
+    renderCom(TUDO)
+    await screen.findAllByText('Banho assistido')
+    await waitFor(() => expect(mockPermissoes).toHaveBeenCalled())
+    expect(mockGet.mock.calls.some(c => c[0] === '/graus-dependencia/')).toBe(false)
+    expect(screen.queryByLabelText(/Grau de dependência/)).toBeNull()
   })
 })

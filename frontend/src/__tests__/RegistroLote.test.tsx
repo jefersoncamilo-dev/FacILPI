@@ -50,7 +50,7 @@ async function abrirLote(user: ReturnType<typeof userEvent.setup>) {
   render(<AuthProvider><MemoryRouter><PermissoesProvider><MeuPlantao /></PermissoesProvider></MemoryRouter></AuthProvider>)
   await user.click(await screen.findByRole('button', { name: 'Por cuidado' }))
   await user.click(await screen.findByRole('button', { name: 'Selecionar' }))
-  await user.click(screen.getByRole('button', { name: 'Marcar todos (3)' }))
+  await user.click(screen.getByRole('button', { name: 'Marcar até 1 h (3)' }))
   await user.click(screen.getByRole('button', { name: 'Registrar em lote (3)' }))
   return within(await screen.findByRole('dialog', { name: 'Registrar 3 cuidados' }))
 }
@@ -127,5 +127,31 @@ describe('UX-01C — registro em lote, persistência individual', () => {
     await user.click(dialogo.getByRole('button', { name: 'Registrar 1 cuidado' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     expect(postsDeExecucao().map(p => p.ocorrencia_id)).toEqual(['b1', 'b2', 'b3', 'b2'])
+  })
+})
+
+describe('UX-01C — atalho do grupo não pega cuidado de amanhã', () => {
+  it('"Marcar até 1 h" deixa de fora o que vence depois; marcado à mão, o lote mostra "amanhã"', async () => {
+    const user = userEvent.setup()
+    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1); amanha.setHours(2, 21, 0, 0)
+    const FUTURO = { ...banho('b9', 'r2', 0), previsto_em: amanha.toISOString() }
+    responde([banho('b1', 'r1', -40), banho('b2', 'r3', 30), FUTURO])
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['plantao:ler', 'execucoes:criar'] } } as any)
+    render(<AuthProvider><MemoryRouter><PermissoesProvider><MeuPlantao /></PermissoesProvider></MemoryRouter></AuthProvider>)
+
+    await user.click(await screen.findByRole('button', { name: 'Por cuidado' }))
+    await user.click(await screen.findByRole('button', { name: 'Selecionar' }))
+    await user.click(screen.getByRole('button', { name: 'Marcar até 1 h (2)' }))
+    const caixa = (nome: RegExp) => screen.getByRole('checkbox', { name: nome })
+    expect(caixa(/Maria Souza/).getAttribute('aria-checked')).toBe('true')
+    expect(caixa(/Ana Reis/).getAttribute('aria-checked')).toBe('true')
+    expect(caixa(/João Lima/).getAttribute('aria-checked')).toBe('false')
+
+    // Continua possível marcar à mão — e aí o lote deixa claro que é de amanhã.
+    await user.click(caixa(/João Lima/))
+    await user.click(screen.getByRole('button', { name: 'Registrar em lote (3)' }))
+    const dialogo = within(await screen.findByRole('dialog', { name: 'Registrar 3 cuidados' }))
+    expect(dialogo.getByText(/amanhã 02:21/)).toBeTruthy()
+    expect(mockPost).not.toHaveBeenCalled()
   })
 })

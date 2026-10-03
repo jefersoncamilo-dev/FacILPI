@@ -4,6 +4,7 @@ import { formatDateTime, mensagemDeErro } from '../../services/api'
 import { escalaApi, plantoesApi, type Area, type PlantaoAtual, type Turno } from '../../services/escala'
 import { Button } from '../ui/button'
 import { Alert } from '../ui/feedback'
+import { cn } from '../../lib/utils'
 
 type Carga = { status: 'carregando' } | { status: 'ok'; atual: PlantaoAtual } | { status: 'erro'; mensagem: string }
 
@@ -80,8 +81,10 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
   }
 
   const plantao = atual.plantao
+  const semEscolhas = !plantao && (atual.escalas_pendentes ?? []).length === 0 && areas.length === 0 && turnos.length === 0
+
   return (
-    <section aria-label="Meu turno" className="rounded-card border border-border bg-card p-4 shadow-card sm:p-5">
+    <section aria-label="Meu turno" className={cn('rounded-card border border-border bg-card shadow-card', semEscolhas ? 'px-4 py-3' : 'p-4 sm:p-5')}>
       {plantao ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0 space-y-1">
@@ -100,6 +103,14 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
           </div>
           <Button variant="outline" onClick={() => encerrar(plantao.id)} disabled={salvando} className="min-h-[44px]">
             <LogOut aria-hidden="true" /> Encerrar plantão
+          </Button>
+        </div>
+      ) : semEscolhas ? (
+        // Nada a escolher (sem escala, área ou turno): uma linha só, texto + ação.
+        <div className="flex items-center justify-between gap-3">
+          <p className="font-display text-base font-semibold text-foreground">Você não está em plantão</p>
+          <Button onClick={() => iniciar()} disabled={salvando} className="min-h-[44px] shrink-0">
+            <LogIn aria-hidden="true" /> Iniciar plantão
           </Button>
         </div>
       ) : (

@@ -26,6 +26,8 @@ export interface AtividadeDoTurno {
 
 export interface MeuPlantaoResumo {
   gerado_em: string
+  // Nome do próprio funcionário da sessão; ausente sem vínculo de funcionário.
+  funcionario_nome?: string | null
   plantao: Plantao | null
   escalas_pendentes: Escala[]
   areas: { id: string; nome: string }[]
