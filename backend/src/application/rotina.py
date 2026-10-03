@@ -658,6 +658,13 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
     leitos = {row.residente_atual_id: local_do_leito(row.unidade, row.quarto, row.leito) for row in (await db.execute(
         select(m.QuartoLeito.residente_atual_id, m.QuartoLeito.unidade, m.QuartoLeito.quarto, m.QuartoLeito.leito).where(
             m.QuartoLeito.instituicao_id == context.ilpi_id, m.QuartoLeito.residente_atual_id.in_(residentes)))).all()} if residentes else {}
+    # UX-01E (decisão C): só o grau ATIVO (I/II/III), como contexto operacional da fila,
+    # para quem já lê o plantão. Histórico, justificativa e autoria continuam atrás de
+    # grau_dependencia:ler em /graus-dependencia.
+    graus = dict((await db.execute(select(m.GrauDependencia.residente_id, m.GrauDependencia.classificacao).where(
+        m.GrauDependencia.ilpi_id == context.ilpi_id, m.GrauDependencia.situacao == "ativo",
+        m.GrauDependencia.residente_id.in_(residentes)))).all()) if residentes else {}
     for item in items:
         item["local"] = leitos.get(item["residente_id"])
+        item["grau"] = graus.get(item["residente_id"])
     return items

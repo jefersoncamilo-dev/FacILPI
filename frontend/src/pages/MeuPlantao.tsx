@@ -16,7 +16,6 @@ import {
   type Filtros, type Situacao, type Visao,
 } from '../components/plantao/visoes'
 import { meuPlantaoApi, type MeuPlantaoResumo } from '../services/meuPlantao'
-import { grausApi } from '../services/avaliacoes'
 import { cn } from '../lib/utils'
 import {
   PLANTAO_LIMIT_PADRAO,
@@ -114,14 +113,6 @@ export function MeuPlantao() {
   const [erro, setErro] = useState('')
   const [nomes, setNomes] = useState<Record<string, string>>({})
   const [fotos, setFotos] = useState<Record<string, string | null | undefined>>({})
-  // Grau de dependência ativo por residente — só para quem já tem grau_dependencia:ler.
-  const [graus, setGraus] = useState<Record<string, string>>({})
-  const podeVerGrau = pode('grau_dependencia:ler')
-  useEffect(() => {
-    if (!podeVerGrau) { setGraus({}); return }
-    // Auxiliar como os nomes: falha só omite o selo, nunca derruba a fila.
-    Promise.resolve().then(grausApi.ativosPorResidente).then(setGraus).catch(() => setGraus({}))
-  }, [podeVerGrau])
   const [visao, setVisaoEstado] = useState<Visao>(() =>
     lerSessao(CHAVE_VISAO, 'horario', v => VISOES.some(o => o.valor === v)))
   const [filtros, setFiltrosEstado] = useState<Filtros>(() =>
@@ -482,7 +473,6 @@ export function MeuPlantao() {
                       item={item}
                       nomeResidente={nomes[item.residente_id]}
                       fotoResidente={fotos[item.residente_id]}
-                      grau={graus[item.residente_id]}
                       agora={agora}
                       acao={podeAgir && !selecionando ? { rotulo: ACAO_ORIGEM[item.origem], onClick: () => abrir(item) } : undefined}
                       selecao={selecionando && elegivel(item)
