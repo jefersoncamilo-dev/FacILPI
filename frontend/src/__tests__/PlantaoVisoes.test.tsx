@@ -100,6 +100,22 @@ beforeEach(() => {
 })
 
 describe('UX-01A.2 — tela', () => {
+  it('o título é o nome do funcionário da sessão; sem vínculo, "Meu Plantão"', async () => {
+    responde(TELA)
+    const padrao = mockGet.getMockImplementation()!
+    mockGet.mockImplementation((url: string, ...resto: any[]) =>
+      url === '/meu-plantao/'
+        ? Promise.resolve({ data: { gerado_em: '2099-01-01T00:00:00Z', funcionario_nome: 'Ana Cuidadora', plantao: null, escalas_pendentes: [], areas: [] } } as any)
+        : (padrao as any)(url, ...resto))
+    const { unmount } = renderTela()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Ana Cuidadora' })).toBeTruthy()
+    unmount()
+
+    responde(TELA)
+    renderTela()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Meu Plantão' })).toBeTruthy()
+  })
+
   it('sem ?desde=, a fila começa 24 h atrás para mostrar o que está atrasado', async () => {
     responde(TELA)
     renderTela()
@@ -112,9 +128,12 @@ describe('UX-01A.2 — tela', () => {
     responde(TELA)
     renderTela()
     const proximas = await screen.findByRole('region', { name: 'Próximas' })
+    // Nome; abaixo, quarto/leito; depois hora programada - cuidado. Avatar com iniciais sem foto.
     expect(within(proximas).getByText('Ala B · Quarto 12 · Leito A')).toBeTruthy()
     expect(within(proximas).getAllByText('Banho')).toHaveLength(2)
-    expect(within(proximas).getAllByText('Maria Souza')).toHaveLength(2)
+    expect(within(proximas).getAllByText(/Maria Souza/)).toHaveLength(2)
+    expect(within(proximas).getAllByText('MS')).toHaveLength(2)
+    expect(within(proximas).getAllByText(/^\d{2}:\d{2}/).length).toBeGreaterThanOrEqual(3)
   })
 
   it('"Por cuidado" agrupa com contagem e lembra a escolha na sessão', async () => {

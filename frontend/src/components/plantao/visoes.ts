@@ -35,6 +35,18 @@ export interface Grupo {
   itens: PlantaoItem[]
 }
 
+/** UX-01C: "Marcar" em grupo só pega o que já venceu ou vence em até 1 h. */
+export const JANELA_MARCAR_EM_LOTE_MS = 60 * 60 * 1000
+
+/**
+ * A fila mostra 24 h à frente; marcar em grupo cuidados de amanhã e registrá-los
+ * como "Realizado" agora seria um registro falso. Esses continuam marcáveis um a
+ * um, de propósito (decisão de quem marca), mas nunca entram pelo atalho do grupo.
+ */
+export function marcavelEmGrupo(item: PlantaoItem, agora: number): boolean {
+  return Boolean(item.previsto_em) && new Date(item.previsto_em!).getTime() <= agora + JANELA_MARCAR_EM_LOTE_MS
+}
+
 export function estaAtrasado(item: PlantaoItem, agora: number): boolean {
   return Boolean(item.previsto_em) && new Date(item.previsto_em!).getTime() < agora
 }

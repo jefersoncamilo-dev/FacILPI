@@ -1,7 +1,9 @@
-import { Check, Clock, MapPin, TriangleAlert } from 'lucide-react'
+import { AlarmClock, Check, TriangleAlert } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { rotuloDoItem, type PlantaoItem } from '../../services/plantao'
 import { estaAtrasado, tempoDeAtraso } from './visoes'
+import { AvatarResidente } from '../residente/AvatarResidente'
+import { SeloGrau } from '../residente/SeloGrau'
 
 const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
 const DIA = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
@@ -11,23 +13,28 @@ function mesmoDia(a: Date, b: Date) {
 }
 
 /**
- * UX-01A.2 — card da fila: horário · cuidado · residente · quarto/leito ·
- * situação · Registrar. A situação é texto + ícone (não só cor). `destaque`
- * escolhe a linha principal: o cuidado (padrão) ou o residente — no
- * agrupamento por cuidado o título do grupo já diz o cuidado.
+ * Card compacto da fila do plantão (UX-01A.2/C):
+ *   foto (ou iniciais) | residente                     | Registrar
+ *                      | quarto/leito (bem pequeno)    |
+ *                      | hora programada  cuidado      |
+ * A hora é pequena e secundária; atraso = hora em laranja + ícone de alarme
+ * (não só cor). Registrar continua o CTA principal (48px).
  */
 export function ItemPlantao({
   item,
   nomeResidente,
+  fotoResidente,
+  grau,
   agora,
-  destaque = 'cuidado',
   acao,
   selecao,
 }: {
   item: PlantaoItem
   nomeResidente?: string
+  fotoResidente?: string | null
+  /** Grau de dependência ativo ('Grau I' | 'Grau II' | 'Grau III'); só vem para quem pode lê-lo. */
+  grau?: string | null
   agora: number
-  destaque?: 'cuidado' | 'residente'
   acao?: { rotulo: string; onClick: () => void }
   /** UX-01B: em modo seleção o card troca o Registrar por uma caixa de marcação. */
   selecao?: { selecionado: boolean; onAlternar: () => void }
@@ -36,14 +43,12 @@ export function ItemPlantao({
   const previsto = item.previsto_em ? new Date(item.previsto_em) : null
   const residente = nomeResidente || item.residente_id
   const cuidado = rotuloDoItem(item)
-  const [principal, secundario] = destaque === 'residente' ? [residente, cuidado] : [cuidado, residente]
-
   const quando = previsto ? `${DIA.format(previsto)} ${HORA.format(previsto)}` : 'sem horário'
 
   return (
     <div
       className={cn(
-        'flex items-center gap-3 rounded-card border bg-card p-3 shadow-sm sm:gap-4 sm:p-4',
+        'flex items-center gap-2 rounded-card border bg-card px-2.5 py-2.5 shadow-sm',
         selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado ? 'border-orange-300' : 'border-border',
       )}
     >
@@ -65,35 +70,30 @@ export function ItemPlantao({
           </span>
         </button>
       )}
-      <div className="w-14 shrink-0 text-center" aria-hidden={!previsto}>
-        {previsto ? (
-          <>
-            <div className={cn('text-lg font-bold tabular-nums leading-tight', atrasado ? 'text-orange-800' : 'text-foreground')}>
-              {HORA.format(previsto)}
-            </div>
-            {!mesmoDia(previsto, new Date(agora)) && <div className="text-xs text-muted-foreground">{DIA.format(previsto)}</div>}
-          </>
-        ) : (
-          <TriangleAlert className="mx-auto size-6 text-orange-700" />
-        )}
-      </div>
+      <AvatarResidente nome={residente} foto={fotoResidente} className="size-11 text-base" />
 
+      {/* Linha 1: residente - leito. Linha 2: hora programada (pequena) - cuidado.
+          Atraso = hora em laranja + ícone de alarme (não só cor); o tempo de atraso fica para leitor de tela. */}
       <div className="min-w-0 flex-1">
-        <div className="line-clamp-2 font-semibold leading-snug text-foreground">{principal}</div>
-        <div className="mt-0.5 truncate text-sm text-muted-foreground">{secundario}</div>
-        {item.local && (
-          <div className="mt-0.5 flex items-start gap-1 text-sm leading-snug text-muted-foreground">
-            <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" /> <span className="min-w-0 break-words">{item.local}</span>
-          </div>
-        )}
-        <div className="mt-1.5">
-          {atrasado ? (
-            <span className="badge-warning inline-flex whitespace-nowrap"><Clock className="size-3" aria-hidden="true" /> Atrasado {tempoDeAtraso(item.previsto_em!, agora)}</span>
-          ) : previsto ? (
-            <span className="text-xs font-medium text-muted-foreground">Pendente</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-semibold leading-snug text-foreground">{residente}</span>
+          <SeloGrau classificacao={grau} />
+        </div>
+        {item.local && <div className="truncate text-[11px] leading-tight text-muted-foreground">{item.local}</div>}
+        <div className="mt-0.5 flex min-w-0 items-baseline gap-1 whitespace-nowrap text-xs leading-snug">
+          {previsto ? (
+            <span className={cn('inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums', atrasado ? 'font-semibold text-orange-800' : 'text-muted-foreground')}>
+              {atrasado && <AlarmClock className="size-3 self-center" aria-hidden="true" />}
+              {HORA.format(previsto)}
+              {!mesmoDia(previsto, new Date(agora)) && ` ${DIA.format(previsto)}`}
+              {atrasado && <span className="sr-only"> — atrasado {tempoDeAtraso(item.previsto_em!, agora)}</span>}
+            </span>
           ) : (
-            <span className="text-xs font-medium text-orange-800">Aberta, sem horário</span>
+            <span className="inline-flex shrink-0 items-center text-orange-800">
+              <TriangleAlert className="size-3.5 self-center" aria-hidden="true" /><span className="sr-only">Sem horário</span>
+            </span>
           )}
+          <span className="min-w-0 truncate text-muted-foreground">{cuidado}</span>
         </div>
       </div>
 
@@ -101,7 +101,7 @@ export function ItemPlantao({
         <button
           data-acao-plantao={`${item.origem}:${item.registro_id}`}
           onClick={acao.onClick}
-          className="btn-primary min-h-[48px] shrink-0 px-4 text-sm"
+          className="btn-primary min-h-[48px] shrink-0 px-2.5 text-sm sm:px-4"
         >
           {acao.rotulo}
         </button>

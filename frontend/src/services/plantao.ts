@@ -132,6 +132,8 @@ export async function encerrarIntercorrencia(intercorrenciaId: string, desfecho:
 export interface ResidenteResumo {
   id: string
   nome: string
+  // Texto livre do cadastro; o avatar só usa se for imagem (data:image ou https).
+  foto?: string | null
 }
 
 export async function getResidentesResumo(): Promise<ResidenteResumo[]> {

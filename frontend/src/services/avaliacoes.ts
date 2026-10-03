@@ -62,6 +62,9 @@ export const avaliacoesApi = {
 
 export const grausApi = {
   listar: (residente_id: string) => api.get<GrauDependencia[]>('/graus-dependencia/', { params: { residente_id } }).then(r => r.data),
+  /** Grau ATIVO de cada residente da ILPI (exige grau_dependencia:ler, como a listagem). */
+  ativosPorResidente: () => api.get<GrauDependencia[]>('/graus-dependencia/', { params: { limit: 1000 } })
+    .then(r => Object.fromEntries(r.data.filter(g => g.situacao === 'ativo').map(g => [g.residente_id, g.classificacao]))),
   confirmarPorAvaliacao: (dados: { residente_id: string; avaliacao_id: string; classificacao: Grau; justificativa: string; validade?: string }) =>
     api.post<GrauDependencia>('/graus-dependencia/', { ...dados, origem: 'avaliacao' }).then(r => r.data),
 }

@@ -33,7 +33,7 @@ export function FiltrosPlantao({
         aria-haspopup="dialog"
         aria-expanded={aberto}
         className={cn(
-          'inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium',
+          'inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium',
           ativos ? 'border-primary bg-brand-soft text-primary' : 'border-border bg-card text-foreground hover:bg-muted',
         )}
       >

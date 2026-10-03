@@ -70,6 +70,8 @@ class Atividades(BaseModel):
 
 class MeuPlantaoResposta(BaseModel):
     gerado_em: datetime
+    # Nome do próprio funcionário da sessão (cabeçalho da tela); None sem vínculo de funcionário.
+    funcionario_nome: Optional[str] = None
     plantao: Optional[PlantaoResposta] = None
     escalas_pendentes: list[EscalaResposta] = []
     areas: list[AreaDoTurno] = []
@@ -90,6 +92,7 @@ async def meu_plantao(request: Request, db: AsyncSession = Depends(get_db), cont
     funcionario = await funcionario_da_sessao(db, context)
     if funcionario is None:
         return resposta
+    resposta.funcionario_nome = funcionario.nome
     plantao = (await db.execute(select(m.Plantao).where(
         m.Plantao.ilpi_id == ilpi, m.Plantao.funcionario_id == funcionario.id,
         m.Plantao.situacao == "em_andamento"))).scalar_one_or_none()

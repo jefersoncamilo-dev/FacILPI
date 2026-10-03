@@ -8,13 +8,15 @@ import { Alert } from '../components/ui/feedback'
 import { MeuTurno } from '../components/plantao/MeuTurno'
 import { MinhaArea } from '../components/plantao/MinhaArea'
 import { RegistrarCuidado } from '../components/plantao/RegistrarCuidado'
+import { RegistrarLote } from '../components/plantao/RegistrarLote'
 import { ItemPlantao } from '../components/plantao/ItemPlantao'
 import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
 import {
-  FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar,
+  FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar, marcavelEmGrupo,
   type Filtros, type Situacao, type Visao,
 } from '../components/plantao/visoes'
 import { meuPlantaoApi, type MeuPlantaoResumo } from '../services/meuPlantao'
+import { grausApi } from '../services/avaliacoes'
 import { cn } from '../lib/utils'
 import {
   PLANTAO_LIMIT_PADRAO,
@@ -111,6 +113,15 @@ export function MeuPlantao() {
   // "nenhuma pendência" na tela do plantonista.
   const [erro, setErro] = useState('')
   const [nomes, setNomes] = useState<Record<string, string>>({})
+  const [fotos, setFotos] = useState<Record<string, string | null | undefined>>({})
+  // Grau de dependência ativo por residente — só para quem já tem grau_dependencia:ler.
+  const [graus, setGraus] = useState<Record<string, string>>({})
+  const podeVerGrau = pode('grau_dependencia:ler')
+  useEffect(() => {
+    if (!podeVerGrau) { setGraus({}); return }
+    // Auxiliar como os nomes: falha só omite o selo, nunca derruba a fila.
+    Promise.resolve().then(grausApi.ativosPorResidente).then(setGraus).catch(() => setGraus({}))
+  }, [podeVerGrau])
   const [visao, setVisaoEstado] = useState<Visao>(() =>
     lerSessao(CHAVE_VISAO, 'horario', v => VISOES.some(o => o.valor === v)))
   const [filtros, setFiltrosEstado] = useState<Filtros>(() =>
@@ -124,6 +135,8 @@ export function MeuPlantao() {
   // quem pode registrar execução. Medicação e intercorrência nunca entram.
   const [selecionando, setSelecionando] = useState(false)
   const [selecionados, setSelecionados] = useState<Set<string>>(() => new Set())
+  // UX-01C: itens do lote em registro (cópia do momento em que o diálogo abriu).
+  const [lote, setLote] = useState<PlantaoItem[] | null>(null)
   // Depois de salvar, o foco vai para o "Registrar" do próximo item da lista.
   const focarApos = useRef<string | null>(null)
   const [form, setForm] = useState<FormAcao>(FORM_VAZIO)
@@ -184,7 +197,10 @@ export function MeuPlantao() {
   useEffect(() => {
     // Auxiliar: a falha aqui não vira erro de tela, só mantém o id como rótulo.
     getResidentesResumo()
-      .then(lista => setNomes(Object.fromEntries(lista.map(r => [r.id, r.nome]))))
+      .then(lista => {
+        setNomes(Object.fromEntries(lista.map(r => [r.id, r.nome])))
+        setFotos(Object.fromEntries(lista.map(r => [r.id, r.foto])))
+      })
       .catch(() => setNomes({}))
   }, [])
 
@@ -228,6 +244,22 @@ export function MeuPlantao() {
   function sairDaSelecao() {
     setSelecionando(false)
     setSelecionados(new Set())
+  }
+
+  // Salvos saem da fila e da seleção já; se algo falhou, o diálogo continua
+  // aberto só com o que falta e a seleção mantém esses itens.
+  function loteSalvo(salvos: PlantaoItem[], restantes: number) {
+    if (salvos.length) {
+      const feitos = new Set(salvos.map(chaveDoItem))
+      setItens(atuais => atuais.filter(i => !feitos.has(chaveDoItem(i))))
+      setSucesso(salvos.length === 1 ? '1 registro salvo.' : `${salvos.length} registros salvos.`)
+      void carregar({ silencioso: true })
+      carregarResumo()
+    }
+    if (restantes === 0) {
+      setLote(null)
+      sairDaSelecao()
+    }
   }
 
   function abrir(item: PlantaoItem) {
@@ -315,17 +347,14 @@ export function MeuPlantao() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div className="space-y-1">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Meu Plantão</h1>
-          {/* Filtros secundários ficam no cabeçalho: a barra de situação cabe inteira em 360px. */}
-          <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
-        </div>
-        <p className="text-sm text-muted-foreground">
+        {/* O nome de quem está no plantão; sem vínculo de funcionário, o título da tela. */}
+        <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{resumo?.funcionario_nome || 'Meu Plantão'}</h1>
+        <p className="text-sm text-muted-foreground max-sm:sr-only">
           {desde
             ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">voltar à fila padrão</Link></>
-            : 'Atrasos das últimas 24 horas e pendências das próximas 24 horas — cuidados, doses e intercorrências abertas'}
+            : 'Atrasos das últimas 24 h e pendências das próximas 24 h'}
         </p>
       </div>
 
@@ -333,7 +362,7 @@ export function MeuPlantao() {
       <MeuTurno onMudou={carregarResumo} />
       {resumo && <MinhaArea resumo={resumo} podeAssumir={pode('alertas:assumir')} onMudou={aoMudarAlerta} />}
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Organizar por">
           {VISOES.map(opcao => (
             <button
@@ -351,48 +380,48 @@ export function MeuPlantao() {
             </button>
           ))}
         </div>
-        <div className="grid grid-cols-3 gap-2" role="group" aria-label="Situação">
+        <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Situação">
             {SITUACOES.map(opcao => (
               <button
                 key={opcao.valor}
                 aria-pressed={filtros.situacao === opcao.valor}
                 onClick={() => setFiltros({ ...filtros, situacao: opcao.valor })}
                 className={cn(
-                  'inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-full border px-2 text-sm font-medium',
-                  filtros.situacao === opcao.valor
-                    ? 'border-primary bg-brand-soft text-primary'
-                    : opcao.valor === 'atrasados' && contagens.atrasados > 0
-                      ? 'border-orange-300 bg-card text-orange-900 hover:bg-orange-50'
-                      : 'border-border bg-card text-foreground hover:bg-muted',
+                  'inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-sm font-medium transition-colors',
+                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
                 )}
               >
-                {opcao.rotulo} <span className="tabular-nums">{contagens[opcao.valor]}</span>
+                {opcao.rotulo}{' '}
+                <span className={cn(
+                  'rounded-full px-1.5 text-xs tabular-nums',
+                  opcao.valor === 'atrasados' && contagens.atrasados > 0 ? 'bg-orange-100 font-semibold text-orange-900' : 'bg-slate-200/70 text-slate-700',
+                )}>
+                  {contagens[opcao.valor]}
+                </span>
               </button>
             ))}
+        </div>
+        {/* Ações da lista: mesmo tamanho e estilo, lado a lado (Selecionar só se houver cuidado marcável). */}
+        <div className={cn('grid gap-2', haElegiveis && !carregando && !erro ? 'grid-cols-2' : 'grid-cols-1')}>
+          {haElegiveis && !carregando && !erro && (
+            <button
+              type="button"
+              onClick={() => (selecionando ? sairDaSelecao() : setSelecionando(true))}
+              aria-pressed={selecionando}
+              className={cn(
+                'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium',
+                selecionando ? 'border-primary bg-brand-soft text-primary' : 'border-border bg-card text-foreground hover:bg-muted',
+              )}
+            >
+              <ListChecks className="size-4" aria-hidden="true" />
+              {selecionando ? 'Cancelar seleção' : 'Selecionar'}
+            </button>
+          )}
+          <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
         </div>
       </div>
 
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
-
-      {haElegiveis && !carregando && !erro && (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
-            {selecionando ? 'Toque nos cuidados para marcar.' : 'Vários cuidados iguais? Marque e registre juntos.'}
-          </p>
-          <button
-            type="button"
-            onClick={() => (selecionando ? sairDaSelecao() : setSelecionando(true))}
-            aria-pressed={selecionando}
-            className={cn(
-              'inline-flex min-h-[44px] shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-medium',
-              selecionando ? 'border-primary bg-brand-soft text-primary' : 'border-border bg-card hover:bg-muted',
-            )}
-          >
-            <ListChecks className="size-4" aria-hidden="true" />
-            {selecionando ? 'Cancelar seleção' : 'Selecionar'}
-          </button>
-        </div>
-      )}
 
       {itens.length >= PLANTAO_LIMIT_PADRAO && !erro && (
         <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
@@ -417,7 +446,9 @@ export function MeuPlantao() {
               agrupam sem mudar a ordem oficial dentro do grupo. */}
           {grupos.map(grupo => {
             const elegiveisDoGrupo = grupo.itens.filter(elegivel)
-            const todosMarcados = elegiveisDoGrupo.length > 0 && elegiveisDoGrupo.every(i => selecionados.has(chaveDoItem(i)))
+            // Atalho do grupo: só vencidos e os que vencem em até 1 h (nunca os de amanhã).
+            const doAtalho = elegiveisDoGrupo.filter(i => marcavelEmGrupo(i, agora))
+            const todosMarcados = doAtalho.length > 0 && doAtalho.every(i => selecionados.has(chaveDoItem(i)))
             return (
               <section key={grupo.chave} aria-label={grupo.titulo} className="space-y-2">
                 <div className="flex min-h-[44px] items-center justify-between gap-2">
@@ -433,13 +464,13 @@ export function MeuPlantao() {
                         : `${grupo.itens.length} ${grupo.itens.length === 1 ? 'pendente' : 'pendentes'}`}
                     </span>
                   </h2>
-                  {selecionando && elegiveisDoGrupo.length > 1 && (
+                  {selecionando && doAtalho.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => alternarGrupo(elegiveisDoGrupo, !todosMarcados)}
+                      onClick={() => (todosMarcados ? alternarGrupo(elegiveisDoGrupo, false) : alternarGrupo(doAtalho, true))}
                       className="min-h-[44px] shrink-0 px-2 text-sm font-medium text-primary hover:underline"
                     >
-                      {todosMarcados ? 'Desmarcar todos' : `Marcar todos (${elegiveisDoGrupo.length})`}
+                      {todosMarcados ? 'Desmarcar todos' : `Marcar até 1 h (${doAtalho.length})`}
                     </button>
                   )}
                 </div>
@@ -450,8 +481,9 @@ export function MeuPlantao() {
                       key={chaveDoItem(item)}
                       item={item}
                       nomeResidente={nomes[item.residente_id]}
+                      fotoResidente={fotos[item.residente_id]}
+                      grau={graus[item.residente_id]}
                       agora={agora}
-                      destaque={visao === 'cuidado' ? 'residente' : 'cuidado'}
                       acao={podeAgir && !selecionando ? { rotulo: ACAO_ORIGEM[item.origem], onClick: () => abrir(item) } : undefined}
                       selecao={selecionando && elegivel(item)
                         ? { selecionado: selecionados.has(chaveDoItem(item)), onAlternar: () => alternar(item) }
@@ -468,18 +500,25 @@ export function MeuPlantao() {
       {selecionando && (
         // Fica acima da navegação inferior no mobile; no desktop, rente ao fim da tela.
         <div className="sticky bottom-24 z-20 flex items-center gap-3 rounded-card border border-primary/40 bg-card p-3 shadow-lg xl:bottom-4" role="region" aria-label="Seleção">
-          <span className="flex-1 text-sm font-semibold" aria-live="polite">
+          <span className="min-w-0 flex-1 text-sm font-semibold" aria-live="polite">
             {selecionadosNaFila.length === 0
               ? 'Nenhum cuidado marcado'
-              : `${selecionadosNaFila.length} ${selecionadosNaFila.length === 1 ? 'cuidado marcado' : 'cuidados marcados'}`}
+              : `${selecionadosNaFila.length} ${selecionadosNaFila.length === 1 ? 'marcado' : 'marcados'}`}
           </span>
           {selecionadosNaFila.length > 0 && (
-            <button type="button" onClick={() => setSelecionados(new Set())} className="min-h-[44px] px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
-              Limpar
-            </button>
+            <>
+              <button type="button" onClick={() => setSelecionados(new Set())} className="min-h-[44px] px-2 text-sm font-medium text-muted-foreground hover:text-foreground max-[400px]:hidden">
+                Limpar
+              </button>
+              <button type="button" onClick={() => { setSucesso(''); setLote(selecionadosNaFila) }} className="btn-primary min-h-[48px] shrink-0 whitespace-nowrap px-4 text-sm">
+                Registrar em lote ({selecionadosNaFila.length})
+              </button>
+            </>
           )}
         </div>
       )}
+
+      <RegistrarLote itens={lote} nomes={nomes} onFechar={() => setLote(null)} onSalvos={loteSalvo} />
 
       <Modal open={itemAberto !== null} onClose={fechar} title={itemAberto ? ACAO_ORIGEM[itemAberto.origem] : ''}>
         {itemAberto && (
