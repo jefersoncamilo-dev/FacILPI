@@ -3,6 +3,7 @@ import { Ban, CircleCheck, CircleX, MessageSquarePlus } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../../services/api'
 import { Dialog, DialogContent } from '../ui/dialog'
 import { cn } from '../../lib/utils'
+import { BotaoDitar } from './Ditado'
 import {
   ROTULO_RESULTADO_CUIDADO,
   registrarCuidado,
@@ -168,6 +169,7 @@ function Formulario({
             value={motivo}
             onChange={e => setMotivo(e.target.value)}
           />
+          <BotaoDitar rotulo="motivo" onTexto={t => setMotivo(m => (m.trim() ? `${m.trim()} ${t}` : t))} />
         </div>
       )}
 
@@ -182,6 +184,7 @@ function Formulario({
             value={observacao}
             onChange={e => setObservacao(e.target.value)}
           />
+          <BotaoDitar rotulo="observação" onTexto={t => setObservacao(o => (o.trim() ? `${o.trim()} ${t}` : t))} />
         </div>
       ) : (
         <button
