@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `027_passagem_plantao` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `028_alerta_expirado` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -29,6 +29,7 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Escala operacional: áreas, turnos, plantão real e responsabilidade temporal append-only (024); escala planejada × plantão real, ausência, substituição simples e cobertura (025).
 - Passagem de plantão persistida: resumo montado pelo servidor, observações curtas e recebimento com a situação atual da fonte (027).
 - Meu Plantão como destino operacional do turno (área, residentes, prioridades, atividades, passagens a receber) e pós-login.
+- Meu Plantão operacional (UX-00/UX-01, #138–#145): registro rápido de cuidado, visões por horário/cuidado/residente, filtros, seleção múltipla e registro em lote com persistência individual; local do residente (G3) e grau de dependência ativo (decisão C) na própria fila; horizonte de cuidados e doses renovado na leitura (G1, #139).
 - Matriz de permissões clínicas/institucionais.
 - Admissão ponta a ponta.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
@@ -41,7 +42,23 @@ D.4 é a próxima frente funcional em recuperação/correção no fluxo atual. O
 ### Camada Operacional (Fases 1–5 integradas)
 Fluxo diário completo: inicia plantão → área/residentes → prioridades/atividades → assume → resolve na origem → a fonte encerra → passagem → próximo turno confirma. Regras em `docs/DOMAIN_RULES.md`; visão e Fases 6–14 (fora do ciclo, sem design técnico) em `docs/ROADMAP.md`.
 
-Decisões de produto pendentes: (1) alerta de doses sem registro para o cuidador — hoje segue `plantao:ler`, como o Meu Plantão; (2) doses/cuidados que saem da janela de 24 h encerram o estado do alerta como "resolvido pela fonte" sem registro. As migrations 021–027 precisam ser aplicadas em ordem em qualquer ambiente persistente — decisão humana, nunca automática.
+Decisões de produto aplicadas e publicadas (homologação técnica das Fases 1–5 concluída: apta para Produto/UX/UI):
+- **#131 (PR #134):** alerta de dose e doses previstas (Central, Meu Plantão, passagem) só com permissão de medicação (`administracoes:ler`); `plantao:ler` sozinho não concede — cuidador e Administrador da ILPI não veem dose.
+- **#132 (PR #133, migration 028):** cuidado/dose que sai da janela de 24 h sem registro encerra o estado do alerta como `expirado` (encerramento `janela`), nunca como "resolvido pela fonte".
+
+As migrations 021–028 precisam ser aplicadas em ordem em qualquer ambiente persistente — decisão humana, nunca automática; no ambiente de homologação publicado a cadeia está em 028 (aplicada antes do deploy do #133).
+
+### Meu Plantão — UX-01
+Integrado (#139–#145): G1, G3, registro rápido (Realizado / Recusado / Não realizado, motivo obrigatório nas exceções), três visões e filtros, fila padrão a partir de 24 h atrás (atrasados visíveis), seleção múltipla, registro em lote (uma execução e uma auditoria por cuidado; "Marcar até 1 h" no atalho de grupo), cards compactos com foto/iniciais, Emergência (abre o prontuário), título com o nome do funcionário e grau ativo na fila para quem tem `plantao:ler` (o histórico do grau continua exigindo `grau_dependencia:ler`). Regras em `docs/DOMAIN_RULES.md`.
+
+Não integrado: ditado por voz no aparelho (UX-01D, PR #144) e a tela de correção de registros (decisão A: Enfermagem, RT e administrador corrigem via estorno com `execucoes:corrigir`; cuidador registra mas não corrige; sem exclusão; só cuidados). G4 (percentual de refeição), G5 (concluídos/expirados) e G7 ("outro horário") seguem adiados.
+
+### Auditoria geral (11/10/2026) — decisões e riscos conhecidos
+- **Situação do residente:** a API ainda aceita `situacao`/`data_admissao` do cliente no cadastro e na edição genéricos; a decisão foi manter como está. Só a Admissão ativa o residente pelas telas atuais. Risco conhecido, não corrigido.
+- **Adiados (exigem migration/RBAC):** autoria por FK em avaliações, sinais vitais e intercorrências (hoje nome em texto) e retirada das permissões clínicas de escrita do template `ilpi_admin` (herança das migrations 006–014).
+- **Antes da VPS:** rate limit de login em memória por `client.host` (proxy/múltiplos workers), JWT em `localStorage` sem CSP.
+- **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 e React Router 7 (upgrades maiores, sem decisão).
+- **Branches:** `main` está muitos commits atrás da linha integrada; a promoção para `main` ainda não tem critério definido.
 
 ### Passagem de Plantão
 Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. A integração com o Prontuário longitudinal (D.4) segue posterior.
