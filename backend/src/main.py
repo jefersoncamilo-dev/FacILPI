@@ -1013,11 +1013,15 @@ async def update_avaliacao(
     data.pop("residente_id", None)
     data.pop("ilpi_id", None)
     data.pop("profissional", None)
+    # P1-2: a edição sobrescreve o registro; o valor anterior de cada campo
+    # alterado fica na auditoria para o histórico clínico não se perder.
+    anteriores = {}
     for k, v in data.items():
         if isinstance(v, str):
             v = v.strip()
             if v == "":
                 continue
+        anteriores[k] = getattr(obj, k)
         setattr(obj, k, v)
     add_audit(
         db,
@@ -1026,6 +1030,7 @@ async def update_avaliacao(
         registro_id=obj.id,
         usuario_id=context.user.id,
         ilpi_id=context.ilpi_id,
+        valores_anteriores=anteriores,
         valores_posteriores=data,
         request=request,
     )
