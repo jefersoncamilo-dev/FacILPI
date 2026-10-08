@@ -17,7 +17,7 @@ interface UsuariosSectionProps {
 }
 
 export function UsuariosSection({
-  usuarios, funcionarios, perfis, searchQuery, onSearchChange,
+  usuarios, funcionarios, searchQuery,
   loading, onEditUser, onResetPassword, onRevogarAcesso,
 }: UsuariosSectionProps) {
   const { pode } = usePermissoesOuPadrao()
@@ -38,11 +38,6 @@ export function UsuariosSection({
   function getFuncionarioNome(usuarioId: string) {
     const f = funcionarios.find(f => f.usuario_id === usuarioId)
     return f?.nome || null
-  }
-
-  function getPerfilNome(usuarioId: string) {
-    const f = funcionarios.find(f => f.usuario_id === usuarioId)
-    return f ? (f.profissao || f.cargo || null) : null
   }
 
   function openReset(user: User) {

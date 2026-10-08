@@ -42,6 +42,10 @@ jobs:
 
       - run: npm ci
 
+      # QA-01: erros quebram o job; avisos (`any` em producao) aparecem no log.
+      - name: Lint
+        run: npm run lint
+
       - name: Testes
         run: npm run test
 
@@ -75,6 +79,18 @@ jobs:
       # o CI continuaria resolvendo ">=" na data do build e o constraints viraria
       # documentacao morta.
       - run: pip install -r requirements-dev.txt -c constraints.txt
+
+      # QA-01: duas migrations com o mesmo down_revision passam despercebidas
+      # nos testes (cada um sobe ate "head") e quebram o `upgrade head` real.
+      - name: Alembic com head unico
+        run: |
+          python - <<'PY'
+          from alembic.config import Config
+          from alembic.script import ScriptDirectory
+          heads = ScriptDirectory.from_config(Config("alembic.ini")).get_heads()
+          print("heads:", heads)
+          assert len(heads) == 1, f"esperado 1 head, encontrado {heads}"
+          PY
 
       # -rs lista os skips no log: um teste pulado em silencio e indistinguivel
       # de um teste que passou, e a suite pula quando o alvo esta indisponivel.

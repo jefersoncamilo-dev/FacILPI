@@ -50,12 +50,12 @@ const tabConfig: { key: Tab; label: string; permissao: string }[] = [
 export function Equipe() {
   const {
     loading, error, tab, situacaoFilter, searchQuery,
-    filteredFuncionarios, filteredUsuarios, perfis, permissoes, funcionarios, usuarios,
+    filteredFuncionarios, perfis, permissoes, funcionarios, usuarios,
     setTab, setSituacaoFilter, setSearchQuery, clearError,
     loadFuncionarios, loadUsuarios, loadPerfis, loadPermissoes,
     createFuncionario, updateFuncionario, inativarFuncionario,
-    vincularUsuario, desvincularUsuario,
-    createUsuario, updateUsuario, resetPassword, revogarAcesso,
+    vincularUsuario,
+    updateUsuario, resetPassword, revogarAcesso,
     createPerfil, updatePerfilPermissoes,
   } = useEquipe()
   const { pode, status } = usePermissoesOuPadrao()
