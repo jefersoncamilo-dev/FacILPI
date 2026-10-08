@@ -1086,6 +1086,10 @@ async def atribuir_perfil_usuario(
     context: SecurityContext = Depends(require_permission("usuarios:atribuir_perfil")),
 ):
     _require_ilpi_context(context)
+    # SEC-01: o alvo precisa ja ter vinculo ativo nesta ILPI. Sem isso, um admin
+    # vincularia usuario de outra ILPI e, com reset-password, tomaria a conta.
+    # 404 (mesmo contrato de _load_local_user) para nao revelar existencia.
+    await _load_local_user(db, context, user_id)
     try:
         link = await _assign_profile_to_user(
             db, context, user_id, payload.perfil_id, request, ilpi_id=context.ilpi_id
