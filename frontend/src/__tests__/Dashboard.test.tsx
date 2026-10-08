@@ -30,7 +30,7 @@ const mockPermissoes = vi.mocked(contextApi.permissoesDaSessao)
 
 const GESTAO = [
   'residentes:ler', 'residentes:criar', 'plantao:ler', 'intercorrencias:ler', 'quartos_leitos:ler',
-  'ausencias:ler', 'admissoes:ler', 'planos_cuidados:ler', 'funcionarios:ler',
+  'ausencias:ler', 'admissoes:ler', 'planos_cuidados:ler', 'funcionarios:ler', 'passagem_plantao:ler',
 ]
 const CUIDADO = ['plantao:ler', 'residentes:ler', 'intercorrencias:ler', 'sinais_vitais:criar', 'intercorrencias:criar']
 

@@ -74,7 +74,7 @@ async function cardsDoHub(titulo: string) {
 
 const TODAS = [
   'residentes:ler', 'admissoes:ler', 'documentos:ler', 'quartos_leitos:ler',
-  'sinais_vitais:ler', 'intercorrencias:ler', 'plantao:ler', 'avaliacoes:ler', 'planos_cuidados:ler',
+  'sinais_vitais:ler', 'intercorrencias:ler', 'plantao:ler', 'passagem_plantao:ler', 'avaliacoes:ler', 'planos_cuidados:ler',
 ]
 
 const CONTAGEM_VAZIA = { critico: 0, atencao: 0, aviso: 0, alerta: 0, pendencia: 0, informativo: 0, atividade: 0, total: 0 }

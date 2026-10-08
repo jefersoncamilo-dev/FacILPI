@@ -36,7 +36,7 @@ export const ACOES_RAPIDAS: AcaoRapida[] = [
   { id: 'sinal', rotulo: 'Registrar sinal vital', icone: HeartPulse, to: '/sinais?registrar=1', permissao: 'sinais_vitais:criar', destaque: 'primario', ordem: { operacao: 1, gestao: 7 } },
   { id: 'intercorrencia', rotulo: 'Registrar intercorrência', icone: TriangleAlert, to: '/intercorrencias?registrar=1', permissao: 'intercorrencias:criar', destaque: 'alerta', ordem: { operacao: 2, gestao: 8 } },
   { id: 'plantao', rotulo: 'Abrir Meu Plantão', icone: ClipboardList, to: '/plantao', permissao: 'plantao:ler', ordem: { operacao: 3, gestao: 9 } },
-  { id: 'passagem', rotulo: 'Passagem de plantão', icone: ArrowLeftRight, to: '/passagem', permissao: 'plantao:ler', ordem: { operacao: 4, gestao: 10 } },
+  { id: 'passagem', rotulo: 'Passagem de plantão', icone: ArrowLeftRight, to: '/passagem', permissao: 'passagem_plantao:ler', ordem: { operacao: 4, gestao: 10 } },
   { id: 'ausencia', rotulo: 'Registrar ausência', icone: DoorOpen, to: '/quartos?ausencia=1', permissao: 'ausencias:criar', ordem: { operacao: 5, gestao: 6 } },
   { id: 'avaliacao', rotulo: 'Nova avaliação', icone: ClipboardCheck, to: '/avaliacoes?novo=1', permissao: 'avaliacoes:criar', ordem: { operacao: 6, gestao: 4 } },
   { id: 'admissao', rotulo: 'Nova admissão', icone: UserRoundPlus, to: '/admissoes?novo=1', permissao: 'admissoes:criar', ordem: { operacao: 7, gestao: 1 } },

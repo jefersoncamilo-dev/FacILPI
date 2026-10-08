@@ -129,7 +129,7 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     // O marcador "Em breve" continua suportado pela navegação; desde a UX-09
     // nenhuma tela do menu está pendente, então o teste afirma o inverso.
     seedSessao()
-    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['plantao:ler', 'avaliacoes:ler', 'planos_cuidados:ler', 'quartos_leitos:ler'] } } as any)
+    mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['plantao:ler', 'passagem_plantao:ler', 'avaliacoes:ler', 'planos_cuidados:ler', 'quartos_leitos:ler'] } } as any)
     renderShell()
 
     for (const nome of [/Passagem de Plantão/, /Avaliações/, /Plano de Cuidados/, /Quartos/]) {
