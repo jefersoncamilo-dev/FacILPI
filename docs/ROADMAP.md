@@ -34,7 +34,7 @@ Antes do BUILD, recuperar/sincronizar com segurança a worktree/branch de D.4 e 
 
 ## 8. D.5 — Passagem de Plantão
 
-Planejar e implementar após D.4. Usar fatos oficiais e contexto operacional sem criar fonte clínica paralela.
+Entregue fora da ordem original, antes do D.4: usa fatos oficiais e contexto operacional sem criar fonte clínica paralela.
 
 A passagem persistida (encerramento, itens, recebimento) passou a ser a **Fase 4 da Camada Operacional** (seção 16). A UX-09 atual continua como prévia ao vivo.
 
@@ -64,7 +64,7 @@ Cobrir fluxos críticos, regressões cross-tenant, perfis, autoria, medicação,
 
 ## 14. CI, cloud e produção
 
-Configurar CI e ambiente cloud/homologação somente após estabilização suficiente do núcleo. Deploy crítico exige aprovação humana, backup/rollback e validação do ambiente.
+O CI (GitHub Actions: frontend, backend SQLite e PostgreSQL) já existe e é a validação integrada autoritativa. Ambiente cloud/homologação e produção seguem pendentes; a VPS é a próxima frente. Deploy crítico exige aprovação humana, backup/rollback e validação do ambiente.
 
 ## 15. Módulos complementares
 
@@ -72,7 +72,7 @@ Estoque, financeiro, portal da família, agenda ampliada, relatórios e outras f
 
 ## 16. Camada Operacional — ciclo atual: Fases 1–5
 
-Registrada em 28/09 (#115). **Status: planejada, em execução por PRs sequenciais** — nada desta seção está integrado até o merge do PR correspondente (confirme no GitHub). Ciclo autorizado em 28/09; o D.4 (seção 7) segue pendente e não é substituído por este ciclo.
+Registrada em 28/09 (#115). **Status: Fases 1–5 integradas** (migrations 021–028); homologação técnica concluída. Confirme no GitHub antes de assumir o estado de uma fase. Ciclo autorizado em 28/09; o D.4 (seção 7) segue pendente e não é substituído por este ciclo.
 
 Objetivo do ciclo: o primeiro fluxo operacional diário completo.
 
@@ -94,7 +94,7 @@ Objetivo do ciclo: o primeiro fluxo operacional diário completo.
 
 ### Fase 1 — Alertas e Pendências (PR 1A backend, PR 1B frontend)
 
-- `alertas:ler` para cuidador, enfermagem, médico, responsável técnico e administrativo (migration 023, a criar; templates + clones institucionais; sem `platform_superuser`).
+- `alertas:ler` para cuidador, enfermagem, médico, responsável técnico e administrativo (migration 023; templates + clones institucionais; sem `platform_superuser`).
 - Localização operacional mínima no item (`unidade`, `quarto`, `leito`, `local`), sem exigir `quartos_leitos:ler` e sem conceder acesso ao módulo.
 - `natureza` separada de `gravidade` (domínio `alerta | pendencia | informativo | atividade`; nesta fase só `alerta` e `pendencia`). Contagem por natureza.
 - Contrato de tempo: `desde` (origem da situação), `prazo` (vencimento real, só quando o domínio fornece), `gerado_em` (metadado da resposta); "agora" é só referência de apresentação do frontend.

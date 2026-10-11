@@ -47,6 +47,7 @@ Use as skills do projeto quando o pedido corresponder:
 - `/security-review`: revisão de tenant/RBAC/autoria/auditoria e riscos.
 - `/review-migration`: revisão READ_ONLY de migration Alembic e compatibilidade SQLite/PostgreSQL.
 - `/review-pr`: revisão independente READ_ONLY de PR; nunca escreve na branch revisada.
+- `/validacao-visual`: validação na tela real, em ambiente descartável e com conta sintética.
 - `/handoff`: fechamento padronizado, incluindo impacto documental, sem inventar estado.
 
 ## Estado e memória

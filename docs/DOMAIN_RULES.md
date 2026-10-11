@@ -66,6 +66,14 @@ Programação não é execução. Ocorrência esperada não é execução. Profi
 
 Pendências/atrasos derivados não devem ser materializados ou classificados automaticamente sem regra aprovada. Não adicionar tolerâncias escondidas.
 
+### Meu Plantão (UX-01)
+- **Horizonte (G1):** a leitura do plantão (`/plantao`, `/meu-plantao`, prévia da passagem, central de alertas) renova a materialização de ocorrências e doses que tenham menos que o limiar à frente, reaproveitando a materialização idempotente e auditada. Nunca retroativa (a partir de agora), sempre no escopo da sessão; conflito concorrente não derruba a leitura.
+- **Local (G3) e grau na fila:** cada item traz o local do leito atual e o grau de dependência **ativo** do residente, como atributos de um item já autorizado por `plantao:ler`. Não concede listar quartos/leitos nem ler o histórico de graus (`grau_dependencia:ler` continua exigido para isso).
+- **Janela da fila:** por padrão começa 24 h atrás, para que o atrasado apareça. É recorte de apresentação, não tolerância de atraso.
+- **Registro rápido:** "Realizado" salva no ato; "Recusado" e "Não realizado" exigem motivo. O horário realizado é o instante do registro; o backend recusa horário futuro.
+- **Lote:** conveniência de tela. Cada cuidado marcado vira **uma** execução própria (executor da sessão, auditoria individual); falha num item não desfaz os demais. Só cuidados entram no lote — medicação e intercorrência, nunca. O atalho de grupo só marca o que já venceu ou vence em até 1 h; cuidados mais distantes só entram marcados um a um.
+- **Correção (decisão A, a implementar):** o cuidador registra, mas não corrige. Enfermagem, RT e administrador corrigem por estorno (`execucoes:corrigir`); nada é apagado e o registro original fica visível como corrigido. Só cuidados, sem medicação.
+
 ## Admissão
 
 Admissão é processo próprio e acompanha etapas sem duplicar as fontes oficiais de documentos, avaliações, quarto/leito ou PAIS. Avanços são explícitos/humanos. Cancelamento/desistência preservam histórico. Conclusão não deve disparar automaticamente medicação, tarefas, alertas, financeiro ou comunicações familiares sem regra própria.
@@ -127,4 +135,4 @@ Camada Operacional, Fase 2A (#120). O FacILPI sabe **quem responde por qual áre
 
 ## IA e voz
 
-IA pode apoiar entrada, organização e consulta, mas não deve tomar decisão clínica automaticamente. Entrada por voz futura deve preencher texto/estruturas sob confirmação humana, não executar conduta clínica por conta própria.
+IA pode apoiar entrada, organização e consulta, mas não deve tomar decisão clínica automaticamente. Entrada por voz futura deve preencher texto/estruturas sob confirmação humana, não executar conduta clínica por conta própria. Ditado (UX-01D, quando integrado): só reconhecimento no próprio aparelho, sem fallback para nuvem; o áudio não sai do dispositivo nem é armazenado; o texto é revisado antes de salvar.
