@@ -119,7 +119,7 @@ describe('UX-11 — Início visual: gráficos com dado real', () => {
 
 describe('UX-11 — ações rápidas pelo perfil de acesso', () => {
   it('só as ações permitidas, na ordem do contexto', () => {
-    const pode = (c?: string) => ['sinais_vitais:criar', 'admissoes:criar', 'plantao:ler'].includes(c || '')
+    const pode = (c?: string) => ['sinais_vitais:criar', 'admissoes:criar', 'plantao:ler', 'passagem_plantao:ler'].includes(c || '')
     expect(acoesDoPerfil(pode, false).map(a => a.id)).toEqual(['sinal', 'plantao', 'passagem', 'admissao'])
     expect(acoesDoPerfil(pode, true).map(a => a.id)).toEqual(['admissao', 'sinal', 'plantao', 'passagem'])
     expect(acoesDoPerfil(() => false, true)).toEqual([])

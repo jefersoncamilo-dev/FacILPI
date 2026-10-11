@@ -82,9 +82,9 @@ describe('UX-00A — modelo de navegação', () => {
     expect(grupo('residentes').itens.find(i => i.id === 'estoque')?.status).toBe('futuro')
   })
 
-  it('Passagem de Plantão mantém plantao:ler (lacuna documentada, sem mudança no UX-00)', () => {
+  it('G8: Passagem de Plantão usa passagem_plantao:ler, a chave do backend', () => {
     const passagem = itensVisiveis(grupo('assistencial'), tudo).find(i => i.id === 'passagem')
-    expect(passagem?.permissao).toBe('plantao:ler')
+    expect(passagem?.permissao).toBe('passagem_plantao:ler')
   })
 })
 

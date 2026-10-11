@@ -138,9 +138,8 @@ export const MODULOS: ModuloNav[] = [
       { id: 'cuidados', label: 'Cuidados', icon: HandHeart, status: 'futuro', descricao: 'Cuidados diários programados.' },
       { id: 'sinais', label: 'Sinais Vitais', icon: HeartPulse, status: 'ativo', to: '/sinais', permissao: 'sinais_vitais:ler', descricao: 'Aferições e histórico por residente.' },
       { id: 'intercorrencias', label: 'Intercorrências', icon: TriangleAlert, status: 'ativo', to: '/intercorrencias', permissao: 'intercorrencias:ler', descricao: 'Ocorrências registradas e acompanhamento.' },
-      // Lacuna documentada (UX-00): o backend também tem `passagem_plantao:ler`;
-      // a tela segue em `plantao:ler` até o alinhamento em issue própria.
-      { id: 'passagem', label: 'Passagem de Plantão', icon: ArrowLeftRight, status: 'ativo', to: '/passagem', permissao: 'plantao:ler', descricao: 'Resumo do turno para quem assume.' },
+      // G8: mesma chave do backend (#125); todo template com plantao:ler também tem esta.
+      { id: 'passagem', label: 'Passagem de Plantão', icon: ArrowLeftRight, status: 'ativo', to: '/passagem', permissao: 'passagem_plantao:ler', descricao: 'Resumo do turno para quem assume.' },
     ],
   },
   {
