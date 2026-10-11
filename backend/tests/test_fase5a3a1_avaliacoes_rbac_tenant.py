@@ -912,3 +912,28 @@ def test_31_pontuacao_nao_finita_recusada_no_put(avaliacoes_db):
         assert r.status_code == 200
         assert r.json()["pontuacao"] == 25.0
     asyncio.run(_with_client(avaliacoes_db, scenario))
+
+
+def test_32_put_audita_valores_anteriores(avaliacoes_db):
+    """P1-2: a edição sobrescreve a avaliação; o valor anterior fica na auditoria."""
+    import json
+
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi = _new_institution()
+        db.add(ilpi)
+        await db.flush()
+        user = await _create_ilpi_user(db, ilpi, permissions={"avaliacoes:atualizar"})
+        residente = await _create_residente(db, ilpi.id)
+        av = await _create_avaliacao_in_db(db, residente.id, ilpi.id, tipo="Katz", pontuacao=25.0)
+        await db.commit()
+        headers = _auth_headers(user, scope="ilpi", ilpi_id=ilpi.id)
+        r = await client.put(f"/api/avaliacoes/{av.id}", json={"pontuacao": 30.0, "classificacao": "Moderada"}, headers=headers)
+        assert r.status_code == 200, r.text
+        audit = (await db.execute(
+            select(m.Auditoria).where(m.Auditoria.acao == "avaliacoes.atualizar", m.Auditoria.registro_id == av.id)
+        )).scalar_one()
+        anteriores = json.loads(audit.valores_anteriores)
+        assert anteriores["pontuacao"] == 25.0
+        assert "classificacao" in anteriores
+        assert json.loads(audit.valores_posteriores)["pontuacao"] == 30.0
+    asyncio.run(_with_client(avaliacoes_db, scenario))
