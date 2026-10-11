@@ -377,6 +377,33 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
         )
         assert assign_platform.status_code == 403
 
+        # SEC-01: usuario de OUTRA ILPI nao pode ser vinculado aqui — senao o
+        # vinculo novo liberaria reset-password e a tomada da conta.
+        cross_assign = await client.post(
+            f"/api/usuarios/{other['user_id']}/perfis",
+            headers=local_headers,
+            json={"perfil_id": context["perfil_id"]},
+        )
+        assert cross_assign.status_code == 404, cross_assign.text
+        cross_links = (
+            await db.execute(
+                select(m.UsuarioIlpiPerfil.id).where(
+                    m.UsuarioIlpiPerfil.usuario_id == other["user_id"],
+                    m.UsuarioIlpiPerfil.ilpi_id == context["ilpi_id"],
+                )
+            )
+        ).scalars().all()
+        assert cross_links == []
+        cross_reset = await client.patch(f"/api/usuarios/{other['user_id']}/reset-password", headers=local_headers)
+        assert cross_reset.status_code == 404
+        unknown_assign = await client.post(
+            f"/api/usuarios/{uuid.uuid4()}/perfis",
+            headers=local_headers,
+            json={"perfil_id": context["perfil_id"]},
+        )
+        assert unknown_assign.status_code == 404
+        assert unknown_assign.json()["detail"]["code"] == cross_assign.json()["detail"]["code"]
+
         login_local = await _login(client, user_payload["email"], user_payload["senha_temporaria"])
         assert login_local.status_code == 200, login_local.text
         password_local = await client.put(
