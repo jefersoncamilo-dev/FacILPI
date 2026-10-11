@@ -21,8 +21,8 @@ export default tseslint.config(
     },
   },
   {
-    // Mocks de teste usam `as any` de propósito.
+    // Mocks de teste usam `as any` e guardam `this` (instância do mock) de propósito.
     files: ['src/__tests__/**', '**/*.test.{ts,tsx}'],
-    rules: { '@typescript-eslint/no-explicit-any': 'off' },
+    rules: { '@typescript-eslint/no-explicit-any': 'off', '@typescript-eslint/no-this-alias': 'off' },
   },
 )
