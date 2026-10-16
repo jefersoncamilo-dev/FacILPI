@@ -72,7 +72,7 @@ Pendências/atrasos derivados não devem ser materializados ou classificados aut
 - **Janela da fila:** por padrão começa 24 h atrás, para que o atrasado apareça. É recorte de apresentação, não tolerância de atraso.
 - **Registro rápido:** "Realizado" salva no ato; "Recusado" e "Não realizado" exigem motivo. O horário realizado é o instante do registro; o backend recusa horário futuro.
 - **Lote:** conveniência de tela. Cada cuidado marcado vira **uma** execução própria (executor da sessão, auditoria individual); falha num item não desfaz os demais. Só cuidados entram no lote — medicação e intercorrência, nunca. O atalho de grupo só marca o que já venceu ou vence em até 1 h; cuidados mais distantes só entram marcados um a um.
-- **Correção (decisão A, a implementar):** o cuidador registra, mas não corrige. Enfermagem, RT e administrador corrigem por estorno (`execucoes:corrigir`); nada é apagado e o registro original fica visível como corrigido. Só cuidados, sem medicação.
+- **Correção (decisão A, UX-01F):** o cuidador registra, mas não corrige. Enfermagem, RT e administrador corrigem por estorno (`execucoes:corrigir`), com motivo obrigatório: trocar o resultado (substituto no mesmo horário do fato) ou anular (estorno sem substituto; o cuidado volta para a fila). Nada é apagado e o registro original fica visível como corrigido. A tela lista os registros das últimas 24 h com o cuidado e quem registrou. Só cuidados, sem medicação.
 
 ## Admissão
 

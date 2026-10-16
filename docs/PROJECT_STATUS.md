@@ -51,7 +51,7 @@ As migrations 021–028 precisam ser aplicadas em ordem em qualquer ambiente per
 ### Meu Plantão — UX-01
 Integrado (#139–#145): G1, G3, registro rápido (Realizado / Recusado / Não realizado, motivo obrigatório nas exceções), três visões e filtros, fila padrão a partir de 24 h atrás (atrasados visíveis), seleção múltipla, registro em lote (uma execução e uma auditoria por cuidado; "Marcar até 1 h" no atalho de grupo), cards compactos com foto/iniciais, Emergência (abre o prontuário), título com o nome do funcionário e grau ativo na fila para quem tem `plantao:ler` (o histórico do grau continua exigindo `grau_dependencia:ler`). Regras em `docs/DOMAIN_RULES.md`.
 
-Não integrado: ditado por voz no aparelho (UX-01D, PR #144) e a tela de correção de registros (decisão A: Enfermagem, RT e administrador corrigem via estorno com `execucoes:corrigir`; cuidador registra mas não corrige; sem exclusão; só cuidados). G4 (percentual de refeição), G5 (concluídos/expirados) e G7 ("outro horário") seguem adiados.
+Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de registros (UX-01F, decisão A): Enfermagem, RT e administrador corrigem via estorno com `execucoes:corrigir` no próprio Meu Plantão; cuidador registra mas não corrige; sem exclusão; só cuidados — confirme no GitHub se o PR já foi integrado. G4 (percentual de refeição), G5 (concluídos/expirados) e G7 ("outro horário") seguem adiados.
 
 ### Auditoria geral (11/10/2026) — decisões e riscos conhecidos
 - **Situação do residente:** a API ainda aceita `situacao`/`data_admissao` do cliente no cadastro e na edição genéricos; a decisão foi manter como está. Só a Admissão ativa o residente pelas telas atuais. Risco conhecido, não corrigido.
