@@ -1,0 +1,56 @@
+# ENV-1 — borda do piloto FacILPI.
+#
+# Nenhum dominio real esta escrito aqui: `{$PUBLIC_HOST}` e resolvido no DEPLOY
+# gate, pelo ambiente. Trocar o host do piloto nao exige editar este arquivo.
+#
+# O Caddy obtem e renova o certificado sozinho (ACME), redireciona HTTP -> HTTPS
+# automaticamente e termina TLS. A rede interna do compose segue em HTTP puro,
+# que e o arranjo que a aplicacao ja esperava: `cookie_secure_for(ENVIRONMENT)`
+# decide o `Secure` do cookie pelo AMBIENTE declarado, nunca pelo esquema da
+# requisicao — atras de um proxy, olhar o esquema marcaria o cookie como inseguro.
+{
+	email {$ACME_EMAIL}
+}
+
+{$PUBLIC_HOST} {
+	encode zstd gzip
+
+	header {
+		# Um ano, o minimo aceito para preload. So faz efeito sobre HTTPS.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# SEC-02: CSP medida contra o build real (ver o comentario no fim do arquivo).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(self)"
+		# O servidor nao precisa anunciar o que e.
+		-Server
+	}
+
+	# A API vem primeiro: o path mais especifico ganha, e o restante cai no SPA.
+	# Same-origin de proposito — mantem `SameSite=strict` do cookie de refresh
+	# funcionando sem excecao e torna o CORS praticamente inerte.
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:8080
+	}
+}
+
+# SEC-02 — CSP. Inventario medido no build de producao (`npm run build`) e
+# conferido no navegador com a politica APLICADA, percorrendo as telas:
+# - script-src 'self': o Vite gera so `/assets/index-*.js`, sem script inline;
+#   nada de eval/new Function no bundle.
+# - style-src 'unsafe-inline': o Radix (react-remove-scroll) injeta <style> em
+#   tempo de execucao ao abrir dialogos. Estilo inline nao executa codigo; o
+#   que protege o token e script-src sem 'unsafe-inline'.
+# - Google Fonts: CSS em fonts.googleapis.com, arquivos em fonts.gstatic.com.
+# - img-src data: https:: a foto do residente e texto livre aceito so como
+#   data:image ou https (AvatarResidente); outras origens nao sao chamadas.
+# - connect-src 'self': a API e same-origin (/api) e o ditado nao usa rede.
+# - Download de anexo usa link blob:, que a CSP nao restringe.
+# - microphone=(self): o ditado (UX-01D) precisa do microfone na propria origem.
+# Uma tela nova que carregue origem externa precisa entrar aqui.

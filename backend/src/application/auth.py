@@ -1,26 +1,158 @@
 import os
 import time
+import logging
+import hashlib
+import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Dict
+from typing import Dict, Any
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from ..infrastructure.database import get_db
-from ..infrastructure.models import User
+from ..infrastructure.models import RefreshToken, User
+from .runtime import cookie_secure_for, resolve_environment
 
-JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-in-prod-min-32-chars-please")
+AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED"
+AUTH_CONTEXT_REQUIRED = "AUTH_CONTEXT_REQUIRED"
+
+JWT_SECRET_MIN_BYTES = 32
+
+# Defaults que ja circularam versionados neste repositorio. Estao aqui para serem
+# RECUSADOS: qualquer um deles e publico e permite forjar token de qualquer
+# usuario. A lista nao e segredo — e a negacao de tres segredos que nunca foram.
+JWT_SECRETS_CONHECIDOS = frozenset(
+    {
+        "dev-secret-change-in-prod-min-32-chars-please",
+        "dev-secret-change-me-min-32-chars-please",
+        "change-me-in-production-please-min-32-chars",
+    }
+)
+
+
+class InsecureJWTSecretError(RuntimeError):
+    """JWT_SECRET ausente, conhecido ou curto demais para assinar sessao."""
+
+
+def resolve_jwt_secret(env: "os._Environ[str] | dict[str, str]") -> str:
+    """Resolve o segredo de assinatura, falhando fechado.
+
+    Recusa por tres motivos, sem ordem de preferencia: ausencia, valor conhecido
+    e entropia insuficiente.
+
+    A verificacao NAO e condicionada a ENVIRONMENT de proposito. O default de
+    ENVIRONMENT e "development", e nem o compose nem o Dockerfile o definem —
+    entao condicionar recriaria exatamente a falha que isto corrige, so que
+    dependendo de uma segunda variavel igualmente esquecivel. Falhar sempre
+    torna o esquecimento barulhento, que e o unico modo de falha aceitavel aqui.
+
+    A excecao nomeia a variavel e o motivo; nunca o valor, nem um prefixo dele.
+    """
+    segredo = env.get("JWT_SECRET")
+    if segredo is None or not segredo.strip():
+        raise InsecureJWTSecretError(
+            "JWT_SECRET nao definida. Gere um segredo aleatorio de pelo menos "
+            f"{JWT_SECRET_MIN_BYTES} bytes por ambiente e nunca o versione."
+        )
+    if segredo in JWT_SECRETS_CONHECIDOS:
+        raise InsecureJWTSecretError(
+            "JWT_SECRET usa um valor de desenvolvimento publicado no repositorio. "
+            "Quem conhece o codigo assina token de qualquer usuario com ele. "
+            "Gere um segredo novo e exclusivo deste ambiente."
+        )
+    if len(segredo.encode("utf-8")) < JWT_SECRET_MIN_BYTES:
+        raise InsecureJWTSecretError(
+            f"JWT_SECRET tem menos de {JWT_SECRET_MIN_BYTES} bytes. "
+            "Use um segredo aleatorio com pelo menos esse tamanho."
+        )
+    return segredo
+
+
+# Resolvido no import: a falha derruba o processo antes de servir a primeira
+# requisicao, em vez de aceitar sessoes assinadas com segredo fraco.
+JWT_SECRET = resolve_jwt_secret(os.environ)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRY = int(os.getenv("JWT_EXPIRY", "3600"))
 RATE_LIMIT_AUTH = int(os.getenv("RATE_LIMIT_AUTH", "10"))
+LOGIN_FAILURE_LIMIT = 10
+LOGIN_FAILURE_WINDOW_SEC = 15 * 60
+# Teto de chaves do armazenamento em memoria. As chaves por conta sao escolhidas
+# por quem tenta logar: sem teto, e-mails inventados fariam a memoria crescer
+# ate o restart.
+RATE_STORE_MAX_KEYS = int(os.getenv("RATE_STORE_MAX_KEYS", "20000"))
+REFRESH_TOKEN_DAYS = int(os.getenv("REFRESH_TOKEN_DAYS", "7"))
+REFRESH_COOKIE_NAME = "refresh_token"
+REFRESH_COOKIE_PATH = "/api/auth"
+# SAFE2-C1: o ambiente passa a ter uma leitura canonica, em `runtime.py`.
+#
+# Antes, `secure` saia de um conjunto que incluia "staging", "prod" e "homolog",
+# e podia ser rebaixado pela variavel REFRESH_COOKIE_SECURE. Nenhum desses
+# valores era definido pelo compose, pelo Dockerfile ou pelo .env.example — o
+# piloto subiria enviando a sessao sem `Secure`. Agora deriva so do ambiente e
+# nao aceita override: em pilot/production, `Secure` nao se negocia.
+ENVIRONMENT = resolve_environment(os.environ)
+REFRESH_COOKIE_SECURE = cookie_secure_for(ENVIRONMENT)
+# PH-02/PR-2: sessoes reais emitidas pela aplicacao carregam sid=token_family.
+# Access token sem sid e recusado em qualquer ambiente, sem excecao para
+# development/test: testes que cunham JWT abrem uma sessao real antes.
 
+logger = logging.getLogger("facilpi.security")
 security = HTTPBearer(auto_error=False)
 
-# Simple in-memory rate limit per IP (for demo; production should use redis)
+# Limite por IP existente. Continua como primeira barreira. O mesmo
+# armazenamento process-local recebe chaves namespaced do limite por conta;
+# isso preserva o reset atomico que a suite ja faz com `_rate_store.clear()`.
 _rate_store: Dict[str, list] = {}
+_login_failure_store = _rate_store
+_LOGIN_FAILURE_PREFIX = "login-fail:"
+_LOGIN_PENDING_PREFIX = "login-pending:"
+
+
+def _key_rule(key: str) -> tuple[int, int] | None:
+    """(limite, janela em segundos) de uma chave de timestamps.
+
+    Reservas pendentes guardam identificadores, nao timestamps, e so existem
+    enquanto a requisicao de login esta em andamento: ficam fora da poda.
+    """
+    if key.startswith(_LOGIN_PENDING_PREFIX):
+        return None
+    if key.startswith(_LOGIN_FAILURE_PREFIX):
+        return LOGIN_FAILURE_LIMIT, LOGIN_FAILURE_WINDOW_SEC
+    return RATE_LIMIT_AUTH, 60
+
+
+def _make_room(now: float) -> None:
+    """Mantem o armazenamento abaixo do teto antes de criar uma chave nova.
+
+    Descarta primeiro as chaves vencidas; depois, as chaves livres menos
+    recentes. Chave bloqueada nunca sai antes do fim da janela — inundar o
+    armazenamento com e-mails inventados nao pode zerar o contador de uma conta
+    sob ataque — e reserva pendente nunca sai. Consequencia aceita: se tudo
+    estiver bloqueado ou pendente, o teto e ultrapassado ate as janelas vencerem.
+    """
+    if len(_rate_store) < RATE_STORE_MAX_KEYS:
+        return
+    evictable: list[tuple[float, str]] = []
+    for key in list(_rate_store):
+        rule = _key_rule(key)
+        if rule is None:
+            continue
+        limit, window = rule
+        active = [float(t) for t in _rate_store[key] if now - float(t) < window]
+        if not active:
+            del _rate_store[key]
+            continue
+        _rate_store[key] = active
+        if len(active) < limit:
+            evictable.append((max(active), key))
+    excess = len(_rate_store) - RATE_STORE_MAX_KEYS + 1
+    for _, key in sorted(evictable)[: max(excess, 0)]:
+        del _rate_store[key]
+
 
 def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 60):
     now = time.time()
@@ -29,8 +161,90 @@ def check_rate_limit(key: str, limit: int = RATE_LIMIT_AUTH, window_sec: int = 6
     lst = [t for t in lst if now - t < window_sec]
     if len(lst) >= limit:
         raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    if key not in _rate_store:
+        _make_room(now)
     lst.append(now)
     _rate_store[key] = lst
+
+
+def normalize_login(login: str) -> str:
+    return login.strip().lower()
+
+
+def _login_limit_keys(login: str) -> tuple[str, str]:
+    normalized = normalize_login(login)
+    return f"{_LOGIN_FAILURE_PREFIX}{normalized}", f"{_LOGIN_PENDING_PREFIX}{normalized}"
+
+
+def _active_login_failures(failure_key: str, now: float) -> list[float]:
+    failures = [
+        float(t)
+        for t in _rate_store.get(failure_key, [])
+        if now - float(t) < LOGIN_FAILURE_WINDOW_SEC
+    ]
+    if failures:
+        _rate_store[failure_key] = failures
+    else:
+        _rate_store.pop(failure_key, None)
+    return failures
+
+
+def check_login_failure_limit(login: str) -> None:
+    """Consulta sem reservar; mantida para diagnostico/testes."""
+    failure_key, pending_key = _login_limit_keys(login)
+    now = time.time()
+    failures = _active_login_failures(failure_key, now)
+    pending = _rate_store.get(pending_key, [])
+    if len(failures) + len(pending) >= LOGIN_FAILURE_LIMIT:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+
+
+def reserve_login_attempt(login: str) -> str:
+    """Reserva uma das 10 vagas antes do primeiro await da autenticação.
+
+    A reserva impede que varias requisicoes concorrentes vejam o mesmo contador
+    e todas ultrapassem o teto. Ela so vira falha depois de credencial invalida.
+    """
+    failure_key, pending_key = _login_limit_keys(login)
+    now = time.time()
+    failures = _active_login_failures(failure_key, now)
+    pending = list(_rate_store.get(pending_key, []))
+    if len(failures) + len(pending) >= LOGIN_FAILURE_LIMIT:
+        raise HTTPException(status_code=429, detail="Muitas tentativas. Tente novamente em instantes.")
+    reservation = secrets.token_urlsafe(12)
+    if pending_key not in _rate_store:
+        _make_room(now)
+    pending.append(reservation)
+    _rate_store[pending_key] = pending
+    return reservation
+
+
+def release_login_reservation(login: str, reservation: str) -> None:
+    _, pending_key = _login_limit_keys(login)
+    pending = [item for item in _rate_store.get(pending_key, []) if item != reservation]
+    if pending:
+        _rate_store[pending_key] = pending
+    else:
+        _rate_store.pop(pending_key, None)
+
+
+def register_login_failure(login: str, reservation: str | None = None) -> None:
+    failure_key, _ = _login_limit_keys(login)
+    now = time.time()
+    failures = _active_login_failures(failure_key, now)
+    if reservation is not None:
+        release_login_reservation(login, reservation)
+    if failure_key not in _rate_store:
+        _make_room(now)
+    failures.append(now)
+    _rate_store[failure_key] = failures
+
+
+def clear_login_failures(login: str, reservation: str | None = None) -> None:
+    failure_key, _ = _login_limit_keys(login)
+    _rate_store.pop(failure_key, None)
+    if reservation is not None:
+        release_login_reservation(login, reservation)
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -41,36 +255,317 @@ def verify_password(password: str, hashed: str) -> bool:
     except Exception:
         return False
 
-def create_access_token(user: User) -> str:
+def create_access_token(
+    user: User,
+    *,
+    scope: str | None = None,
+    ilpi_id: str | None = None,
+    perfil_id: str | None = None,
+    sid: str | None = None,
+) -> str:
     now = datetime.now(timezone.utc)
     exp = now + timedelta(seconds=JWT_EXPIRY)
     payload = {
         "sub": user.id,
         "email": user.email,
+        "jti": str(uuid.uuid4()),
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
+        "is_superuser": bool(getattr(user, "is_superuser", False)),
+        "exige_troca_senha": bool(getattr(user, "exige_troca_senha", False)),
     }
+    if sid is not None:
+        payload["sid"] = sid
+    if scope is not None:
+        payload["scope"] = scope
+        payload["ilpi_id"] = ilpi_id
+        payload["perfil_id"] = perfil_id
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+def decode_access_token(token: str) -> dict[str, Any]:
+    try:
+        return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise _authentication_required("expired_token")
+    except (jwt.InvalidTokenError, TypeError, ValueError):
+        raise _authentication_required("invalid_token")
+
+
+def access_session_identity_for_logout(request: Request) -> tuple[str, str] | None:
+    """Identifica sessao para revogacao sem transformar logout em autenticacao.
+
+    Logout e reducao de privilegio: um token expirado, mas ainda validamente
+    assinado, continua sendo prova suficiente para encerrar a familia que ele
+    nomeia. Bearer ausente, malformado, com assinatura invalida ou sem sid nao
+    deve impedir o cliente de limpar a sessao local nem revelar detalhes.
+    """
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token,
+            JWT_SECRET,
+            algorithms=[JWT_ALGORITHM],
+            options={"verify_exp": False},
+        )
+    except (jwt.InvalidTokenError, TypeError, ValueError):
+        return None
+    user_id = payload.get("sub")
+    sid = payload.get("sid")
+    if not isinstance(user_id, str) or not user_id:
+        return None
+    if not isinstance(sid, str) or not sid:
+        return None
+    return user_id, sid
+
+
+def token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_temporary_password() -> str:
+    return secrets.token_urlsafe(18)
+
+
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    response.set_cookie(
+        REFRESH_COOKIE_NAME,
+        refresh_token,
+        max_age=REFRESH_TOKEN_DAYS * 24 * 60 * 60,
+        httponly=True,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite="strict",
+        path=REFRESH_COOKIE_PATH,
+    )
+
+
+def clear_refresh_cookie(response: Response) -> None:
+    response.delete_cookie(
+        REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite="strict",
+    )
+
+
+async def issue_refresh_token(
+    db: AsyncSession,
+    user: User,
+    *,
+    scope: str | None,
+    ilpi_id: str | None,
+    perfil_id: str | None,
+    request: Request | None = None,
+    token_family: str | None = None,
+    replaces: RefreshToken | None = None,
+) -> str:
+    raw_token = generate_refresh_token()
+    now = datetime.now(timezone.utc)
+    refresh_id = str(uuid.uuid4())
+    family = token_family or str(uuid.uuid4())
+    row = RefreshToken(
+        id=refresh_id,
+        user_id=user.id,
+        token_hash=token_hash(raw_token),
+        jti=str(uuid.uuid4()),
+        token_family=family,
+        ilpi_id=ilpi_id,
+        perfil_id=perfil_id,
+        expires_at=now + timedelta(days=REFRESH_TOKEN_DAYS),
+        ip=request.client.host if request and request.client else None,
+        user_agent=request.headers.get("user-agent") if request else None,
+    )
+    db.add(row)
+    await db.flush()
+    if replaces is not None:
+        replaces.revoked_at = now
+        replaces.replaced_by = row.id
+    return raw_token
+
+
+async def load_refresh_token(db: AsyncSession, raw_token: str) -> RefreshToken | None:
+    if not raw_token:
+        return None
+    return (
+        await db.execute(
+            select(RefreshToken).where(RefreshToken.token_hash == token_hash(raw_token))
+        )
+    ).scalar_one_or_none()
+
+
+async def load_active_session_token(
+    db: AsyncSession,
+    user_id: str,
+    token_family: str,
+) -> RefreshToken | None:
+    """Retorna o unico refresh ativo que ancora uma familia de sessao."""
+    row = (
+        await db.execute(
+            select(RefreshToken)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family == token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+            .order_by(RefreshToken.created_at.desc())
+        )
+    ).scalars().first()
+    return row if refresh_token_is_valid(row) else None
+
+
+def access_session_identity(request: Request) -> tuple[str, str] | None:
+    """Extrai (user_id, sid) de Bearer assinado sem escolher sessao por heuristica."""
+    header = request.headers.get("authorization")
+    if not header:
+        return None
+    scheme, _, token = header.partition(" ")
+    if scheme.lower() != "bearer" or not token:
+        raise _authentication_required("missing_or_invalid_scheme")
+    payload = decode_access_token(token)
+    user_id = payload.get("sub")
+    sid = payload.get("sid")
+    if not isinstance(user_id, str) or not user_id:
+        raise _authentication_required("missing_subject")
+    if not isinstance(sid, str) or not sid:
+        raise _authentication_required("missing_session_id")
+    return user_id, sid
+
+
+def refresh_token_is_valid(row: RefreshToken | None) -> bool:
+    if row is None or row.revoked_at is not None:
+        return False
+    expires_at = row.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    return expires_at > datetime.now(timezone.utc)
+
+
+async def revoke_token_family(db: AsyncSession, user_id: str, token_family: str) -> int:
+    """Revoga a familia inteira de UMA sessao, nao o usuario.
+
+    Cada login abre familia nova e, dentro de uma familia, so o token mais
+    recente esta ativo. Escopar por (user_id, token_family) derruba exatamente a
+    cadeia comprometida e preserva as outras sessoes do mesmo usuario — que e a
+    diferenca entre isolar um roubo e deslogar a pessoa de todos os aparelhos.
+
+    Usa o indice composto ix_refresh_user_family, que ja existe.
+    """
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family == token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.revoked_at = now
+    return len(rows)
+
+
+async def revoke_user_refresh_tokens(db: AsyncSession, user_id: str) -> None:
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.revoked_at = now
+
+
+async def revoke_user_refresh_tokens_except_family(
+    db: AsyncSession,
+    user_id: str,
+    keep_token_family: str,
+) -> int:
+    """Revoga outras sessoes do usuario e preserva a familia atual."""
+    now = datetime.now(timezone.utc)
+    rows = (
+        await db.execute(
+            select(RefreshToken).where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.token_family != keep_token_family,
+                RefreshToken.revoked_at.is_(None),
+            )
+        )
+    ).scalars().all()
+    for row in rows:
+        row.revoked_at = now
+    return len(rows)
+
+
+def _authentication_required(reason: str) -> HTTPException:
+    # Never include the token or decoder exception in the response/log.
+    logger.warning("authentication_denied code=%s reason=%s", AUTHENTICATION_REQUIRED, reason)
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail={
+            "code": AUTHENTICATION_REQUIRED,
+            "message": "Autenticação obrigatória",
+        },
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def _authentication_context_required(user_id: str) -> HTTPException:
+    logger.warning(
+        "authentication_denied code=%s reason=user_inactive user_id=%s",
+        AUTH_CONTEXT_REQUIRED,
+        user_id,
+    )
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            "code": AUTH_CONTEXT_REQUIRED,
+            "message": "Contexto de autorização não disponível",
+        },
+    )
+
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(status_code=401, detail="Não autenticado")
+    if (
+        credentials is None
+        or not isinstance(credentials.scheme, str)
+        or credentials.scheme.lower() != "bearer"
+    ):
+        raise _authentication_required("missing_or_invalid_scheme")
     token = credentials.credentials
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = payload.get("sub")
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Token inválido")
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expirado")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token inválido")
+    payload = decode_access_token(token)
+
+    user_id = payload.get("sub")
+    if not isinstance(user_id, str) or not user_id:
+        raise _authentication_required("missing_subject")
+
+    sid = payload.get("sid")
+    if sid is None:
+        raise _authentication_required("missing_session_id")
+    if not isinstance(sid, str) or not sid:
+        raise _authentication_required("invalid_session_id")
+    if await load_active_session_token(db, user_id, sid) is None:
+        raise _authentication_required("revoked_or_expired_session")
 
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalar_one_or_none()
-    if not user or not user.ativo:
-        raise HTTPException(status_code=401, detail="Usuário não encontrado ou inativo")
+    if user is None:
+        raise _authentication_required("user_not_found")
+    if not user.ativo:
+        raise _authentication_context_required(user.id)
     return user

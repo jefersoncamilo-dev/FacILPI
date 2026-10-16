@@ -1,51 +1,186 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
-import { Modal } from '../components/Modal'
+import { mensagemDeErro } from '../services/api'
+import { ContextPicker } from '../components/ContextPicker'
+import { AuthLayout } from '../components/auth/AuthLayout'
+import { PasswordInput } from '../components/auth/PasswordInput'
+import { Button } from '../components/ui/button'
+import { Input, Label } from '../components/ui/input'
+import { Alert } from '../components/ui/feedback'
+import { SESSION_ENDED_KEY } from '../types/context'
+import type { ContextOption } from '../types/context'
+import { destinoAposLogin } from '../services/meuPlantao'
+
+// A marca só é consumida quando a pessoa tenta entrar de novo. Consumir ao
+// montar falhava: após um 401 o React já redireciona pela SPA (montando o
+// Login) antes do recarregamento completo pedido pelo interceptor, e a página
+// recarregada não encontrava mais a marca.
+function sessaoFoiEncerrada(): boolean {
+  try {
+    return sessionStorage.getItem(SESSION_ENDED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function consumirMarcaDeSessaoEncerrada() {
+  try {
+    sessionStorage.removeItem(SESSION_ENDED_KEY)
+  } catch {
+    /* sem armazenamento de sessão: nada a consumir */
+  }
+}
 
 export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [err, setErr] = useState('')
-  const [open, setOpen] = useState(false)
-  const { login, loading } = useAuth()
+  const [sessaoEncerrada, setSessaoEncerrada] = useState(sessaoFoiEncerrada)
+  const [options, setOptions] = useState<ContextOption[] | null>(null)
+  const [picking, setPicking] = useState(false)
+  const { login, loading, switchContext } = useAuth()
   const navigate = useNavigate()
 
   async function handle(e: React.FormEvent) {
     e.preventDefault()
     setErr('')
+    setSessaoEncerrada(false)
+    consumirMarcaDeSessaoEncerrada()
     try {
-      await login(email, password)
-      navigate('/')
+      const res = await login(email, password)
+      // Troca obrigatória tem prioridade sobre qualquer seleção de contexto.
+      if (res.requiresPasswordChange) {
+        navigate('/primeiro-acesso')
+        return
+      }
+      if (res.options.length > 1) {
+        // Múltiplos contextos: seleção explícita, sem substituir silenciosamente.
+        setOptions(res.options)
+      } else {
+        // Contexto único global é o operador da plataforma: a aplicação
+        // institucional responderia 403 em tudo.
+        // #126: com plantão ativo, Meu Plantão é o destino operacional.
+        navigate(res.options[0]?.scope === 'global' ? '/platform' : await destinoAposLogin())
+      }
     } catch (e: any) {
-      const msg = e.response?.data?.detail || 'Falha no login. Verifique credenciais.'
-      setErr(msg)
-      setOpen(true)
+      // Conta com mais de um vínculo institucional: o backend exige escolher o
+      // contexto no login, mas não há como listá-los antes da autenticação —
+      // decisão de produto/segurança pendente (UX-01 / #83). Até lá, dizer o
+      // que está acontecendo em vez de pedir uma escolha que a tela não oferece.
+      if (e?.response?.data?.detail?.code === 'PROFILE_SELECTION_REQUIRED') {
+        setErr(
+          'Sua conta está vinculada a mais de uma instituição, e o acesso com vários vínculos ainda não está disponível. Procure o administrador da ILPI.',
+        )
+        return
+      }
+      setErr(mensagemDeErro(e, 'Falha no login. Verifique credenciais.'))
     }
   }
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primaryLight via-white to-bg p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primaryDeep mx-auto flex items-center justify-center text-white font-bold text-xl">FL</div>
-          <h1 className="mt-4 text-2xl font-bold text-primaryDeep">FáciLPI</h1>
-          <p className="text-textMuted text-sm mt-1">Gestão, Cuidados e Conformidade</p>
+  async function choose(opt: ContextOption) {
+    if (opt.scope === 'global') {
+      navigate('/platform')
+      return
+    }
+    setErr('')
+    setPicking(true)
+    try {
+      await switchContext(opt)
+      navigate(await destinoAposLogin())
+    } catch (e: any) {
+      setErr(mensagemDeErro(e, 'Contexto não autorizado'))
+    } finally {
+      setPicking(false)
+    }
+  }
+
+  if (options) {
+    return (
+      <AuthLayout>
+        <div className="space-y-6">
+          <div className="space-y-1.5">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Escolha o contexto</h1>
+            <p className="text-sm text-muted-foreground">
+              Sua conta possui mais de um contexto. Selecione onde deseja operar agora.
+            </p>
+          </div>
+          {err && <Alert variant="error">{err}</Alert>}
+          <ContextPicker options={options} onPick={choose} disabled={picking} />
+          {picking && (
+            <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" /> Abrindo contexto…
+            </p>
+          )}
         </div>
-        <form onSubmit={handle} className="card space-y-4">
-          <h2 className="font-semibold text-lg">Entrar</h2>
-          <input className="input" placeholder="E-mail" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
-          <input className="input" placeholder="Senha" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
-          <button disabled={loading} className="btn-primary w-full disabled:opacity-60">
-            {loading ? 'Entrando...' : 'Entrar'}
-          </button>
-          <p className="text-sm text-center text-textMuted">Não tem conta? <Link to="/register" className="text-primary font-semibold hover:underline">Cadastre-se</Link></p>
+      </AuthLayout>
+    )
+  }
+
+  return (
+    <AuthLayout>
+      <div className="space-y-7">
+        <div className="space-y-1.5">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[1.75rem]">Boas-vindas</h1>
+          <p className="text-sm text-muted-foreground">Entre com o seu e-mail e senha para continuar.</p>
+        </div>
+
+        {sessaoEncerrada && !err && (
+          <Alert variant="info" title="Sua sessão foi encerrada">
+            Por segurança, entre novamente para continuar de onde parou.
+          </Alert>
+        )}
+        {err && <Alert variant="error">{err}</Alert>}
+
+        <form onSubmit={handle} className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="login-email">E-mail</Label>
+            <Input
+              id="login-email"
+              placeholder="E-mail"
+              type="email"
+              inputMode="email"
+              autoComplete="username"
+              autoFocus
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              aria-invalid={err ? true : undefined}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="login-senha">Senha</Label>
+            <PasswordInput
+              id="login-senha"
+              placeholder="Senha"
+              autoComplete="current-password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              aria-invalid={err ? true : undefined}
+              required
+            />
+          </div>
+          <Button type="submit" size="lg" className="w-full" disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="animate-spin" aria-hidden="true" /> Entrando…
+              </>
+            ) : (
+              'Entrar'
+            )}
+          </Button>
         </form>
+
+        {/* PH-01: o acesso ao FacILPI é sempre provisionado — o operador da
+            plataforma cria o primeiro gestor e a ILPI cria a própria equipe.
+            Não há autocadastro nem recuperação de senha self-service no
+            backend; a redefinição é feita pelo administrador da ILPI. */}
+        <div className="space-y-1 border-t border-border pt-5 text-center text-sm text-muted-foreground">
+          <p>O acesso é criado pela sua instituição. Procure o administrador da ILPI.</p>
+          <p>Esqueceu a senha? O administrador da ILPI pode redefini-la para você.</p>
+        </div>
       </div>
-      <Modal open={open} onClose={() => setOpen(false)} title="Atenção">
-        <p className="text-sm text-textMain">{err}</p>
-        <button onClick={() => setOpen(false)} className="btn-primary w-full mt-4">Fechar</button>
-      </Modal>
-    </div>
+    </AuthLayout>
   )
 }

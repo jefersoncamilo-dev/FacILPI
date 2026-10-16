@@ -4,6 +4,40 @@ Plataforma SaaS para gestão completa de Instituições de Longa Permanência pa
 
 > Gerado a partir de `Project.md` + `Prompt.txt` + `config/*.md` (pegada-de-silicio).
 
+> **Atenção — este README é histórico.** Foi escrito na fase inicial e descreve
+> stack, portas e layout de ambiente que **já não são os atuais** (ele ainda
+> menciona Supabase e `backend/.env`; o piloto usa PostgreSQL em container,
+> Caddy na borda e um `.env` único na raiz). Em qualquer conflito, prevalecem o
+> código integrado e os documentos em `docs/`. Mantido como referência de
+> intenção do produto, não como guia operacional.
+
+## Estado operacional
+
+Snapshot; confirme no GitHub quando a atualidade importar.
+
+```
+OFF_HOST_COPY              = VERIFIED
+OFF_HOST_RECOVERY_CHAIN    = VERIFIED
+POSTGRES_DISASTER_RESTORE  = VERIFIED
+DISASTER_RECOVERY_OFF_HOST = VERIFIED
+BACKUP_DR                  = CLOSED
+READY_FOR_VPS              = YES
+
+FEATURE_FREEZE             = ACTIVE
+PILOT_GO                   = NOT_EVALUATED
+REAL_DATA                  = BLOCKED
+```
+
+O backup local, a cópia off-host cifrada e o disaster recovery completo foram
+provados de ponta a ponta com dados sintéticos: `pg_dump -Fc` real → `age` →
+Backblaze B2 com Object Lock → **destruição do ambiente de origem** →
+recuperação exclusivamente off-host → `pg_restore` em PostgreSQL novo →
+validação pela própria aplicação.
+
+Fontes autoritativas: [`docs/RUNBOOK_BACKUP_RESTORE.md`](docs/RUNBOOK_BACKUP_RESTORE.md),
+[`docs/RUNBOOK_OFFHOST.md`](docs/RUNBOOK_OFFHOST.md) e
+[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
+
 ## Stack
 
 - **Backend:** Python 3.11, FastAPI, SQLAlchemy 2 (async), Alembic, Pydantic v2, `asyncpg`/`aiosqlite` + `greenlet`, `PyJWT` + `bcrypt`, Uvicorn
