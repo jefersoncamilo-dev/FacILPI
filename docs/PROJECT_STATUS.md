@@ -56,7 +56,7 @@ Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de regi
 ### Auditoria geral (11/10/2026) — decisões e riscos conhecidos
 - **Situação do residente:** a API ainda aceita `situacao`/`data_admissao` do cliente no cadastro e na edição genéricos; a decisão foi manter como está. Só a Admissão ativa o residente pelas telas atuais. Risco conhecido, não corrigido.
 - **Adiados (exigem migration/RBAC):** autoria por FK em avaliações, sinais vitais e intercorrências (hoje nome em texto) e retirada das permissões clínicas de escrita do template `ilpi_admin` (herança das migrations 006–014).
-- **Antes da VPS:** rate limit de login em memória por `client.host` (proxy/múltiplos workers), JWT em `localStorage` sem CSP.
+- **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. O JWT segue em `localStorage`; a CSP sem script inline reduz o risco, e a saída para cookie fica como decisão futura.
 - **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 e React Router 7 (upgrades maiores, sem decisão).
 - **Branches:** `main` está muitos commits atrás da linha integrada; a promoção para `main` ainda não tem critério definido.
 
