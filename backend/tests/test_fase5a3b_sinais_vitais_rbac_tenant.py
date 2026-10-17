@@ -625,11 +625,13 @@ def test_16_spoof_autoria_ignorado(sinais_db):
                 "usuario_id": _new_id(),
                 "autor": "Outro Autor",
                 "executor": "Outro Executor",
+                "autor_id": _new_id(),
             },
             headers=headers,
         )
         assert r.status_code == 201
         assert r.json()["profissional"] == "Tec. Vera"
+        assert r.json()["autor_id"] == user.id
     asyncio.run(_with_client(sinais_db, scenario))
 
 

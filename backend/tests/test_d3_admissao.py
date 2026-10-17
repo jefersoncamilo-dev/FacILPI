@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from .revisoes import ESQUEMA_DOS_MODELOS
 from .test_d3_admissao_migration import _engine, _migrate, _ref
 from .test_d2_rotina import (
     _create_ilpi_user, _create_platform_user, _create_funcionario, _create_residente,
@@ -27,17 +28,16 @@ URL = "/api/admissoes/"
 # Issue #25 (H0-3): DOMAIN exige documentos:validar, que so existe a partir
 # da migration 017. d3_db precisa migrar ate 017 (nao mais o HEAD "016" de
 # test_d3_admissao_migration) para o catalogo/grants ficarem consistentes.
-# Alvo do banco funcional: acompanha a ultima revisao que altera o modelo
-# exercitado por estes testes. A 018 adicionou colunas em `documentos`, entao
-# parar na 017 faria o ORM consultar colunas inexistentes. Os testes da
+# Alvo do banco funcional: a revisao que os modelos atuais exigem
+# (tests/revisoes.py). A 018 e depois a 029 acrescentaram colunas mapeadas;
+# parar antes faria o ORM consultar colunas inexistentes. Os testes da
 # TRANSICAO de cada migration continuam pinados no seu proprio par.
-HEAD_018 = "018_a3_documentos_arquivo"
 
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def d3_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD_018)
+    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
     return ref
 
 
@@ -387,7 +387,9 @@ def test_platform_profissao_e_templates_sem_grants(d3_db):
         for key in ("ilpi_admin", "administrativo", "responsavel_tecnico", "cuidador", "enfermagem", "medico"):
             keys = set((await db.scalars(select(m.Permissao.chave).join(m.PerfilPermissao).join(m.Perfil)
                                         .where(m.Perfil.chave == key, m.Perfil.ilpi_id.is_(None)))).all())
-            assert not keys & ALL
+            # A 021 (#103/#104) concedeu exatamente admissoes:* ao Administrador da
+            # ILPI; os perfis institucionais seguem sem nenhuma (so atribuicao explicita).
+            assert keys & ALL == (ALL if key == "ilpi_admin" else set()), key
         # Atribuicao explicita, nao profissao, passa a permitir leitura.
         profile_id = await db.scalar(select(m.UsuarioIlpiPerfil.perfil_id).where(m.UsuarioIlpiPerfil.usuario_id == professional.id))
         await _grant(db, profile_id, {"admissoes:ler"})

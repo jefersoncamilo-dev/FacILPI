@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 
+from .revisoes import ESQUEMA_DOS_MODELOS
 from .test_alertas_gestor import GESTOR, _agora, _alertas, _gestor, _residente
 from .test_d2_rotina import _create_funcionario, _new_id, _prog_payload, _setup_pais_vigente
 from .test_d3_admissao import _client
@@ -25,7 +26,7 @@ URL = "/api/central-alertas"
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def expirado_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
     return ref
 
 

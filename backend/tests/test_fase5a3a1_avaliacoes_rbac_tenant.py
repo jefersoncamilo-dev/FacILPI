@@ -587,11 +587,13 @@ def test_14_payload_hostile_professionals(avaliacoes_db):
             "tipo": "Katz",
             "profissional": "Pessoa Errada",
             "instituicao_id": _new_id(),
+            "autor_id": _new_id(),
         }
         r = await client.post("/api/avaliacoes/", json=payload, headers=headers)
         assert r.status_code == 201
         data = r.json()
         assert data["profissional"] == "Enf. Maria"
+        assert data["autor_id"] == user.id
     asyncio.run(_with_client(avaliacoes_db, scenario))
 
 

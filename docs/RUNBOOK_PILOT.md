@@ -75,7 +75,7 @@ versão que está sendo implantada. Confira antes com
 atual:
 
 ```
-028_alerta_expirado (head)
+029_autoria_autor_id (head)
 ```
 
 Se divergir, **pare aqui**. Subir a aplicação sobre um esquema que não é o head
