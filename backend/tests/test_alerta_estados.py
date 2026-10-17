@@ -15,6 +15,7 @@ import pytest
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
+from .revisoes import ESQUEMA_DOS_MODELOS
 from .test_alertas_gestor import _agora, _alertas, _gestor, _residente, _run, _um, alertas_db  # noqa: F401
 from .test_alertas_operacionais import _institucional
 from .test_d2_rotina import _create_ilpi_user, _headers, _new_id, _new_institution
@@ -185,10 +186,16 @@ def test_026_concede_cria_e_reverte(pre026_db):
             .join(m.Permissao, m.Permissao.id == m.PerfilPermissao.permissao_id)
             .where(m.Permissao.chave == "alertas:assumir", m.Perfil.ilpi_id.is_(None)))).all())
         assert chaves == {"ilpi_admin", "cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"}
+    asyncio.run(_client(pre026_db, depois))
+    # A API usa os modelos atuais: o historico e criado no schema que eles mapeiam.
+    # O downgrade abaixo desce por 029..027 e precisa ser recusado na 026.
+    _migrate(pre026_db, target=ESQUEMA_DOS_MODELOS)
+
+    async def historico(client, db):
         ilpi, _, queda, _ = await _cenario(db)
         _, h, _ = await _institucional(db, ilpi, "cuidador")
         await _acao(client, h, "assumir", f"intercorrencia_grave_aberta:{queda.id}")
-    asyncio.run(_client(pre026_db, depois))
+    asyncio.run(_client(pre026_db, historico))
     falha = _migrate(pre026_db, target="025_escala_planejada", command="downgrade", success=False)
     assert "alerta_estados tem historico" in falha.stdout + falha.stderr
 

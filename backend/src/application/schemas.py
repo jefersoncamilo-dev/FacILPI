@@ -993,6 +993,7 @@ class SinalVitalCreate(BaseModel):
         return self
 
 class SinalVitalResponse(SinalVitalCreate):
+    autor_id: Optional[str] = None
     # Leitura sem a restricao nova da entrada: registro gravado antes dela nao
     # pode derrubar a listagem.
     temperatura: Optional[float] = None
@@ -1086,6 +1087,7 @@ class IntercorrenciaResponse(BaseModel):
     ocorrido_em: Optional[datetime] = None
     id: str
     responsavel: Optional[str] = None
+    autor_id: Optional[str] = None
     # Timestamp tecnico de criacao do registro.
     data: Optional[datetime] = None
     class Config:
@@ -1309,6 +1311,7 @@ class AvaliacaoUpdate(BaseModel):
 
 
 class AvaliacaoResponse(AvaliacaoCreate):
+    autor_id: Optional[str] = None
     # Leitura sem a restricao da entrada: registro gravado antes dela nao pode
     # derrubar a listagem.
     pontuacao: Optional[float] = None

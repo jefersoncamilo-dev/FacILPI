@@ -10,6 +10,7 @@ from datetime import timedelta
 import pytest
 from sqlalchemy import select, text, update
 
+from .revisoes import ESQUEMA_DOS_MODELOS
 from .test_alertas_gestor import _agora
 from .test_alertas_operacionais import _institucional
 from .test_d2_rotina import _create_funcionario, _create_ilpi_user, _headers, _new_id, _prog_payload, _setup_pais_vigente
@@ -25,7 +26,7 @@ URL = "/api/passagens"
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def passagem_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
     return ref
 
 
@@ -270,10 +271,16 @@ def test_027_concede_e_recusa_downgrade_com_historico(pre027_db):
         ambas = {"passagem_plantao:ler", "passagem_plantao:registrar"}
         assert por_perfil == {"ilpi_admin": ambas, "cuidador": ambas, "enfermagem": ambas, "responsavel_tecnico": ambas,
                               "medico": {"passagem_plantao:ler"}}
+    _run(pre027_db, depois)
+    # A API usa os modelos atuais: o historico e criado no schema que eles mapeiam.
+    # O downgrade abaixo desce por 029..028 e precisa ser recusado na 027.
+    _migrate(pre027_db, target=ESQUEMA_DOS_MODELOS)
+
+    async def historico(client, db):
         ilpi, _, _, _ = await _ilpi_com_area(client, db)
         _, h, _ = await _institucional(db, ilpi, "cuidador")
         await _ok(await client.post(URL + "/", headers=h, json={"observacoes": [{"categoria": "outro", "texto": "Tudo tranquilo"}]}), 201)
-    _run(pre027_db, depois)
+    _run(pre027_db, historico)
     falha = _migrate(pre027_db, target="026_alerta_estados", command="downgrade", success=False)
     assert "passagens_plantao tem historico" in falha.stdout + falha.stderr
 
