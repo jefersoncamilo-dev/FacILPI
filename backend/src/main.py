@@ -959,6 +959,9 @@ async def create_avaliacao(
             data[k] = v.strip()
     obj = m.Avaliacao(**data)
     db.add(obj)
+    # O id nasce no flush (default do modelo); sem ele a auditoria de criação
+    # gravava registro_id NULO e não apontava para a avaliação criada.
+    await db.flush()
     add_audit(
         db,
         acao="avaliacoes.criar",
