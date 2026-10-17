@@ -465,6 +465,7 @@ RESPONSE_KEYS = {
     "residente_id", "tipo", "gravidade", "situacao", "sbar_situacao", "sbar_contexto",
     "sbar_avaliacao", "sbar_recomendacao", "providencia", "desfecho", "ocorrido_em",
     "id", "responsavel", "data",
+    "autor_id",  # 029: autoria por usuario (contrato aditivo)
 }
 LEGACY_SITUACOES = ["Aberta", None, "Encerrada"]
 LEGACY_TIPOS = ["", "   "]
