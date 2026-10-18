@@ -11,6 +11,7 @@ import { RegistrarCuidado } from '../components/plantao/RegistrarCuidado'
 import { RegistrarLote } from '../components/plantao/RegistrarLote'
 import { ItemPlantao } from '../components/plantao/ItemPlantao'
 import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
+import { CorrigirRegistros } from '../components/plantao/CorrigirRegistros'
 import {
   FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar, marcavelEmGrupo,
   type Filtros, type Situacao, type Visao,
@@ -410,6 +411,15 @@ export function MeuPlantao() {
           )}
           <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
         </div>
+        {/* UX-01F (decisão A): só quem corrige (Enfermagem, RT, administrador) vê. */}
+        {pode('execucoes:corrigir') && pode('execucoes:ler') && (
+          <div className="flex justify-end">
+            <CorrigirRegistros
+              nomes={nomes}
+              onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
+            />
+          </div>
+        )}
       </div>
 
       {sucesso && <Alert variant="success">{sucesso}</Alert>}

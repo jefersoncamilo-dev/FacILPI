@@ -506,14 +506,28 @@ async def registrar_execucao(payload: s.ExecucaoCreate, request: Request, db: As
 
 @execucoes_router.get("/", response_model=list[s.ExecucaoResponse])
 async def listar_execucoes(residente_id: str | None = None, programacao_id: str | None = None,
-    ocorrencia_id: str | None = None, skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
+    ocorrencia_id: str | None = None, a_partir_de: AwareDatetime | None = None,
+    skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db), context: SecurityContext = Depends(require_permission("execucoes:ler"))):
     query = select(m.ExecucaoCuidado).where(m.ExecucaoCuidado.ilpi_id == context.ilpi_id)
     for key, value in (("residente_id", residente_id), ("programacao_id", programacao_id), ("ocorrencia_id", ocorrencia_id)):
         if value is not None:
             query = query.where(getattr(m.ExecucaoCuidado, key) == value)
-    return [_data(obj) for obj in (await db.scalars(query.order_by(
-        m.ExecucaoCuidado.ocorrido_em.desc(), m.ExecucaoCuidado.id).offset(skip).limit(limit))).all()]
+    if a_partir_de is not None:
+        query = query.where(m.ExecucaoCuidado.ocorrido_em >= _utc(a_partir_de))
+    objects = (await db.scalars(query.order_by(
+        m.ExecucaoCuidado.ocorrido_em.desc(), m.ExecucaoCuidado.id).offset(skip).limit(limit))).all()
+    # UX-01F: o que foi feito e por quem, para a tela de correção conferir sem
+    # novas consultas. Contexto do próprio registro (mesma ILPI), não acesso novo.
+    ocorrencia_ids = {obj.ocorrencia_id for obj in objects}
+    descricoes = dict((await db.execute(select(m.OcorrenciaCuidado.id, m.PaisIntervencao.descricao).join(
+        m.PaisIntervencao, (m.PaisIntervencao.id == m.OcorrenciaCuidado.intervencao_id)
+        & (m.PaisIntervencao.ilpi_id == m.OcorrenciaCuidado.ilpi_id)).where(
+        m.OcorrenciaCuidado.ilpi_id == context.ilpi_id, m.OcorrenciaCuidado.id.in_(ocorrencia_ids)))).all()) if ocorrencia_ids else {}
+    executor_ids = {obj.executor_id for obj in objects}
+    nomes = dict((await db.execute(select(m.User.id, m.User.nome).where(m.User.id.in_(executor_ids)))).all()) if executor_ids else {}
+    return [{**_data(obj), "descricao": descricoes.get(obj.ocorrencia_id), "executor_nome": nomes.get(obj.executor_id)}
+            for obj in objects]
 
 
 @execucoes_router.get("/{id}", response_model=s.ExecucaoResponse)

@@ -105,6 +105,57 @@ export async function registrarCuidado(item: Pick<PlantaoItem, 'registro_id'>, r
   })
 }
 
+// ---- UX-01F: correção de registros de cuidado (decisão A) ----
+// Correção = estorno (`execucoes:corrigir`): o registro original nunca é apagado,
+// fica marcado como corrigido com motivo, autor e horário. Só cuidados.
+
+export interface ExecucaoRegistrada {
+  id: string
+  residente_id: string
+  ocorrencia_id: string
+  resultado: ResultadoCuidado
+  ocorrido_em: string
+  observacao?: string | null
+  justificativa?: string | null
+  estornado_em?: string | null
+  motivo_estorno?: string | null
+  substitui_id?: string | null
+  descricao?: string | null
+  executor_nome?: string | null
+}
+
+export async function listarRegistrosRecentes(aPartirDe: string): Promise<ExecucaoRegistrada[]> {
+  const { data } = await api.get<ExecucaoRegistrada[]>('/execucoes-cuidado/', { params: { a_partir_de: aPartirDe, limit: 200 } })
+  return data
+}
+
+export interface Correcao {
+  motivo: string
+  // null = anular: o registro não deveria existir e o cuidado volta para a fila.
+  novo: RegistroCuidado | null
+}
+
+export async function corrigirRegistro(registro: ExecucaoRegistrada, correcao: Correcao) {
+  const justificativa = correcao.novo?.justificativa?.trim()
+  const observacao = correcao.novo?.observacao?.trim()
+  const { data } = await api.post(`/execucoes-cuidado/${registro.id}/estornar`, {
+    motivo: correcao.motivo.trim(),
+    ...(correcao.novo
+      ? {
+          substituto: {
+            ocorrencia_id: registro.ocorrencia_id,
+            resultado: correcao.novo.resultado,
+            // Corrige o resultado, não o horário: o fato continua no mesmo instante.
+            ocorrido_em: registro.ocorrido_em,
+            ...(correcao.novo.resultado !== 'executada' && justificativa ? { justificativa } : {}),
+            ...(observacao ? { observacao } : {}),
+          },
+        }
+      : {}),
+  })
+  return data
+}
+
 // C5AdministracaoCreate: quantidade obrigatória quando "administrada";
 // justificativa obrigatória nos demais resultados.
 export type ResultadoDose = 'administrada' | 'recusada' | 'omitida'

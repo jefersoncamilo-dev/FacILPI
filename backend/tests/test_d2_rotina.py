@@ -813,3 +813,33 @@ def test_24_ux01e_grau_ativo_na_fila_sem_abrir_historico(rotina_db):
         # A fila mostra só o grau ativo; o histórico continua protegido.
         assert (await client.get("/api/graus-dependencia/", params={"residente_id": com_grau.id}, headers=h)).status_code == 403
     asyncio.run(_with_client(rotina_db, op))
+
+
+def test_25_ux01f_listagem_para_correcao_e_anulacao(rotina_db):
+    async def op(client, db):
+        ilpi = _new_institution()
+        user = await _create_ilpi_user(db, ilpi, permissions=PAIS6 | D2_ALL)
+        rev = await _create_funcionario(db, ilpi)
+        res = await _create_residente(db, ilpi.id)
+        await db.commit()
+        h = _headers(user, ilpi_id=ilpi.id)
+        pid, iid = await _setup_pais_vigente(client, h, res.id, rev.id)
+        prog_id = (await client.post("/api/programacoes-cuidado/", json=_prog_payload(pid, iid), headers=h)).json()["id"]
+        oid = (await client.get("/api/ocorrencias-cuidado/", params={"programacao_id": prog_id}, headers=h)).json()[0]["id"]
+        agora = datetime.now(timezone.utc)
+        eid = (await client.post("/api/execucoes-cuidado/", json={
+            "ocorrencia_id": oid, "resultado": "executada", "ocorrido_em": agora.isoformat()}, headers=h)).json()["id"]
+
+        # A listagem traz o que foi feito e por quem; a_partir_de recorta o período.
+        lista = (await client.get("/api/execucoes-cuidado/", params={"a_partir_de": (agora - timedelta(hours=1)).isoformat()}, headers=h)).json()
+        assert [(e["id"], e["descricao"], e["executor_nome"]) for e in lista] == [(eid, "Banho assistido", user.nome)]
+        assert (await client.get("/api/execucoes-cuidado/", params={"a_partir_de": (agora + timedelta(minutes=1)).isoformat()}, headers=h)).json() == []
+
+        # Anular = estorno sem substituto: nada é apagado e o cuidado volta a ficar pendente.
+        r = await client.post(f"/api/execucoes-cuidado/{eid}/estornar", json={"motivo": "Registrado no residente errado"}, headers=h)
+        assert r.status_code == 200, r.text
+        assert (await client.get(f"/api/ocorrencias-cuidado/{oid}", headers=h)).json()["pendente"] is True
+        lista = (await client.get("/api/execucoes-cuidado/", headers=h)).json()
+        assert lista[0]["id"] == eid and lista[0]["estornado_em"] is not None
+        assert lista[0]["motivo_estorno"] == "Registrado no residente errado"
+    asyncio.run(_with_client(rotina_db, op))

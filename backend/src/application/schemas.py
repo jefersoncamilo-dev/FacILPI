@@ -1688,6 +1688,9 @@ class ExecucaoResponse(BaseModel):
     motivo_estorno: Optional[str] = None
     substitui_id: Optional[str] = None
     substituto: Optional["ExecucaoResponse"] = None
+    # UX-01F: só na listagem — descrição da intervenção e nome de quem registrou.
+    descricao: Optional[str] = None
+    executor_nome: Optional[str] = None
     created_at: Optional[datetime] = None
 
 
