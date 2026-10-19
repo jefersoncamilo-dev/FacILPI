@@ -83,7 +83,7 @@ Ferramental: `ops/backup.sh`, `ops/restore.sh`, `ops/offhost_upload.sh`, `ops/of
 Pendências conhecidas desta frente, **nenhuma bloqueando a VPS**: lifecycle rule do bucket (GATE-5), instalação na VPS (GATE-7) e os testes negativos de `DeleteObject` do GATE-6, não executados porque DELETE permaneceu proibido em todos os gates.
 
 ### CI / cloud / produção
-O CI do GitHub Actions está configurado e é a validação integrada autoritativa: três jobs — `Frontend (testes, TypeScript, build)`, `Backend (SQLite)` e `Backend (PostgreSQL)`. Homologação cloud e produção **não** estão configuradas; a VPS é a próxima frente. Verifique a situação atual antes de qualquer ação operacional.
+O CI do GitHub Actions está configurado e é a validação integrada autoritativa: três jobs — `Frontend (testes, TypeScript, build)`, `Backend (SQLite)` e `Backend (PostgreSQL)`. Existe uma homologação publicada, com banco PostgreSQL no Neon (cadeia em 028); a forma de deploy do backend e do frontend desse ambiente não está descrita no repositório. Produção não está configurada; a VPS com o `docker-compose.yml` (Caddy + PostgreSQL próprio, `docs/RUNBOOK_PILOT.md`) é a frente seguinte. Verifique a situação atual antes de qualquer ação operacional.
 
 ```
 FEATURE_FREEZE = ACTIVE

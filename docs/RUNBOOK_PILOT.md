@@ -2,10 +2,10 @@
 
 Procedimento operacional para subir e verificar o ambiente do piloto.
 
-> **Não há recuperação de desastre.** `BACKUP_RESTORE` ainda não foi
-> implementado. Perder o host significa perder banco e anexos. Enquanto esse gate
-> não fechar, o snapshot do provedor é a única rede de proteção, e ela é externa
-> a este projeto.
+> **Backup e recuperação:** `BACKUP_DR = CLOSED` (ver `docs/PROJECT_STATUS.md`).
+> Antes de qualquer migration ou deploy, gere o backup pelo
+> `docs/RUNBOOK_BACKUP_RESTORE.md` e a cópia off-host pelo
+> `docs/RUNBOOK_OFFHOST.md`. Este runbook não substitui aqueles.
 
 ## Topologia
 
@@ -69,10 +69,13 @@ docker compose run --rm backend alembic upgrade head
 docker compose run --rm backend alembic current
 ```
 
-A saída de `alembic current` deve conter exatamente:
+A saída de `alembic current` deve conter exatamente o head do repositório na
+versão que está sendo implantada. Confira antes com
+`docker compose run --rm backend alembic heads` (um único head). Na versão
+atual:
 
 ```
-020_documentos_admin_anexar (head)
+028_alerta_expirado (head)
 ```
 
 Se divergir, **pare aqui**. Subir a aplicação sobre um esquema que não é o head
@@ -172,7 +175,7 @@ docker compose up -d
 anterior a uma migration já aplicada, o esquema continua no head novo. Não existe
 downgrade seguro pelo runbook; nesse caso, pare e escale.
 
-## O que o BACKUP_RESTORE precisará proteger
+## O que o backup protege
 
 Registrado aqui para que o próximo gate não redescubra a lista:
 
@@ -181,7 +184,7 @@ Registrado aqui para que o próximo gate não redescubra a lista:
 3. **segredos/config** — o `.env` do host, sob custódia própria, fora do backup
    de dados
 4. **versão da aplicação** — tag ou SHA da imagem que gerou aqueles dados
-5. **head do Alembic** — `020_documentos_admin_anexar` no momento do backup
+5. **head do Alembic** — o `alembic current` no momento do backup
 
 Os itens 4 e 5 são os que costumam faltar, e são o que separa "temos um dump" de
 "conseguimos restaurar".
