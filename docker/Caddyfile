@@ -21,6 +21,9 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		# SEC-02: CSP medida contra o build real (ver o comentario no fim do arquivo).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Permissions-Policy "camera=(), geolocation=(), microphone=(self)"
 		# O servidor nao precisa anunciar o que e.
 		-Server
 	}
@@ -37,8 +40,17 @@
 	}
 }
 
-# CSP NAO foi definida neste BUILD, deliberadamente. O bundle do Vite e o Tailwind
-# geram estilos e scripts cujo inventario de origens precisa ser medido no
-# ambiente montado; publicar uma politica sem essa medicao quebraria a aplicacao
-# em producao ou nasceria tao permissiva que nao protegeria nada. Fica registrado
-# como pendencia do DEPLOY gate, com os demais cabecalhos ja no lugar.
+# SEC-02 — CSP. Inventario medido no build de producao (`npm run build`) e
+# conferido no navegador com a politica APLICADA, percorrendo as telas:
+# - script-src 'self': o Vite gera so `/assets/index-*.js`, sem script inline;
+#   nada de eval/new Function no bundle.
+# - style-src 'unsafe-inline': o Radix (react-remove-scroll) injeta <style> em
+#   tempo de execucao ao abrir dialogos. Estilo inline nao executa codigo; o
+#   que protege o token e script-src sem 'unsafe-inline'.
+# - Google Fonts: CSS em fonts.googleapis.com, arquivos em fonts.gstatic.com.
+# - img-src data: https:: a foto do residente e texto livre aceito so como
+#   data:image ou https (AvatarResidente); outras origens nao sao chamadas.
+# - connect-src 'self': a API e same-origin (/api) e o ditado nao usa rede.
+# - Download de anexo usa link blob:, que a CSP nao restringe.
+# - microphone=(self): o ditado (UX-01D) precisa do microfone na propria origem.
+# Uma tela nova que carregue origem externa precisa entrar aqui.
