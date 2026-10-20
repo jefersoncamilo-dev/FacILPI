@@ -182,6 +182,7 @@ def test_hostile_payload_authorship_correction_close_audit(c4_db):
         hostile["data"] = "1900-01-01T00:00:00Z"
         row = await _create(client, resident, headers, **hostile)
         assert row["responsavel"] == employee.nome
+        assert row["autor_id"] == creator.id
         assert row["id"] != hostile["id"] and row["data"][:4] != "1900"
         editor = await _create_ilpi_user(db, ilpi, permissions=KEYS, profile_key="c4_editor", nome="Editor")
         await db.commit()
@@ -196,6 +197,7 @@ def test_hostile_payload_authorship_correction_close_audit(c4_db):
         assert closed.json()["situacao"] == "encerrada"
         assert closed.json()["desfecho"] == "Registro concluido"
         assert closed.json()["responsavel"] == employee.nome
+        assert correction.json()["autor_id"] == creator.id and closed.json()["autor_id"] == creator.id
         assert closed.json()["tipo"] == "queda corrigida"
         audit = (await db.execute(select(m.Auditoria).where(m.Auditoria.registro_id == row["id"]))).scalars().all()
         by_action = {item.acao: item for item in audit}
@@ -463,6 +465,7 @@ RESPONSE_KEYS = {
     "residente_id", "tipo", "gravidade", "situacao", "sbar_situacao", "sbar_contexto",
     "sbar_avaliacao", "sbar_recomendacao", "providencia", "desfecho", "ocorrido_em",
     "id", "responsavel", "data",
+    "autor_id",  # 029: autoria por usuario (contrato aditivo)
 }
 LEGACY_SITUACOES = ["Aberta", None, "Encerrada"]
 LEGACY_TIPOS = ["", "   "]

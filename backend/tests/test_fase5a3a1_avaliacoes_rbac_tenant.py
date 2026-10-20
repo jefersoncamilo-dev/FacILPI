@@ -587,11 +587,13 @@ def test_14_payload_hostile_professionals(avaliacoes_db):
             "tipo": "Katz",
             "profissional": "Pessoa Errada",
             "instituicao_id": _new_id(),
+            "autor_id": _new_id(),
         }
         r = await client.post("/api/avaliacoes/", json=payload, headers=headers)
         assert r.status_code == 201
         data = r.json()
         assert data["profissional"] == "Enf. Maria"
+        assert data["autor_id"] == user.id
     asyncio.run(_with_client(avaliacoes_db, scenario))
 
 
@@ -936,4 +938,23 @@ def test_32_put_audita_valores_anteriores(avaliacoes_db):
         assert anteriores["pontuacao"] == 25.0
         assert "classificacao" in anteriores
         assert json.loads(audit.valores_posteriores)["pontuacao"] == 30.0
+    asyncio.run(_with_client(avaliacoes_db, scenario))
+
+
+def test_33_auditoria_de_criacao_aponta_para_a_avaliacao(avaliacoes_db):
+    """A auditoria de criação precisa do id da avaliação (antes saía NULO)."""
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi = _new_institution()
+        db.add(ilpi)
+        await db.flush()
+        user = await _create_ilpi_user(db, ilpi, permissions={"avaliacoes:criar"})
+        residente = await _create_residente(db, ilpi.id)
+        await db.commit()
+        headers = _auth_headers(user, scope="ilpi", ilpi_id=ilpi.id)
+        r = await client.post("/api/avaliacoes/", json={"residente_id": residente.id, "tipo": "Katz", "pontuacao": 3}, headers=headers)
+        assert r.status_code == 201, r.text
+        audit = (await db.execute(
+            select(m.Auditoria).where(m.Auditoria.acao == "avaliacoes.criar", m.Auditoria.usuario_id == user.id)
+        )).scalar_one()
+        assert audit.registro_id == r.json()["id"]
     asyncio.run(_with_client(avaliacoes_db, scenario))

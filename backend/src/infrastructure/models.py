@@ -291,6 +291,8 @@ class Avaliacao(Base):
     tipo: Mapped[str] = mapped_column(String(50), nullable=False)  # Katz, Lawton, etc
     instrumento: Mapped[str] = mapped_column(String(100), nullable=True)
     profissional: Mapped[str] = mapped_column(String(255), nullable=True)
+    # 029: autoria por usuario; o texto ao lado segue como foto do nome.
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True)
     respostas: Mapped[str] = mapped_column(Text, nullable=True)  # JSON string
     pontuacao: Mapped[float] = mapped_column(Float, nullable=True)
     classificacao: Mapped[str] = mapped_column(String(100), nullable=True)
@@ -839,6 +841,8 @@ class SinalVital(Base):
     glicemia: Mapped[float] = mapped_column(Float, nullable=True)
     peso: Mapped[float] = mapped_column(Float, nullable=True)
     profissional: Mapped[str] = mapped_column(String(255), nullable=True)
+    # 029: autoria por usuario; o texto ao lado segue como foto do nome.
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True)
     data: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
     observacao: Mapped[str] = mapped_column(Text, nullable=True)
 
@@ -867,6 +871,8 @@ class Intercorrencia(Base):
     providencia: Mapped[str] = mapped_column(Text, nullable=True)
     desfecho: Mapped[str] = mapped_column(Text, nullable=True)
     responsavel: Mapped[str] = mapped_column(String(255), nullable=True)
+    # 029: autoria por usuario; o texto ao lado segue como foto do nome.
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, index=True)
     # Par ocorrido_em/registrado_em de D.2/C.5: `ocorrido_em` e quando o evento
     # aconteceu (pode ser retroativo) e `data` e quando o registro foi criado.
     # `data` nao foi renomeada para `registrado_em` neste BUILD.

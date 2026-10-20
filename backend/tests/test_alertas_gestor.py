@@ -16,6 +16,7 @@ import pytest
 from sqlalchemy import func, select, update
 
 from .test_c5_medicacao_migration import KEYS as C5_KEYS
+from .revisoes import ESQUEMA_DOS_MODELOS
 from .test_d2_rotina import (
     D2_ALL, PAIS6, _create_funcionario, _create_ilpi_user, _headers, _new_id, _new_institution,
     _prog_payload, _setup_pais_vigente,
@@ -37,7 +38,7 @@ GESTOR = {"alertas:ler"} | FONTES | ADMISSOES | PAIS6 | D2_ALL | C5_KEYS
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def alertas_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
     return ref
 
 

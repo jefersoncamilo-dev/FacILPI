@@ -951,6 +951,7 @@ async def create_avaliacao(
     session_tenant = context.ilpi_id
     data["ilpi_id"] = session_tenant
     data["profissional"] = await _resolve_profissional(db, context)
+    data["autor_id"] = context.user.id
     await _ensure_avaliacao_parent(db, data, context)
     if data.get("data") is None:
         data["data"] = datetime.now(timezone.utc)
@@ -959,6 +960,9 @@ async def create_avaliacao(
             data[k] = v.strip()
     obj = m.Avaliacao(**data)
     db.add(obj)
+    # O id nasce no flush (default do modelo); sem ele a auditoria de criação
+    # gravava registro_id NULO e não apontava para a avaliação criada.
+    await db.flush()
     add_audit(
         db,
         acao="avaliacoes.criar",
@@ -1287,6 +1291,7 @@ async def create_sinal_vital(
     data.pop("executor", None)
     data["ilpi_id"] = context.ilpi_id
     data["profissional"] = await _resolve_profissional(db, context)
+    data["autor_id"] = context.user.id
     await _ensure_sinal_parent(db, data.get("residente_id"), context)
     if data.get("data") is None:
         data["data"] = datetime.now(timezone.utc)
@@ -1388,6 +1393,7 @@ async def create_intercorrencia(
         **dados,
         ilpi_id=context.ilpi_id,
         responsavel=await _resolve_profissional(db, context),
+        autor_id=context.user.id,
     )
     db.add(obj)
     await db.flush()

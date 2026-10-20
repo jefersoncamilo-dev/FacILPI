@@ -84,9 +84,22 @@ else:
     # postgres: enable pool; pgbouncer handling via query params already
     pass
 
-_engine_kwargs = {"echo": False}
-if DATABASE_URL.startswith("postgresql"):
-    _engine_kwargs.update({"pool_size": 5, "max_overflow": 10})
+def engine_kwargs_for(url: str) -> dict:
+    """Parâmetros do engine por banco.
+
+    PostgreSQL: o pool reaproveita conexões, e o provedor (Neon) derruba as que
+    ficam ociosas. Sem `pool_pre_ping`, a primeira requisição depois de um
+    período parado recebia "connection is closed" e respondia 500 (visto na
+    homologação). O ping testa a conexão antes do uso e troca a morta;
+    `pool_recycle` renova antes da janela de ociosidade do provedor.
+    """
+    kwargs = {"echo": False}
+    if url.startswith("postgresql"):
+        kwargs.update({"pool_size": 5, "max_overflow": 10, "pool_pre_ping": True, "pool_recycle": 240})
+    return kwargs
+
+
+_engine_kwargs = engine_kwargs_for(DATABASE_URL)
 
 engine = create_async_engine(DATABASE_URL, **_engine_kwargs)
 

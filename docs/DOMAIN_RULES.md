@@ -32,6 +32,9 @@ O Residente é o centro da arquitetura funcional. Processos como Admissão não 
 
 Avaliação é um fato/instrumento registrado. Grau de dependência oficial exige confirmação humana e histórico próprio. Não automatize decisão clínica nem use o campo legado de Residente como nova fonte oficial.
 
+
+### Autoria de avaliações, sinais vitais e intercorrências (029)
+O autor é o usuário da sessão, gravado em `autor_id` (FK para `users`). O nome em texto (`profissional` / `responsavel`) continua sendo gravado como foto do nome no momento do registro e nunca vem do payload. Registros anteriores à 029 receberam `autor_id` só a partir da auditoria de criação; o que não casou sem ambiguidade ficou sem autor, com o nome em texto preservado. Corrigir uma intercorrência não troca o autor.
 ## Documentos
 
 Obrigatoriedade documental é uma regra institucional/processual. Validade temporal não deve alterar automaticamente o status do documento sem regra explicitamente aprovada. Em Admissão, documento obrigatório só é considerado atendido conforme o contrato atual do módulo; não invente uma lista universal de documentos obrigatórios.
