@@ -74,7 +74,7 @@ Estoque, financeiro, portal da família, agenda ampliada, relatórios e outras f
 
 ## 16. Camada Operacional — ciclo atual: Fases 1–5
 
-Registrada em 28/09 (#115). **Status: Fases 1–5 integradas** (migrations 021–028); homologação técnica concluída. Confirme no GitHub antes de assumir o estado de uma fase. Ciclo autorizado em 28/09; o D.4 (seção 7) segue pendente e não é substituído por este ciclo.
+Registrada em 28/09 (#115). **Status: Fases 1–5 integradas** (migrations 021–028); homologação técnica concluída. Confirme no GitHub antes de assumir o estado de uma fase. Ciclo autorizado em 28/09; o D.4 (seção 7) foi integrado à parte e não é substituído por este ciclo.
 
 Objetivo do ciclo: o primeiro fluxo operacional diário completo.
 
