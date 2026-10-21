@@ -26,11 +26,13 @@ Perfis clínicos/institucionais explícitos. Profissão não concede permissão 
 
 Fluxo próprio de Admissão ligado às fontes oficiais de Residente, documentos, avaliações, quarto/leito e PAIS.
 
-## 7. D.4 — Prontuário longitudinal — próximo gate funcional
+## 7. D.4 — Prontuário longitudinal — integrado
 
-Implementar/corrigir como projeção read-only das fontes oficiais, com paginação/cursor real, eventos historicamente honestos e sem tabela duplicadora de prontuário.
+Projeção read-only das fontes oficiais, sem tabela duplicadora (#21 backend, #27 frontend). O PLAN do M20 (20/10/2026) confirmou aderência ao contrato: cursor keyset no SQL, um evento por transição de prescrição, estorno e substituição visíveis, tenant da sessão e RBAC por origem; CI verde no commit `6328994`.
 
-Antes do BUILD, recuperar/sincronizar com segurança a worktree/branch de D.4 e preservar alterações locais autorizadas.
+Decisão: a Passagem de Plantão não entra no prontuário.
+
+Follow-ups: N1 (autoria legível e links das origens para a tela), #163 (cursor com `data` nula em avaliações e sinais vitais), #164 (documentos), #165 (conclusão da admissão) e #166 (vínculos de familiares).
 
 ## 8. D.5 — Passagem de Plantão
 
@@ -72,7 +74,7 @@ Estoque, financeiro, portal da família, agenda ampliada, relatórios e outras f
 
 ## 16. Camada Operacional — ciclo atual: Fases 1–5
 
-Registrada em 28/09 (#115). **Status: Fases 1–5 integradas** (migrations 021–028); homologação técnica concluída. Confirme no GitHub antes de assumir o estado de uma fase. Ciclo autorizado em 28/09; o D.4 (seção 7) segue pendente e não é substituído por este ciclo.
+Registrada em 28/09 (#115). **Status: Fases 1–5 integradas** (migrations 021–028); homologação técnica concluída. Confirme no GitHub antes de assumir o estado de uma fase. Ciclo autorizado em 28/09; o D.4 (seção 7) foi integrado à parte e não é substituído por este ciclo.
 
 Objetivo do ciclo: o primeiro fluxo operacional diário completo.
 
