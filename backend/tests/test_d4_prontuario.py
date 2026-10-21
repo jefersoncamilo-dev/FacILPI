@@ -357,10 +357,18 @@ def test_rbac_por_origem(prontuario_db):
         # full vê ambos
         r=await client.get(_pront_url(res.id), headers=h_full)
         assert {e["origem"] for e in r.json()["items"]} >= {"avaliacao","sinal_vital"}
-        # sem nenhuma permissao aplicavel -> 403
-        none=await _create_ilpi_user(db, ilpi, permissions={"residentes:ler"}, profile_key="none2")
+        # sem nenhuma permissao de leitura de origem -> 403
+        none=await _create_ilpi_user(db, ilpi, permissions={"residentes:atualizar"}, profile_key="none2")
         await db.commit()
         r=await client.get(_pront_url(res.id), headers=_headers(none, ilpi_id=ilpi.id))
+        assert r.status_code==403
+        # N2 (030, decisao A): residentes:ler sozinho le so a origem "saida", nunca dado clinico.
+        so_res=await _create_ilpi_user(db, ilpi, permissions={"residentes:ler"}, profile_key="so_res")
+        await db.commit()
+        r=await client.get(_pront_url(res.id), headers=_headers(so_res, ilpi_id=ilpi.id))
+        assert r.status_code==200, r.text
+        assert {e["origem"] for e in r.json()["items"]} <= {"saida"}
+        r=await client.get(_pront_url(res.id)+"?origem=avaliacao", headers=_headers(so_res, ilpi_id=ilpi.id))
         assert r.status_code==403
     asyncio.run(_with_client(prontuario_db, op))
 
