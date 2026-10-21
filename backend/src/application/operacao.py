@@ -31,6 +31,7 @@ from ..infrastructure.database import get_db
 from .alertas import _fuso
 from .audit import add_audit
 from .rotina import _data, _utc
+from .saida_residente import SITUACOES_SAIDA
 from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_ilpi_context, require_permission
 
 escala_router = APIRouter(prefix="/escala", tags=["escala"], dependencies=[Depends(require_ilpi_context)])
@@ -348,14 +349,18 @@ def _area(area: m.AreaOperacional, leitos: list[LeitoDaArea] | None = None) -> A
 
 
 async def residentes_das_areas(db: AsyncSession, ilpi: str, area_ids: list[str]) -> dict[str, list[str]]:
-    """Residentes que ocupam AGORA os leitos ativos de cada area (ocupacao e a fonte)."""
+    """Residentes que ocupam AGORA os leitos ativos de cada area (ocupacao e a fonte).
+
+    N2 (030): quem ja saiu da ILPI fica fora do turno mesmo antes de o leito ser liberado.
+    """
     if not area_ids:
         return {}
     linhas = (await db.execute(
         select(m.AreaLeito.area_id, m.QuartoLeito.residente_atual_id)
         .join(m.QuartoLeito, (m.QuartoLeito.id == m.AreaLeito.quarto_leito_id) & (m.QuartoLeito.instituicao_id == m.AreaLeito.ilpi_id))
+        .join(m.Residente, (m.Residente.id == m.QuartoLeito.residente_atual_id) & (m.Residente.instituicao_id == m.QuartoLeito.instituicao_id))
         .where(m.AreaLeito.ilpi_id == ilpi, m.AreaLeito.area_id.in_(area_ids), m.AreaLeito.fim_em.is_(None),
-               m.QuartoLeito.residente_atual_id.is_not(None))
+               m.QuartoLeito.residente_atual_id.is_not(None), m.Residente.situacao.not_in(SITUACOES_SAIDA))
     )).all()
     por_area: dict[str, list[str]] = {a: [] for a in area_ids}
     for area_id, residente_id in linhas:

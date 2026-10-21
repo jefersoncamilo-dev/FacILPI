@@ -45,6 +45,8 @@ ORIGEM_PERMISSION = {
     "execucao_cuidado": "execucoes:ler",
     "ocupacao": "quartos_leitos:ler",
     "ausencia": "ausencias:ler",
+    # N2 (030): saida do residente (obito, transferencia, desligamento, retorno).
+    "saida": "residentes:ler",
 }
 
 ORIGEM_CATEGORIA = {
@@ -58,6 +60,7 @@ ORIGEM_CATEGORIA = {
     "execucao_cuidado": "assistencia",
     "ocupacao": "administrativo",
     "ausencia": "administrativo",
+    "saida": "administrativo",
 }
 
 EFFECTIVE_PAIS_STATES = {"aprovado", "vigente", "encerrado", "substituido"}
@@ -621,6 +624,33 @@ async def get_prontuario(
                 autor_id=r.usuario_id,
                 resumo=f"Ausencia {r.tipo}",
                 situacao=r.tipo,
+            ))
+
+    # Saida do residente (N2): estorno fica visivel no proprio evento.
+    if "saida" in allowed:
+        q = select(m.ResidenteSaida).where(m.ResidenteSaida.ilpi_id == tenant, m.ResidenteSaida.residente_id == residente_id)
+        if desde is not None:
+            q = q.where(m.ResidenteSaida.ocorrido_em >= _utc(desde))
+        if ate is not None:
+            q = q.where(m.ResidenteSaida.ocorrido_em <= _utc(ate))
+        if situacao is not None:
+            q = q.where(m.ResidenteSaida.tipo == situacao)
+        q = _apply_keyset(q, m.ResidenteSaida.ocorrido_em, m.ResidenteSaida.registrado_em, m.ResidenteSaida.id, "saida", "saida", cursor_tuple, limit)
+        rows = (await db.execute(q)).scalars().all()
+        for r in rows:
+            events.append(_event(
+                ocorrido_em=_utc(r.ocorrido_em),
+                registrado_em=_utc(r.registrado_em),
+                origem="saida",
+                tipo="saida",
+                categoria=ORIGEM_CATEGORIA["saida"],
+                registro_id=r.id,
+                residente_id=residente_id,
+                autor_id=r.registrado_por,
+                resumo=f"Saida do residente: {r.tipo}",
+                situacao=r.tipo,
+                estornado=r.estornado_em is not None,
+                motivo_estorno=r.motivo_estorno,
             ))
 
     # filtro categoria residual (defesa extra; allowed ja restringe por origem)

@@ -39,6 +39,16 @@ O autor é o usuário da sessão, gravado em `autor_id` (FK para `users`). O nom
 
 Obrigatoriedade documental é uma regra institucional/processual. Validade temporal não deve alterar automaticamente o status do documento sem regra explicitamente aprovada. Em Admissão, documento obrigatório só é considerado atendido conforme o contrato atual do módulo; não invente uma lista universal de documentos obrigatórios.
 
+## Saída do residente (N2, 030)
+
+Óbito (data e hora; na ILPI ou em hospital), transferência (outra instituição ou hospital, com destino), desligamento (fim de contrato, a pedido da família, do residente ou da ILPI) e retorno à família ficam em `residente_saidas`, append-only, com o autor da sessão e auditoria própria. Só residente "Ativo" sai; a situação passa a "Falecido", "Transferido", "Desligado" ou "Retornou a familia" na mesma transação, e há no máximo uma saída vigente por residente.
+
+- Registra: `residentes:registrar_saida` (Administrador da ILPI, RT, Enfermagem e Administrativo, templates e clones). Cuidador, Médico e Platform Superuser não registram; profissão não concede.
+- Leito: liberado só se quem registra marcar a opção e tiver `quartos_leitos:atualizar`; nada é liberado sozinho.
+- PAIS, prescrições e programações: não são encerrados pela saída. A tela lista as pendências (cada origem pela sua leitura) e cada uma segue a ação humana do próprio módulo.
+- Estorno: `residentes:estornar_saida` (Administrador da ILPI e RT), com motivo; o registro original continua visível e o residente volta a "Ativo"; o leito não volta sozinho.
+- Repercussão: residente que saiu deixa de gerar alertas em todas as regras e sai do turno (Meu Plantão, fila do plantão, passagem). A saída aparece no prontuário com `residentes:ler`. "Em admissão" segue pelas regras da Admissão.
+
 ## Quarto/leito e ausência
 
 Leito representa ocupação estrutural. Ausência/hospitalização representa presença física temporariamente alterada. Não libere leito automaticamente apenas porque existe ausência.

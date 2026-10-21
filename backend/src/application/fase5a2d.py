@@ -299,13 +299,25 @@ async def liberar_leito(
     if leito.residente_atual_id is None:
         raise HTTPException(status_code=409, detail="Leito não possui residente para liberar")
 
+    await liberar_leito_ocupado(db, context, leito, request)
+    await db.commit()
+    await db.refresh(leito)
+    return leito
+
+
+async def liberar_leito_ocupado(db: AsyncSession, context: SecurityContext, leito: m.QuartoLeito, request: Request) -> None:
+    """Fecha o historico e libera o leito, sem commit (o chamador decide a transacao).
+
+    Usado pela liberacao avulsa e pela saida do residente (N2), que so libera
+    por escolha explicita de quem registra.
+    """
     now = _now_utc()
     old_vals = {"residente_atual_id": leito.residente_atual_id, "data_ocupacao": str(leito.data_ocupacao)}
 
     # Close history
     hist_result = await db.execute(
         select(m.OcupacaoHistorico).where(
-            m.OcupacaoHistorico.quarto_leito_id == leito_id,
+            m.OcupacaoHistorico.quarto_leito_id == leito.id,
             m.OcupacaoHistorico.instituicao_id == context.ilpi_id,
             m.OcupacaoHistorico.residente_id == leito.residente_atual_id,
             m.OcupacaoHistorico.data_saida.is_(None),
@@ -329,9 +341,6 @@ async def liberar_leito(
         valores_posteriores={"residente_atual_id": None, "data_ocupacao": None},
         request=request,
     )
-    await db.commit()
-    await db.refresh(leito)
-    return leito
 
 
 @quartos_leitos_router.post("/transferencia", response_model=s.QuartoLeitoResponse)

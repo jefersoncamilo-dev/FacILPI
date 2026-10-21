@@ -14,6 +14,7 @@ import { ProntuarioLinhaDoTempo } from '../components/prontuario/ProntuarioLinha
 import { ProntuarioCarregando, ProntuarioErro, ProntuarioVazio } from '../components/prontuario/ProntuarioEstados'
 import { RegistrarSinalVitalModal } from '../components/sinaisVitais/RegistrarSinalVitalModal'
 import { RegistrarIntercorrenciaModal } from '../components/intercorrencias/RegistrarIntercorrenciaModal'
+import { RegistrarSaidaModal } from '../components/residentes/RegistrarSaidaModal'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { useContextoResidente } from '../hooks/useContextoResidente'
 import { PRONTUARIO_ORIGENS, type ProntuarioOrigem } from '../services/prontuario'
@@ -93,6 +94,9 @@ export function ResidenteProntuario() {
   const [registrandoIntercorrencia, setRegistrandoIntercorrencia] = useState(false)
   const [sucessoIntercorrencia, setSucessoIntercorrencia] = useState('')
   const [semPermissaoIntercorrencia, setSemPermissaoIntercorrencia] = useState(false)
+  const [registrandoSaida, setRegistrandoSaida] = useState(false)
+  const [sucessoSaida, setSucessoSaida] = useState('')
+  const [versaoResidente, setVersaoResidente] = useState(0)
 
   useEffect(() => {
     if (!id) return
@@ -102,7 +106,7 @@ export function ResidenteProntuario() {
       .get(`/residentes/${id}`)
       .then(({ data }) => setResidente(data))
       .catch((e: any) => setResidenteErro(mensagemErro(e.response?.status)))
-  }, [id])
+  }, [id, versaoResidente])
 
   const carregar = useCallback(
     async (filtrosAtuais: FiltrosValue) => {
@@ -244,7 +248,23 @@ export function ResidenteProntuario() {
                   Plano de cuidados
                 </Link>
               )}
+              {/* N2 (#171): ação rara e irreversível sem estorno; fica por último e só para residente ativo. */}
+              {residente?.situacao === 'Ativo' && pode('residentes:registrar_saida') && (
+                <button
+                  type="button"
+                  onClick={() => { setSucessoSaida(''); setRegistrandoSaida(true) }}
+                  className="btn-secondary w-full sm:w-auto"
+                >
+                  Registrar saída
+                </button>
+              )}
             </div>
+
+            {sucessoSaida && (
+              <div role="status" className="card border-l-4 border-l-success py-3">
+                <span className="text-sm font-medium text-success">{sucessoSaida}</span>
+              </div>
+            )}
 
             {semPermissaoSinais && (
               <p className="text-sm text-textMuted">
@@ -335,6 +355,21 @@ export function ResidenteProntuario() {
           }}
           residenteFixo={{ id, nome: residente?.nome ?? '' }}
           onPermissaoNegada={() => setSemPermissaoIntercorrencia(true)}
+        />
+      )}
+
+      {id && residente && (
+        <RegistrarSaidaModal
+          open={registrandoSaida}
+          onClose={() => setRegistrandoSaida(false)}
+          onRegistrado={() => {
+            setRegistrandoSaida(false)
+            setSucessoSaida('Saída registrada. Encerre as pendências na tela de cada módulo.')
+            setVersaoResidente(v => v + 1)
+            carregar(filtros)
+          }}
+          residente={{ id, nome: residente.nome }}
+          podeLiberarLeito={pode('quartos_leitos:atualizar')}
         />
       )}
     </div>

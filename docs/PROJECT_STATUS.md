@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `029_autoria_autor_id` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `030_saida_residente` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -32,6 +32,7 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Meu Plantão operacional (UX-00/UX-01, #138–#145): registro rápido de cuidado, visões por horário/cuidado/residente, filtros, seleção múltipla e registro em lote com persistência individual; local do residente (G3) e grau de dependência ativo (decisão C) na própria fila; horizonte de cuidados e doses renovado na leitura (G1, #139).
 - Matriz de permissões clínicas/institucionais.
 - Admissão ponta a ponta.
+- Saída do residente (N2, #171, migration 030): óbito, transferência, desligamento e retorno à família, com estorno; regras em `docs/DOMAIN_RULES.md`.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
 
 ## Estado funcional importante
