@@ -1086,3 +1086,76 @@ def test_pais_keyset_consistente_com_ocorrido_em(prontuario_db):
         assert len(received) == len(set(received)), \
             f"duplicatas detectadas: {received}"
     asyncio.run(_with_client(prontuario_db, op))
+
+
+# N1: autoria legivel e links reais.
+def test_n1_autor_por_fk_029_com_nome_resolvido(prontuario_db):
+    async def op(client, db):
+        ilpi = _new_inst()
+        user = await _create_ilpi_user(db, ilpi, permissions=ALL_CLINICAL)
+        res = await _create_residente(db, ilpi.id)
+        now = datetime.now(timezone.utc)
+        for seed, delta in ((_seed_avaliacao, 0), (_seed_sinal, 1), (_seed_intercorrencia, 2)):
+            obj = await seed(db, ilpi.id, res.id, when=now - timedelta(minutes=delta))
+            obj.autor_id = user.id
+        await db.commit()
+        r = await client.get(_pront_url(res.id), headers=_headers(user, ilpi_id=ilpi.id))
+        assert r.status_code == 200, r.text
+        por_origem = {e["origem"]: e for e in r.json()["items"]}
+        for origem in ("avaliacao", "sinal_vital", "intercorrencia"):
+            assert por_origem[origem]["autor_id"] == user.id
+            assert por_origem[origem]["autor_nome"] == user.nome
+    asyncio.run(_with_client(prontuario_db, op))
+
+
+def test_n1_sem_fk_usa_nome_em_texto_e_autor_id_nulo(prontuario_db):
+    async def op(client, db):
+        ilpi = _new_inst()
+        user = await _create_ilpi_user(db, ilpi, permissions=ALL_CLINICAL)
+        res = await _create_residente(db, ilpi.id)
+        now = datetime.now(timezone.utc)
+        await _seed_avaliacao(db, ilpi.id, res.id, when=now)
+        await _seed_sinal(db, ilpi.id, res.id, when=now - timedelta(minutes=1))
+        await _seed_intercorrencia(db, ilpi.id, res.id, when=now - timedelta(minutes=2))
+        await db.commit()
+        r = await client.get(_pront_url(res.id), headers=_headers(user, ilpi_id=ilpi.id))
+        assert r.status_code == 200, r.text
+        por_origem = {e["origem"]: e for e in r.json()["items"]}
+        assert por_origem["avaliacao"]["autor_id"] is None and por_origem["avaliacao"]["autor_nome"] == "Prof D4"
+        assert por_origem["sinal_vital"]["autor_id"] is None and por_origem["sinal_vital"]["autor_nome"] == "Enf D4"
+        assert por_origem["intercorrencia"]["autor_id"] is None and por_origem["intercorrencia"]["autor_nome"] == "Enf D4"
+    asyncio.run(_with_client(prontuario_db, op))
+
+
+def test_n1_todas_origens_autor_uuid_ou_nulo_e_links_de_tela(prontuario_db):
+    uuid_re = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+    async def op(client, db):
+        ilpi = _new_inst()
+        user = await _create_ilpi_user(db, ilpi, permissions=ALL_CLINICAL)
+        res = await _create_residente(db, ilpi.id)
+        now = datetime.now(timezone.utc)
+        await _seed_avaliacao(db, ilpi.id, res.id, when=now)
+        await _seed_grau(db, ilpi.id, res.id, confirmado_em=now - timedelta(hours=1), confirmado_por=user.id)
+        await _seed_sinal(db, ilpi.id, res.id, when=now - timedelta(hours=2))
+        await _seed_intercorrencia(db, ilpi.id, res.id, when=now - timedelta(hours=3))
+        _, presc = await _seed_medicacao_prescricao(db, ilpi.id, res.id, user.id, situacao="ativa", now=now - timedelta(hours=4))
+        await _seed_administracao(db, ilpi.id, res.id, presc.id, _new_id(), user.id, when=now - timedelta(hours=5))
+        pais = await _seed_pais(db, ilpi.id, res.id, user.id, situacao="vigente")
+        await _seed_execucao(db, ilpi.id, res.id, user.id, when=now - timedelta(hours=6))
+        await _seed_ocupacao(db, ilpi.id, res.id, user.id, when=now - timedelta(hours=7))
+        await _seed_ausencia(db, ilpi.id, res.id, user.id, when=now - timedelta(hours=8))
+        await db.commit()
+        r = await client.get(_pront_url(res.id), headers=_headers(user, ilpi_id=ilpi.id), params={"limit": 100})
+        assert r.status_code == 200, r.text
+        items = r.json()["items"]
+        assert {e["origem"] for e in items} >= {"avaliacao", "grau_dependencia", "sinal_vital", "intercorrencia", "prescricao", "administracao", "pais", "execucao_cuidado", "ocupacao", "ausencia"}
+        for e in items:
+            assert e["autor_id"] is None or uuid_re.match(e["autor_id"]), e
+            if e["autor_id"] == user.id:
+                assert e["autor_nome"] == user.nome, e
+            if e["origem"] == "pais":
+                assert e["link"] == f"/plano/{e['registro_id']}"
+            else:
+                assert e["link"] is None, e
+        assert any(e["origem"] == "pais" and e["registro_id"] == pais.id for e in items)
+    asyncio.run(_with_client(prontuario_db, op))

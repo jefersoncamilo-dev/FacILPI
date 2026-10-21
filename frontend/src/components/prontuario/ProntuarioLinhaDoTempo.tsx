@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { formatDateTime } from '../../services/api'
 import { rotuloSituacaoEvento } from '../../lib/rotulos'
 import { ProntuarioCategoria, ProntuarioEvento } from '../../services/prontuario'
@@ -17,9 +18,6 @@ const CATEGORIA_SIGLA: Record<ProntuarioCategoria, string> = {
   medicacao: 'MD',
   administrativo: 'AD',
 }
-
-// UUID exato — sem heurística por espaço/proporção hexadecimal.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function chaveDia(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -54,16 +52,10 @@ function agruparPorDia(eventos: ProntuarioEvento[]): { chave: string; eventos: P
   return grupos
 }
 
-function AutorEvento({ autorId }: { autorId?: string | null }) {
-  if (!autorId) return null
-  if (UUID_RE.test(autorId)) {
-    return (
-      <span className="font-mono text-xs text-textMuted" title={autorId}>
-        {autorId.slice(0, 8)}…
-      </span>
-    )
-  }
-  return <span className="text-xs text-textMuted">{autorId}</span>
+// N1: o nome vem resolvido pelo servidor; o id nunca é exibido.
+function AutorEvento({ autorNome }: { autorNome?: string | null }) {
+  if (!autorNome) return null
+  return <span className="text-xs text-textMuted">{autorNome}</span>
 }
 
 // Estornado/substituído nunca dependem só de cor: sempre têm texto explícito.
@@ -107,10 +99,12 @@ export function ProntuarioLinhaDoTempo({ eventos }: { eventos: ProntuarioEvento[
                   )}
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <span className="text-xs text-textMuted">{formatDateTime(evento.ocorrido_em)}</span>
-                    <AutorEvento autorId={evento.autor_id} />
+                    <AutorEvento autorNome={evento.autor_nome} />
                   </div>
                   {evento.link && (
-                    <p className="text-xs text-textMuted mt-1">Detalhe ainda não disponível</p>
+                    <Link to={evento.link} className="text-xs text-primary underline mt-1 inline-block">
+                      Ver detalhe
+                    </Link>
                   )}
                 </div>
               </div>

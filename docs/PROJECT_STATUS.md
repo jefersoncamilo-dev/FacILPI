@@ -37,7 +37,7 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 ## Estado funcional importante
 
 ### Prontuário longitudinal
-As Issues do D.4 (#21 backend, #27 frontend) estão fechadas. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. O PLAN do M20 (20/10/2026) confirmou a aderência ao contrato (paginação por cursor no SQL, um evento por transição, estornos e substituições visíveis). A Passagem de Plantão não entra no prontuário. Follow-ups: N1 (autoria legível e links para a tela), #163, #164, #165 e #166.
+As Issues do D.4 (#21 backend, #27 frontend) estão fechadas. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. O PLAN do M20 (20/10/2026) confirmou a aderência ao contrato (paginação por cursor no SQL, um evento por transição, estornos e substituições visíveis). A Passagem de Plantão não entra no prontuário. N1 (#169): cada evento traz `autor_id` (UUID ou nulo) e `autor_nome` resolvido no servidor, com o nome em texto como fallback antes da 029; só o PAIS tem link de tela (`/plano/:id`), as demais origens vêm sem link. Follow-ups: #163, #164, #165 e #166.
 
 ### Camada Operacional (Fases 1–5 integradas)
 Fluxo diário completo: inicia plantão → área/residentes → prioridades/atividades → assume → resolve na origem → a fonte encerra → passagem → próximo turno confirma. Regras em `docs/DOMAIN_RULES.md`; visão e Fases 6–14 (fora do ciclo, sem design técnico) em `docs/ROADMAP.md`.

@@ -46,6 +46,7 @@ export interface ProntuarioEvento {
   ocorrido_em: string
   registrado_em?: string | null
   autor_id?: string | null
+  autor_nome?: string | null
   resumo: string
   situacao?: string | null
   estornado: boolean
