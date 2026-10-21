@@ -37,7 +37,7 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 ## Estado funcional importante
 
 ### Prontuário longitudinal
-As Issues do D.4 (#21 backend, #27 frontend) estão fechadas. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. A aderência da implementação a esse contrato (paginação por cursor, eventos, estornos) ainda será verificada em PLAN próprio.
+As Issues do D.4 (#21 backend, #27 frontend) estão fechadas. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. O PLAN do M20 (20/10/2026) confirmou a aderência ao contrato (paginação por cursor no SQL, um evento por transição, estornos e substituições visíveis). A Passagem de Plantão não entra no prontuário. Follow-ups: N1 (autoria legível e links para a tela), #163, #164, #165 e #166.
 
 ### Camada Operacional (Fases 1–5 integradas)
 Fluxo diário completo: inicia plantão → área/residentes → prioridades/atividades → assume → resolve na origem → a fonte encerra → passagem → próximo turno confirma. Regras em `docs/DOMAIN_RULES.md`; visão e Fases 6–14 (fora do ciclo, sem design técnico) em `docs/ROADMAP.md`.
@@ -55,7 +55,8 @@ Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de regi
 
 ### Auditoria geral (11/10/2026) — decisões e riscos conhecidos
 - **Situação do residente:** a API ainda aceita `situacao`/`data_admissao` do cliente no cadastro e na edição genéricos; a decisão foi manter como está. Só a Admissão ativa o residente pelas telas atuais. Risco conhecido, não corrigido.
-- **Adiados (exigem migration/RBAC):** autoria por FK em avaliações, sinais vitais e intercorrências (hoje nome em texto) e retirada das permissões clínicas de escrita do template `ilpi_admin` (herança das migrations 006–014).
+- **Autoria por FK:** integrada em avaliações, sinais vitais e intercorrências (029, PR #158); o nome em texto segue como foto. A exibição legível no prontuário é o N1.
+- **Adiado (exige migration/RBAC):** retirada das permissões clínicas de escrita do template `ilpi_admin` (herança das migrations 006–014).
 - **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. O JWT segue em `localStorage`; a CSP sem script inline reduz o risco, e a saída para cookie fica como decisão futura.
 - **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 e React Router 7 (upgrades maiores, sem decisão).
 - **Branches:** a `main` foi promovida a partir da linha integrada pelo PR #160 (20/10/2026, v0.6.0), com conteúdo igual ao da `fase-3b`. A `fase-3b` continua sendo a linha integrada; a `main` só avança por promoção.
@@ -68,7 +69,7 @@ Uma promoção da `fase-3b` para a `main` exige:
 4. aprovação explícita do responsável no PR de promoção.
 
 ### Passagem de Plantão
-Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. A integração com o Prontuário longitudinal (D.4) segue posterior.
+Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. Não integra o Prontuário longitudinal (decisão do M20).
 
 ### Frontend
 Existe frontend funcional, mas a consolidação visual/mobile-first definitiva ainda é uma etapa posterior ao hardening do núcleo operacional. Não iniciar redesign amplo dentro de uma Issue backend.
