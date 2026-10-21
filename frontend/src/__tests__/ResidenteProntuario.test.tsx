@@ -28,7 +28,8 @@ function evento(overrides: Partial<ProntuarioResponse['items'][number]> = {}) {
     residente_id: 'r1',
     ocorrido_em: new Date().toISOString(),
     registrado_em: new Date().toISOString(),
-    autor_id: 'Enf. Ana Lima',
+    autor_id: null,
+    autor_nome: 'Enf. Ana Lima',
     resumo: 'Avaliação funcional',
     situacao: null,
     estornado: false,
@@ -184,34 +185,44 @@ describe('ResidenteProntuario', () => {
     expect(await screen.findByText('Substituído')).toBeTruthy()
   })
 
-  it('13. autor em texto livre é exibido como recebido', async () => {
+  it('13. autor exibido pelo nome resolvido no servidor', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({
-      data: { items: [evento({ autor_id: 'Enf. Ana Lima' })], next_cursor: null, has_more: false },
+      data: { items: [evento({ autor_id: null, autor_nome: 'Enf. Ana Lima' })], next_cursor: null, has_more: false },
     } as any)
     renderTela()
     expect(await screen.findByText('Enf. Ana Lima')).toBeTruthy()
   })
 
-  it('14. autor em UUID válido é exibido abreviado, com valor completo em title', async () => {
+  it('14. UUID do autor nunca aparece na tela, nem truncado', async () => {
     const uuid = 'f3a9c1d2-1234-4abc-9def-0123456789ab'
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({
-      data: { items: [evento({ autor_id: uuid })], next_cursor: null, has_more: false },
+      data: { items: [evento({ autor_id: uuid, autor_nome: 'Maria Souza' })], next_cursor: null, has_more: false },
     } as any)
-    renderTela()
-    const abreviado = await screen.findByTitle(uuid)
-    expect(abreviado.textContent).toBe('f3a9c1d2…')
+    const { container } = renderTela()
+    expect(await screen.findByText('Maria Souza')).toBeTruthy()
+    expect(container.textContent).not.toContain('f3a9c1d2')
+    expect(screen.queryByTitle(uuid)).toBeNull()
   })
 
-  it('15. link de evento sem tela de destino não é clicável', async () => {
+  it('15. link de tela é clicável; evento sem link não mostra aviso', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({
-      data: { items: [evento({ link: '/api/avaliacoes/ev1' })], next_cursor: null, has_more: false },
+      data: {
+        items: [
+          evento({ registro_id: 'p1', origem: 'pais', link: '/plano/p1' }),
+          evento({ registro_id: 'ev2', link: null }),
+        ],
+        next_cursor: null,
+        has_more: false,
+      },
     } as any)
     renderTela()
-    expect(await screen.findByText('Detalhe ainda não disponível')).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /avaliacoes/i })).toBeNull()
+    const link = await screen.findByRole('link', { name: 'Ver detalhe' })
+    expect(link.getAttribute('href')).toBe('/plano/p1')
+    expect(screen.getAllByRole('link', { name: 'Ver detalhe' })).toHaveLength(1)
+    expect(screen.queryByText('Detalhe ainda não disponível')).toBeNull()
   })
 
   it('16. navegação Residentes → Prontuário ao clicar no card', async () => {
