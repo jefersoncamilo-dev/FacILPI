@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `029_autoria_autor_id` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário). Na homologação a 029 só entra antes da próxima promoção para a `main` (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `029_autoria_autor_id` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
