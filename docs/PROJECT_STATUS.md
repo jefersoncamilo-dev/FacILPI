@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `029_autoria_autor_id` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário). Na homologação a 029 só entra antes da próxima promoção para a `main` (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `029_autoria_autor_id` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -37,7 +37,7 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 ## Estado funcional importante
 
 ### Prontuário longitudinal
-D.4 é a próxima frente funcional em recuperação/correção no fluxo atual. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. Não assuma que D.4 está integrado sem verificar GitHub.
+As Issues do D.4 (#21 backend, #27 frontend) estão fechadas. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. A aderência da implementação a esse contrato (paginação por cursor, eventos, estornos) ainda será verificada em PLAN próprio.
 
 ### Camada Operacional (Fases 1–5 integradas)
 Fluxo diário completo: inicia plantão → área/residentes → prioridades/atividades → assume → resolve na origem → a fonte encerra → passagem → próximo turno confirma. Regras em `docs/DOMAIN_RULES.md`; visão e Fases 6–14 (fora do ciclo, sem design técnico) em `docs/ROADMAP.md`.
@@ -58,7 +58,14 @@ Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de regi
 - **Adiados (exigem migration/RBAC):** autoria por FK em avaliações, sinais vitais e intercorrências (hoje nome em texto) e retirada das permissões clínicas de escrita do template `ilpi_admin` (herança das migrations 006–014).
 - **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. O JWT segue em `localStorage`; a CSP sem script inline reduz o risco, e a saída para cookie fica como decisão futura.
 - **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 e React Router 7 (upgrades maiores, sem decisão).
-- **Branches:** `main` está muitos commits atrás da linha integrada; a promoção para `main` ainda não tem critério definido.
+- **Branches:** a `main` foi promovida a partir da linha integrada pelo PR #160 (20/10/2026, v0.6.0), com conteúdo igual ao da `fase-3b`. A `fase-3b` continua sendo a linha integrada; a `main` só avança por promoção.
+
+### Critério de promoção para a `main` (decisão D4, 20/10/2026)
+Uma promoção da `fase-3b` para a `main` exige:
+1. os três jobs de CI verdes (Frontend, Backend SQLite, Backend PostgreSQL);
+2. homologação com contas sintéticas;
+3. migrations aplicadas em ordem no ambiente de homologação, por decisão humana;
+4. aprovação explícita do responsável no PR de promoção.
 
 ### Passagem de Plantão
 Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. A integração com o Prontuário longitudinal (D.4) segue posterior.
@@ -83,7 +90,7 @@ Ferramental: `ops/backup.sh`, `ops/restore.sh`, `ops/offhost_upload.sh`, `ops/of
 Pendências conhecidas desta frente, **nenhuma bloqueando a VPS**: lifecycle rule do bucket (GATE-5), instalação na VPS (GATE-7) e os testes negativos de `DeleteObject` do GATE-6, não executados porque DELETE permaneceu proibido em todos os gates.
 
 ### CI / cloud / produção
-O CI do GitHub Actions está configurado e é a validação integrada autoritativa: três jobs — `Frontend (testes, TypeScript, build)`, `Backend (SQLite)` e `Backend (PostgreSQL)`. Existe uma homologação publicada (`docs/RUNBOOK_HOMOLOGACAO.md`): API e frontend no Render, publicados automaticamente **a partir da `main`** (desde 16/10/2026; antes publicavam a `fase-3b`), banco PostgreSQL no Neon (cadeia em 028). A `v0.5.0` (`aa2bd10`) é a primeira versão promovida; o frontend publicado tem os cabeçalhos de segurança do SEC-02. Produção não está configurada; a VPS com o `docker-compose.yml` (Caddy + PostgreSQL próprio, `docs/RUNBOOK_PILOT.md`) é a frente seguinte. Verifique a situação atual antes de qualquer ação operacional.
+O CI do GitHub Actions está configurado e é a validação integrada autoritativa: três jobs — `Frontend (testes, TypeScript, build)`, `Backend (SQLite)` e `Backend (PostgreSQL)`. Existe uma homologação publicada (`docs/RUNBOOK_HOMOLOGACAO.md`): API e frontend no Render, publicados automaticamente **a partir da `main`** (desde 16/10/2026; antes publicavam a `fase-3b`), banco PostgreSQL no Neon (cadeia em 028 no último registro; confirmar se a 029 já foi aplicada). A `v0.5.0` (`aa2bd10`) foi a primeira versão promovida, e a v0.6.0 veio pelo PR #160 (sem release publicada no GitHub); o frontend publicado tem os cabeçalhos de segurança do SEC-02. Produção não está configurada; a VPS com o `docker-compose.yml` (Caddy + PostgreSQL próprio, `docs/RUNBOOK_PILOT.md`) é a frente seguinte. Verifique a situação atual antes de qualquer ação operacional.
 
 ```
 FEATURE_FREEZE = ACTIVE
