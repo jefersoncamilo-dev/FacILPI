@@ -59,6 +59,7 @@ from .application.fase3a import (
 )
 from .application.platform import platform_router
 from .application.prontuario import prontuario_router
+from .application.saida_residente import router as saida_residente_router
 from .application.dashboard import dashboard_router
 from .application.alertas import central_alertas_router
 from .application.operacao import escala_router, plantoes_router
@@ -1524,6 +1525,7 @@ app.include_router(quartos_leitos_router, prefix="/api")
 app.include_router(ausencias_router, prefix="/api")
 app.include_router(ocupacao_historico_router, prefix="/api")
 app.include_router(prontuario_router, prefix="/api")
+app.include_router(saida_residente_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 # #107: alertas derivados (projecao). /api/alertas/ legado segue fail_closed.
 app.include_router(central_alertas_router, prefix="/api")

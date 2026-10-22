@@ -143,6 +143,9 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "residentes:criar",
         "residentes:atualizar",
         "residentes:inativar",
+        # N2 (030, #171): saida do residente e estorno.
+        "residentes:registrar_saida",
+        "residentes:estornar_saida",
         "admissoes:ler",
         "admissoes:criar",
         "admissoes:atualizar",

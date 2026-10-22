@@ -255,8 +255,9 @@ def test_clone_local_preexistente_recebe_anexar(d1_db):
         chaves = {row[0] for row in (await db.execute(text(
             "SELECT p.chave FROM permissoes p JOIN perfil_permissoes pp ON pp.permissao_id = p.id "
             "WHERE pp.perfil_id = :p"), {"p": perfil_id})).all()}
-        # Em head a 023 (#117) e a 026 (#123) tambem alcancam o clone preexistente.
-        assert chaves == {"documentos:anexar", "alertas:ler", "alertas:assumir"}
+        # Em head a 023 (#117), a 026 (#123) e a 030 (#171, saida do residente para o
+        # Administrativo) tambem alcancam o clone preexistente.
+        assert chaves == {"documentos:anexar", "alertas:ler", "alertas:assumir", "residentes:registrar_saida"}
     asyncio.run(_client(d1_db, conferir))
 
 

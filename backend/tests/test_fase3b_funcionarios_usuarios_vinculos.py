@@ -541,7 +541,9 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
         # ilpi_admin +3, cuidador/enfermagem/responsavel_tecnico +2 cada, medico +1.
         # 98 + 1 e 196 + 6: a 026 (#123) cria alertas:assumir para ilpi_admin e os 5 institucionais.
         # 99 + 2 e 202 + 9: a 027 (#125) cria passagem_plantao:ler/registrar (medico so ler).
-        assert counts == {"permissoes": 101, "template_perfis": 7, "template_permissoes": 211}
+        # 101 + 2 e 211 + 6: a 030 (#171) cria residentes:registrar_saida (ilpi_admin, RT,
+        # enfermagem, administrativo) e residentes:estornar_saida (ilpi_admin, RT).
+        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 217}
 
         platform_still_works = await client.get("/api/instituicoes/", headers=_auth_headers(context["global_access"]))
         assert platform_still_works.status_code == 200, platform_still_works.text

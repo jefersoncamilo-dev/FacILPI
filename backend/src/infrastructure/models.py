@@ -241,6 +241,54 @@ class OcupacaoHistorico(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
+class ResidenteSaida(Base):
+    """N2 (030): saida do residente, append-only; estorno preserva o registro."""
+    __tablename__ = "residente_saidas"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["residente_id", "ilpi_id"],
+            ["residentes.id", "residentes.instituicao_id"],
+            name="fk_residente_saidas_residente_ilpi",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint("tipo IN ('obito','transferencia','desligamento','retorno_familia')",
+                        name="ck_residente_saidas_tipo"),
+        CheckConstraint("tipo <> 'obito' OR local_obito IN ('ilpi','hospital')",
+                        name="ck_residente_saidas_obito_local"),
+        CheckConstraint("tipo <> 'transferencia' OR (destino_tipo IN ('instituicao','hospital') "
+                        "AND destino_descricao IS NOT NULL)", name="ck_residente_saidas_transferencia_destino"),
+        CheckConstraint("tipo <> 'desligamento' OR motivo_desligamento IN "
+                        "('fim_contrato','pedido_familia','pedido_residente','pedido_ilpi')",
+                        name="ck_residente_saidas_desligamento_motivo"),
+        CheckConstraint("(estornado_em IS NULL AND estornado_por IS NULL AND motivo_estorno IS NULL) OR "
+                        "(estornado_em IS NOT NULL AND estornado_por IS NOT NULL AND motivo_estorno IS NOT NULL)",
+                        name="ck_residente_saidas_estorno"),
+        Index("ix_residente_saidas_ilpi_residente", "ilpi_id", "residente_id"),
+        Index(
+            "uq_residente_saidas_vigente",
+            "ilpi_id", "residente_id",
+            unique=True,
+            sqlite_where=sa.text("estornado_em IS NULL"),
+            postgresql_where=sa.text("estornado_em IS NULL"),
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id"), nullable=False)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(20), nullable=False)
+    ocorrido_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    local_obito: Mapped[str] = mapped_column(String(20), nullable=True)
+    destino_tipo: Mapped[str] = mapped_column(String(20), nullable=True)
+    destino_descricao: Mapped[str] = mapped_column(String(255), nullable=True)
+    motivo_desligamento: Mapped[str] = mapped_column(String(30), nullable=True)
+    observacao: Mapped[str] = mapped_column(String(500), nullable=True)
+    registrado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    registrado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    estornado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    estornado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    motivo_estorno: Mapped[str] = mapped_column(String(500), nullable=True)
+
+
 class Ausencia(Base):
     __tablename__ = "ausencias"
     __table_args__ = (
