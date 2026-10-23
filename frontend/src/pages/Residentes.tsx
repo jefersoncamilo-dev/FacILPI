@@ -13,7 +13,7 @@ import { LoadingState } from '../components/ui/states'
 import { cn } from '../lib/utils'
 import { rotuloSituacaoResidente } from '../lib/rotulos'
 
-const FORM_VAZIO = { nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M', situacao: 'Em admissao' }
+const FORM_VAZIO = { nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M' }
 
 /** Lista de residentes (UX-04 / #89). Estrutura do card: Issue #34; estados: PH-01. */
 export function Residentes() {

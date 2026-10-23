@@ -537,8 +537,9 @@ class ResidenteCreate(BaseModel):
     data_nascimento: date
     sexo: Optional[str] = None
     foto: Optional[str] = None
-    data_admissao: Optional[date] = None
-    situacao: Optional[str] = "Em admissao"
+    # M14 (#172): situacao e data_admissao fora do contrato de escrita. O servidor
+    # cria sempre "Em admissao"; so a Admissao ativa e so a saida (N2) tira de
+    # "Ativo". Extras enviados sao ignorados.
     # F5A-3A2: grau_dependencia REMOVIDO do contrato de escrita. O campo
     # legado em Residente é congelado (sem escrita, sem sincronização);
     # a fonte oficial é GrauDependencia. Extras enviados são ignorados.
@@ -581,8 +582,7 @@ class ResidenteUpdate(BaseModel):
     data_nascimento: Optional[date] = None
     sexo: Optional[str] = None
     foto: Optional[str] = None
-    data_admissao: Optional[date] = None
-    situacao: Optional[str] = None
+    # M14 (#172): sem situacao e data_admissao no update (Admissao e saida decidem).
     # F5A-3A2: sem grau_dependencia no update (legado congelado).
     restricoes: Optional[str] = None
     alergias: Optional[str] = None
@@ -591,6 +591,9 @@ class ResidenteUpdate(BaseModel):
 
 class ResidenteResponse(ResidenteCreate):
     id: str
+    # M14 (#172): continuam na leitura, fora da escrita.
+    data_admissao: Optional[date] = None
+    situacao: Optional[str] = None
     # F5A-3A2: leitura do legado mantida por compatibilidade; escrita
     # bloqueada (ausente em Create/Update). Fonte oficial: GrauDependencia.
     grau_dependencia: Optional[str] = None
