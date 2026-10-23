@@ -1,19 +1,32 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Clock, LogIn, LogOut, MapPin } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { ArrowRightLeft, Clock, LogIn, LogOut, MapPin } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../../services/api'
 import { escalaApi, plantoesApi, type Area, type PlantaoAtual, type Turno } from '../../services/escala'
+import { passagemApi } from '../../services/passagem'
+import { usePermissoesOuPadrao } from '../../context/PermissoesContext'
+import { Modal } from '../Modal'
 import { Button } from '../ui/button'
 import { Alert } from '../ui/feedback'
 import { cn } from '../../lib/utils'
 
 type Carga = { status: 'carregando' } | { status: 'ok'; atual: PlantaoAtual } | { status: 'erro'; mensagem: string }
+// Estado da passagem deste plantão no diálogo: só afirma algo depois de ler.
+type EstadoPassagem = 'sem_leitura' | 'consultando' | 'entregue' | 'nao_entregue' | 'erro'
 
 /**
  * Início e fim do PRÓPRIO plantão (#120). O profissional escolhe por quais
  * áreas responde; isso não abre nenhuma tela nova (RBAC continua no backend).
  * Sem `plantao:registrar`, o cartão não aparece.
  */
-export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void }) {
+export function MeuTurno({ onMudou, atrasados }: {
+  onMudou?: (atual: PlantaoAtual) => void
+  /** M1 (#176): atrasados que o Meu Plantão já carregou; ausente quando não carregou. */
+  atrasados?: number
+}) {
+  const { pode } = usePermissoesOuPadrao()
+  const [confirmando, setConfirmando] = useState(false)
+  const [passagem, setPassagem] = useState<EstadoPassagem>('sem_leitura')
   const [carga, setCarga] = useState<Carga>({ status: 'carregando' })
   const [areas, setAreas] = useState<Area[]>([])
   const [turnos, setTurnos] = useState<Turno[]>([])
@@ -67,11 +80,29 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
     }
   }
 
+  // M1 (#176): encerrar sempre passa por confirmação, com o que já se sabe do turno.
+  async function pedirEncerramento(id: string) {
+    setErro('')
+    setConfirmando(true)
+    if (!pode('passagem_plantao:ler')) {
+      setPassagem('sem_leitura')
+      return
+    }
+    setPassagem('consultando')
+    try {
+      const passagens = await passagemApi.listar('todas')
+      setPassagem(passagens.some(p => p.plantao_id === id) ? 'entregue' : 'nao_entregue')
+    } catch {
+      setPassagem('erro')
+    }
+  }
+
   async function encerrar(id: string) {
     setSalvando(true)
     setErro('')
     try {
       await plantoesApi.encerrar(id)
+      setConfirmando(false)
       await carregar()
     } catch (e) {
       setErro(mensagemDeErro(e, 'Não foi possível encerrar o plantão.'))
@@ -86,24 +117,35 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
   return (
     <section aria-label="Meu turno" className={cn('rounded-card border border-border bg-card shadow-card', semEscolhas ? 'px-4 py-3' : 'p-4 sm:p-5')}>
       {plantao ? (
+        // M1 (#176): a ação principal é passar o plantão (é ela que leva a informação adiante);
+        // encerrar fica secundário e sempre confirma. Compacto no celular.
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0 space-y-1">
-            <p className="font-display text-base font-semibold text-foreground">
-              Plantão em andamento{plantao.turno_nome ? ` · ${plantao.turno_nome}` : ''}
-            </p>
-            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
-              <Clock className="size-4" aria-hidden="true" /> Desde {formatDateTime(plantao.inicio_em)}
+          <div className="min-w-0 space-y-0.5 sm:space-y-1">
+            <p className="flex flex-wrap items-baseline gap-x-2 font-display text-base font-semibold text-foreground">
+              <span>Plantão em andamento{plantao.turno_nome ? ` · ${plantao.turno_nome}` : ''}</span>
+              <span className="flex items-center gap-1 text-sm font-normal text-muted-foreground">
+                <Clock className="size-4" aria-hidden="true" /> Desde {formatDateTime(plantao.inicio_em)}
+              </span>
             </p>
             <p className="flex items-center gap-1.5 text-sm text-slate-700">
-              <MapPin className="size-4 text-muted-foreground" aria-hidden="true" />
-              {plantao.responsabilidades.length
-                ? `Responsável por: ${plantao.responsabilidades.map(r => r.area_nome).join(', ')}`
-                : 'Sem área definida — a coordenação pode atribuir.'}
+              <MapPin className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="truncate">
+                {plantao.responsabilidades.length
+                  ? `Responsável por: ${plantao.responsabilidades.map(r => r.area_nome).join(', ')}`
+                  : 'Sem área definida — a coordenação pode atribuir.'}
+              </span>
             </p>
           </div>
-          <Button variant="outline" onClick={() => encerrar(plantao.id)} disabled={salvando} className="min-h-[44px]">
-            <LogOut aria-hidden="true" /> Encerrar plantão
-          </Button>
+          <div className="flex items-center gap-2">
+            {pode('passagem_plantao:registrar') && (
+              <Button asChild className="min-h-[44px] flex-1 sm:flex-none">
+                <Link to="/passagem"><ArrowRightLeft aria-hidden="true" /> Passar plantão</Link>
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => pedirEncerramento(plantao.id)} disabled={salvando} className="min-h-[44px] shrink-0">
+              <LogOut aria-hidden="true" /> Encerrar plantão
+            </Button>
+          </div>
         </div>
       ) : semEscolhas ? (
         // Nada a escolher (sem escala, área ou turno): uma linha só, texto + ação.
@@ -168,7 +210,38 @@ export function MeuTurno({ onMudou }: { onMudou?: (atual: PlantaoAtual) => void 
           </Button>
         </div>
       )}
-      {erro && <Alert variant="error" className="mt-3">{erro}</Alert>}
+      {erro && !confirmando && <Alert variant="error" className="mt-3">{erro}</Alert>}
+      {plantao && (
+        <Modal open={confirmando} onClose={() => setConfirmando(false)} title="Encerrar o plantão?">
+          <div className="space-y-4">
+            <ul className="space-y-1 text-sm text-foreground">
+              {atrasados !== undefined && (
+                <li>
+                  {atrasados > 0
+                    ? `${atrasados} ${atrasados === 1 ? 'pendência atrasada' : 'pendências atrasadas'} na sua fila.`
+                    : 'Nenhuma pendência atrasada na sua fila.'}
+                </li>
+              )}
+              {passagem === 'consultando' && <li className="text-muted-foreground">Consultando a passagem…</li>}
+              {passagem === 'entregue' && <li>A passagem deste plantão já foi entregue.</li>}
+              {passagem === 'nao_entregue' && <li className="font-medium">A passagem deste plantão ainda não foi entregue.</li>}
+              {passagem === 'erro' && <li className="text-muted-foreground">Não foi possível conferir a passagem.</li>}
+            </ul>
+            <p className="text-sm text-muted-foreground">Ao encerrar, o próximo turno só recebe o que estiver na passagem.</p>
+            {erro && <Alert variant="error">{erro}</Alert>}
+            <div className="flex flex-col gap-2 sm:flex-row-reverse">
+              {pode('passagem_plantao:registrar') && (
+                <Button asChild className="min-h-[44px]">
+                  <Link to="/passagem" onClick={() => setConfirmando(false)}>Passar plantão primeiro</Link>
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => encerrar(plantao.id)} disabled={salvando} className="min-h-[44px]">
+                {salvando ? 'Encerrando…' : 'Encerrar mesmo assim'}
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </section>
   )
 }

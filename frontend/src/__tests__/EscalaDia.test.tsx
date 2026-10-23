@@ -128,7 +128,7 @@ describe('Meu turno — iniciar a partir da própria escala (#122)', () => {
       } }
       return { data: atual.plantao } as any
     })
-    render(<MeuTurno />)
+    render(<MemoryRouter><MeuTurno /></MemoryRouter>)
     expect(await screen.findByText(/Sua escala:/)).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: /Iniciar minha escala/ }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/plantoes/iniciar', { area_ids: [], escala_id: 'e1' }))

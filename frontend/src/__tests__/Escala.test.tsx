@@ -120,11 +120,16 @@ describe('Escala (#120)', () => {
   })
 })
 
+// O cartão tem link para /passagem (M1): precisa de router.
+function renderTurno(ui: JSX.Element) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>)
+}
+
 describe('Meu turno no Meu Plantão (#120)', () => {
   it('sem plantao:registrar e sem plantão, o cartão não aparece', async () => {
     const atual: PlantaoAtual = { pode_registrar: false, funcionario_id: 'f9', plantao: null }
     responder({ '/plantoes/atual': atual })
-    const { container } = render(<MeuTurno />)
+    const { container } = renderTurno(<MeuTurno />)
     await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/plantoes/atual'))
     expect(container.textContent).toBe('')
   })
@@ -138,7 +143,7 @@ describe('Meu turno no Meu Plantão (#120)', () => {
       return Promise.resolve({ data: [] } as any)
     })
     mockPost.mockImplementation(async () => { atual = { ...atual, plantao: PLANTAO }; return { data: PLANTAO } as any })
-    render(<MeuTurno />)
+    renderTurno(<MeuTurno />)
     await userEvent.click(await screen.findByRole('checkbox', { name: 'Ala B' }))
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Turno' }), 't1')
     await userEvent.click(screen.getByRole('button', { name: /Iniciar plantão/ }))
@@ -147,13 +152,37 @@ describe('Meu turno no Meu Plantão (#120)', () => {
     expect(screen.getByText('Responsável por: Ala B')).toBeTruthy()
   })
 
-  it('encerra o próprio plantão', async () => {
+  it('encerra o próprio plantão só depois de confirmar (M1)', async () => {
     let atual: PlantaoAtual = { pode_registrar: true, funcionario_id: 'f1', plantao: PLANTAO }
     mockGet.mockImplementation((url: string) => Promise.resolve({ data: url === '/plantoes/atual' ? atual : [] } as any))
     mockPost.mockImplementation(async () => { atual = { ...atual, plantao: null }; return { data: { ...PLANTAO, situacao: 'encerrado' } } as any })
-    render(<MeuTurno />)
+    renderTurno(<MeuTurno atrasados={2} />)
     await userEvent.click(await screen.findByRole('button', { name: /Encerrar plantão/ }))
+    // Abrir o diálogo não encerra nada.
+    expect(mockPost).not.toHaveBeenCalled()
+    expect(await screen.findByText('2 pendências atrasadas na sua fila.')).toBeTruthy()
+    expect(await screen.findByText('A passagem deste plantão ainda não foi entregue.')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Encerrar mesmo assim' }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/plantoes/p1/encerrar', {}))
     expect(await screen.findByText('Você não está em plantão')).toBeTruthy()
+  })
+
+  it('fechar o diálogo não encerra; "Passar plantão" leva à passagem (M1)', async () => {
+    const atual: PlantaoAtual = { pode_registrar: true, funcionario_id: 'f1', plantao: PLANTAO }
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/plantoes/atual') return Promise.resolve({ data: atual } as any)
+      if (url === '/passagens/') return Promise.resolve({ data: [{ id: 'pp1', plantao_id: 'p1' }] } as any)
+      return Promise.resolve({ data: [] } as any)
+    })
+    renderTurno(<MeuTurno />)
+    const link = await screen.findByRole('link', { name: /Passar plantão/ })
+    expect(link.getAttribute('href')).toBe('/passagem')
+    await userEvent.click(screen.getByRole('button', { name: /Encerrar plantão/ }))
+    expect(await screen.findByText('A passagem deste plantão já foi entregue.')).toBeTruthy()
+    // Sem contagem carregada, o diálogo não afirma nada sobre atrasados.
+    expect(screen.queryByText(/atrasada/)).toBeNull()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Encerrar mesmo assim' })).toBeNull())
+    expect(mockPost).not.toHaveBeenCalled()
   })
 })
