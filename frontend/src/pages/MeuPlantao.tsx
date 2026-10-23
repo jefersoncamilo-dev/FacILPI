@@ -351,7 +351,11 @@ export function MeuPlantao() {
       </div>
 
       {/* #120: início/fim do próprio plantão e por quais áreas responde (só com plantao:registrar). */}
-      <MeuTurno onMudou={carregarResumo} />
+      {/* M1 (#176): atrasados da fila inteira (sem os filtros da tela); sem fila carregada, nada é afirmado. */}
+      <MeuTurno
+        onMudou={carregarResumo}
+        atrasados={carregando || erro ? undefined : itens.filter(i => atendeSituacao(i, 'atrasados', agora)).length}
+      />
       {resumo && <MinhaArea resumo={resumo} podeAssumir={pode('alertas:assumir')} onMudou={aoMudarAlerta} />}
 
       <div className="space-y-2">
