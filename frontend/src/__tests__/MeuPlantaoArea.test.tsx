@@ -50,7 +50,7 @@ describe('Minha área agora (#126)', () => {
     expect(within(secao).getByText('Ala B · 2 residentes · 1 em atenção · 1 prioridade')).toBeTruthy()
     expect(within(secao).getByRole('link', { name: 'Hilda Sintetica' }).getAttribute('href')).toBe('/residentes/r1')
     expect(within(secao).queryByRole('link', { name: 'Rita Sintetica' })).toBeNull()
-    expect(within(secao).getByRole('link', { name: 'Ver intercorrência em Intercorrências' }).getAttribute('href')).toBe('/intercorrencias')
+    expect(within(secao).getByRole('link', { name: 'Ver intercorrência em Intercorrências' }).getAttribute('href')).toBe('/intercorrencias?residente=r1&id=i1')
     expect(within(secao).getByRole('button', { name: /^Assumir/ })).toBeTruthy()
     expect(within(secao).getByRole('link', { name: /1 passagem de plantão aguardando você/ }).getAttribute('href')).toBe('/passagem')
     expect(within(secao).getByText(/1 atrasada/)).toBeTruthy()

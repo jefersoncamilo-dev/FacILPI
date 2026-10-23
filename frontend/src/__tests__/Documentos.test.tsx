@@ -193,6 +193,17 @@ describe('Documentos — estados de tela', () => {
   })
 })
 
+describe('Documentos — destino dos alertas (M5)', () => {
+  it('?residente= filtra e ?id= destaca o documento', async () => {
+    respondeCom({ documentos: [COM_ARQUIVO, SEM_ARQUIVO] })
+    renderPagina('/documentos?residente=res-1&id=doc-2')
+    const sus = await screen.findByText('Cartão do SUS')
+    expect(chamadasDaLista()[0][1]).toEqual({ params: { residente_id: 'res-1' } })
+    expect(sus.closest('article')?.getAttribute('aria-current')).toBe('true')
+    expect(screen.getByText('RG').closest('article')?.getAttribute('aria-current')).toBeNull()
+  })
+})
+
 describe('Documentos — contrato da API', () => {
   it('8. consulta GET /documentos/ e a lista de residentes', async () => {
     respondeCom({ documentos: [] })

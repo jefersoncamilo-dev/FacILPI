@@ -147,6 +147,21 @@ describe('Avaliações — registro', () => {
     expect((dialog.getByLabelText('Instrumento (opcional)') as HTMLInputElement).value).toBe('MAN')
     await waitFor(() => expect((dialog.getByLabelText('Residente') as HTMLSelectElement).value).toBe('r1'))
   })
+
+  it('vindo do alerta de avaliação vencida (?id=), copia tipo e instrumento da vencida (M5)', async () => {
+    responde({ avaliacoes: [...AVALIACOES, avaliacao({ id: 'a3', residente_id: 'r2', tipo: 'Cognitiva', instrumento: 'MEEM', validade: '2000-01-01' })] })
+    renderEm('/avaliacoes?residente=r2&novo=1&id=a3')
+    const dialog = within(await screen.findByRole('dialog'))
+    expect((dialog.getByLabelText('Tipo') as HTMLInputElement).value).toBe('Cognitiva')
+    expect((dialog.getByLabelText('Instrumento (opcional)') as HTMLInputElement).value).toBe('MEEM')
+    await waitFor(() => expect((dialog.getByLabelText('Residente') as HTMLSelectElement).value).toBe('r2'))
+  })
+
+  it('?novo=1 sem permissão de criar não abre o formulário (M5)', async () => {
+    renderEm('/avaliacoes?residente=r2&novo=1&id=a2', ['avaliacoes:ler', 'residentes:ler'])
+    expect(await screen.findByText('Risco de queda')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 })
 
 describe('Avaliações — detalhe e grau de dependência', () => {

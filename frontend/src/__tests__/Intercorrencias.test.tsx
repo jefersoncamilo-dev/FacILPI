@@ -61,8 +61,8 @@ function respondeCom(opcoes: Opcoes = {}) {
   })
 }
 
-function renderPagina() {
-  return render(<MemoryRouter><Intercorrencias /></MemoryRouter>)
+function renderPagina(rota = '/intercorrencias') {
+  return render(<MemoryRouter initialEntries={[rota]}><Intercorrencias /></MemoryRouter>)
 }
 
 const urlsChamadas = () => mockGet.mock.calls.map(c => c[0])
@@ -122,6 +122,18 @@ describe('Intercorrências — estados de tela', () => {
     expect(within(cartao).getByText('Registrado por Enf. Ana Lima')).toBeTruthy()
     expect(within(cartao).getByText(/Encontrada sentada no chão/)).toBeTruthy()
     expect(within(cartao).getByText(/Avaliada, sem lesão aparente/)).toBeTruthy()
+  })
+})
+
+describe('Intercorrências — destino dos alertas (M5)', () => {
+  it('?residente= filtra a consulta e ?id= destaca o registro', async () => {
+    respondeCom({ registros: [REGISTRO, { ...REGISTRO, id: 'int-2', tipo: 'Febre' }] })
+    renderPagina('/intercorrencias?residente=res-1&id=int-2')
+    await screen.findByText('Febre')
+    expect(chamadasDaLista()[0][1]).toEqual({ params: { residente_id: 'res-1' } })
+    expect((screen.getByLabelText('Residente') as HTMLSelectElement).value).toBe('res-1')
+    expect(screen.getByText('Febre').closest('article')?.getAttribute('aria-current')).toBe('true')
+    expect(screen.getByText('Queda no banheiro').closest('article')?.getAttribute('aria-current')).toBeNull()
   })
 })
 
