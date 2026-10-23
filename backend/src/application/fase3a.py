@@ -1322,7 +1322,8 @@ async def vincular_usuario_funcionario(
         )
     ).scalar_one()
     if same_tenant == 0:
-        raise _http_error(status.HTTP_403_FORBIDDEN, "USER_TENANT_MISMATCH", "Usuário não pertence à ILPI")
+        # N4: mesmo 404 do id inexistente, para nao revelar usuario de outra ILPI.
+        raise _http_error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Usuário não encontrado")
     before = {"usuario_id": employee.usuario_id}
     employee.usuario_id = user.id
     add_audit(
