@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import httpx
 import pytest
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -312,7 +312,28 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
             headers=local_headers,
             json={"usuario_id": other["user_id"]},
         )
-        assert cross_link.status_code == 403
+        # N4: usuario de outra ILPI e id inexistente respondem igual (404 com o
+        # mesmo corpo) e nada e gravado: o vinculo e a auditoria nao mudam.
+        audits_before = (
+            await db.execute(select(func.count()).select_from(m.Auditoria).where(m.Auditoria.acao == "funcionario.usuario_vinculado"))
+        ).scalar_one()
+        unknown_link = await client.post(
+            f"/api/funcionarios/{sem_login_id}/vincular-usuario",
+            headers=local_headers,
+            json={"usuario_id": str(uuid.uuid4())},
+        )
+        assert cross_link.status_code == 404, cross_link.text
+        assert unknown_link.status_code == 404, unknown_link.text
+        assert cross_link.json() == unknown_link.json()
+        assert cross_link.json()["detail"]["code"] == "USER_NOT_FOUND"
+        persisted_usuario_id = (
+            await db.execute(select(m.Funcionario.usuario_id).where(m.Funcionario.id == sem_login_id))
+        ).scalar_one()
+        assert persisted_usuario_id == user_payload["id"]
+        audits_after = (
+            await db.execute(select(func.count()).select_from(m.Auditoria).where(m.Auditoria.acao == "funcionario.usuario_vinculado"))
+        ).scalar_one()
+        assert audits_after == audits_before
 
         duplicate_cpf = await client.post(
             "/api/funcionarios/",
