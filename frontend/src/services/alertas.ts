@@ -117,21 +117,31 @@ export function plantaoDesde(iso: string | null | undefined): string {
   return iso ? `/plantao?desde=${encodeURIComponent(iso)}` : '/plantao'
 }
 
+/** Monta `/rota?residente=…&id=…`, omitindo o que o alerta não trouxe. */
+function comContexto(rota: string, campos: Record<string, string | null | undefined>): string {
+  const p = new URLSearchParams()
+  for (const [k, v] of Object.entries(campos)) if (v) p.set(k, v)
+  const q = p.toString()
+  return q ? `${rota}?${q}` : rota
+}
+
 /** Onde e como cada alerta é resolvido — o único mapa de destinos (sino, Central, Início, Meu Plantão). */
 export function destinoDoAlerta(a: Alerta): Destino {
   switch (a.regra) {
     case 'admissao_parada':
       return { to: `/admissoes/${a.referencia_id}`, rotulo: 'Admissões', acao: 'Continuar admissão' }
     case 'documento_aguardando_validacao':
-      return { to: '/documentos', rotulo: 'Documentos', acao: 'Validar documento' }
+      return { to: comContexto('/documentos', { residente: a.residente_id, id: a.referencia_id }), rotulo: 'Documentos', acao: 'Validar documento' }
     case 'documento_vencido':
     case 'documento_vencendo':
-      return { to: '/documentos', rotulo: 'Documentos', acao: 'Atualizar documento' }
+      return { to: comContexto('/documentos', { residente: a.residente_id, id: a.referencia_id }), rotulo: 'Documentos', acao: 'Atualizar documento' }
+    // O alerta não traz tipo/instrumento: `id` é a avaliação vencida, e a tela
+    // copia dela o tipo e o instrumento da nova.
     case 'avaliacao_vencida':
-      return { to: '/avaliacoes', rotulo: 'Avaliações', acao: 'Realizar avaliação' }
+      return { to: comContexto('/avaliacoes', { residente: a.residente_id, novo: '1', id: a.referencia_id }), rotulo: 'Avaliações', acao: 'Realizar avaliação' }
     case 'grau_ausente':
     case 'grau_vencido':
-      return { to: '/avaliacoes', rotulo: 'Avaliações', acao: 'Definir grau de dependência' }
+      return { to: comContexto('/avaliacoes', { residente: a.residente_id }), rotulo: 'Avaliações', acao: 'Definir grau de dependência' }
     case 'pais_parado':
     case 'pais_vencido':
       return { to: `/plano/${a.referencia_id}`, rotulo: 'Plano de Cuidados', acao: 'Abrir PAIS' }
@@ -144,7 +154,7 @@ export function destinoDoAlerta(a: Alerta): Destino {
       return { to: plantaoDesde(a.prazo), rotulo: 'Meu Plantão', acao: 'Registrar doses' }
     case 'intercorrencia_grave_aberta':
     case 'intercorrencia_aberta_prolongada':
-      return { to: '/intercorrencias', rotulo: 'Intercorrências', acao: 'Ver intercorrência' }
+      return { to: comContexto('/intercorrencias', { residente: a.residente_id, id: a.referencia_id }), rotulo: 'Intercorrências', acao: 'Ver intercorrência' }
     case 'residente_sem_leito':
       return { to: '/quartos', rotulo: 'Quartos e Leitos', acao: 'Alocar leito' }
     case 'ausencia_prolongada':

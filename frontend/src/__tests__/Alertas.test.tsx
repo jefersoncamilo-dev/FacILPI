@@ -120,7 +120,7 @@ describe('Alertas e Pendências (#107, #117) — página', () => {
     const demais = screen.getByRole('region', { name: 'Demais (3)' })
     expect(within(demais).getByRole('link', { name: 'Continuar admissão em Admissões' }).getAttribute('href')).toBe('/admissoes/adm-9')
     expect(within(demais).getByText(/Sem avanço há 9 dias/)).toBeTruthy()
-    expect(within(demais).getByRole('link', { name: 'Validar documento em Documentos' }).getAttribute('href')).toBe('/documentos')
+    expect(within(demais).getByRole('link', { name: 'Validar documento em Documentos' }).getAttribute('href')).toBe('/documentos?residente=res-1&id=doc-1')
     expect(within(demais).getByRole('link', { name: 'Ver equipe em Equipe' }).getAttribute('href')).toBe('/equipe')
     // A tela respeita a ordem do backend.
     const titulos = within(demais).getAllByRole('listitem').map(li => li.querySelector('p')?.textContent)

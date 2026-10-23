@@ -48,7 +48,14 @@ export function Intercorrencias() {
   const [params, setParams] = useSearchParams()
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
-  const [residenteId, setResidenteId] = useState<string>(TODOS)
+  // M5 (#177): `?residente=` chega filtrado e `?id=` destaca o registro (destino dos alertas).
+  const [residenteId, setResidenteId] = useState<string>(() => params.get('residente') || TODOS)
+  const destacado = params.get('id')
+  useEffect(() => {
+    if (destacado && registros.some(r => r.id === destacado)) {
+      document.getElementById(`intercorrencia-${destacado}`)?.scrollIntoView?.({ block: 'center' })
+    }
+  }, [destacado, registros])
 
   const [modalAberto, setModalAberto] = useState(() => params.get('registrar') === '1')
   // UX-11 (#101): `?registrar=1` (ações rápidas do Início) abre o registro
@@ -133,7 +140,15 @@ export function Intercorrencias() {
           id="int-filtro-residente"
           className="input sm:flex-1"
           value={residenteId}
-          onChange={e => { setSucesso(''); setResidenteId(e.target.value) }}
+          onChange={e => {
+            setSucesso('')
+            setResidenteId(e.target.value)
+            if (params.has('residente') || params.has('id')) {
+              const p = new URLSearchParams(params)
+              p.delete('residente'); p.delete('id')
+              setParams(p, { replace: true })
+            }
+          }}
         >
           <option value={TODOS}>Todos os residentes</option>
           {residentes.map(r => (
@@ -205,7 +220,9 @@ export function Intercorrencias() {
             return (
             <article
               key={registro.id}
-              className={`card min-w-0 border-l-4 ${
+              id={`intercorrencia-${registro.id}`}
+              aria-current={registro.id === destacado ? 'true' : undefined}
+              className={`card min-w-0 border-l-4 ${registro.id === destacado ? 'ring-2 ring-primary ' : ''}${
                 registro.situacao === 'aberta' ? 'border-l-warning' : foraDoContrato ? 'border-l-border' : 'border-l-success'
               }`}
             >

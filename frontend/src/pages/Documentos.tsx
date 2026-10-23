@@ -56,6 +56,13 @@ export function Documentos() {
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
   const residenteId = searchParams.get(PARAM_RESIDENTE) ?? TODOS
+  // M5 (#177): `?id=` destaca o documento (destino dos alertas); trocar o filtro o descarta.
+  const destacado = searchParams.get('id')
+  useEffect(() => {
+    if (destacado && documentos.some(d => d.id === destacado)) {
+      document.getElementById(`documento-${destacado}`)?.scrollIntoView?.({ block: 'center' })
+    }
+  }, [destacado, documentos])
 
   const [cadastrando, setCadastrando] = useAberturaPorParametro('novo')
   const [documentoParaAnexo, setDocumentoParaAnexo] = useState<Documento | null>(null)
@@ -248,7 +255,12 @@ export function Documentos() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {documentos.map(documento => (
-            <article key={documento.id} className="card min-w-0">
+            <article
+              key={documento.id}
+              id={`documento-${documento.id}`}
+              aria-current={documento.id === destacado ? 'true' : undefined}
+              className={`card min-w-0${documento.id === destacado ? ' ring-2 ring-primary' : ''}`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="font-semibold break-words">{documento.tipo}</div>

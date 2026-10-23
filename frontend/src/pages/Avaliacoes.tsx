@@ -44,6 +44,13 @@ export function Avaliacoes() {
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
+  // M5 (#177): `?novo=1&id=` chega do alerta de avaliação vencida, que não traz
+  // tipo nem instrumento — a nova copia os da avaliação vencida, se visível.
+  const idBase = params.get('id')
+  const inicialNova = useMemo(() => {
+    const base = nova && !nova.tipo && idBase ? avaliacoes?.find(a => a.id === idBase) : undefined
+    return base ? { ...nova, tipo: base.tipo, instrumento: base.instrumento || '' } : nova
+  }, [nova, idBase, avaliacoes])
   useEffect(() => {
     api.get<ResidenteRef[]>('/residentes/').then(r => setResidentes(r.data || [])).catch(() => setResidentes([]))
   }, [])
@@ -67,7 +74,7 @@ export function Avaliacoes() {
     const p = new URLSearchParams(params)
     if (id) p.set('residente', id)
     else p.delete('residente')
-    p.delete('novo'); p.delete('tipo'); p.delete('instrumento')
+    p.delete('novo'); p.delete('tipo'); p.delete('instrumento'); p.delete('id')
     setParams(p, { replace: true })
   }
 
@@ -144,8 +151,9 @@ export function Avaliacoes() {
         </>
       )}
 
-      {nova && (
-        <NovaAvaliacaoDialogo inicial={nova} residentes={residentes} usados={usados} aoFechar={() => setNova(null)}
+      {/* Com `?id=` espera a lista para o formulário já nascer preenchido. */}
+      {inicialNova && pode('avaliacoes:criar') && (!idBase || avaliacoes !== null) && (
+        <NovaAvaliacaoDialogo inicial={inicialNova} residentes={residentes} usados={usados} aoFechar={() => setNova(null)}
           aoCriar={a => {
             setNova(null)
             setAviso(`Avaliação registrada para ${nomes.get(a.residente_id) || 'o residente'}.`)
