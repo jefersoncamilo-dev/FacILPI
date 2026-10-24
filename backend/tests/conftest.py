@@ -8,6 +8,8 @@ import sqlite3
 import tempfile
 import uuid
 
+import pytest
+
 from .db_safety import register_temp_root, validate_sqlite_path, validate_target
 
 _ORIGINAL_CONNECT = sqlite3.connect
@@ -54,6 +56,7 @@ _PG_MARCADORES = ("POSTGRES_URL", "PG_MANIFEST", "reset_postgres", "validate_pg_
 _PG_ATIVO = any(nome.endswith("_TEST_POSTGRES_URL") and valor for nome, valor in os.environ.items())
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config, items):
     # Issue #184: com pytest-xdist (`--dist loadgroup`), os databases PostgreSQL
     # descartaveis tem nomes fixos e sao compartilhados entre arquivos. Tudo que
@@ -61,7 +64,6 @@ def pytest_collection_modifyitems(config, items):
     # so o que comprovadamente roda em SQLite (param "sqlite") fica livre.
     if not _PG_ATIVO:
         return
-    import pytest
 
     fontes: dict[str, bool] = {}
     for item in items:

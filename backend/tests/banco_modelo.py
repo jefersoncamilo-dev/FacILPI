@@ -21,12 +21,14 @@ import os
 import pathlib
 import re
 import shutil
+import subprocess
+import sys
 import tempfile
 import uuid
 
 from sqlalchemy.engine import make_url
 
-from .db_safety import register_temp_root, run_alembic, validate_sqlite_path
+from .db_safety import BACKEND, register_temp_root, run_alembic, validate_sqlite_path
 
 _PG_HOSTS = {"127.0.0.1", "localhost"}
 _PG_PORTS = {55484, 55485, 55486}
@@ -70,7 +72,21 @@ def _validar_pg(url: str) -> None:
 
 
 def _alembic(url: str, revisao: str) -> None:
-    resultado = run_alembic(url, "upgrade", revisao)
+    if make_url(url).get_backend_name() == "sqlite":
+        resultado = run_alembic(url, "upgrade", revisao)
+    else:
+        # `run_alembic` so aceita o database do PG_MANIFEST; o modelo tem nome
+        # proprio e ja passou por `_validar_pg`. Mesmo ambiente de `run_alembic`.
+        _validar_pg(url)
+        ambiente = os.environ.copy()
+        ambiente["DATABASE_URL"] = url
+        ambiente.pop("APP_DATABASE_URL", None)
+        resultado = subprocess.run(
+            [sys.executable, "-m", "alembic", "-c", str(BACKEND / "alembic.ini"),
+             "-x", f"database_url={url}", "upgrade", revisao],
+            cwd=BACKEND, env=ambiente, capture_output=True, text=True,
+            encoding="utf-8", errors="replace",
+        )
     assert resultado.returncode == 0, resultado.stdout + resultado.stderr
 
 
