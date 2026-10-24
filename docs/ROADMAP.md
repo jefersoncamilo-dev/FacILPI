@@ -153,3 +153,13 @@ Somente direção de produto. Nenhuma destas fases tem design técnico, migratio
 - **Fase 14 — Automação e detecção de padrões.** Organização, sumarização, priorização e identificação de padrões sobre dados existentes. Sem diagnóstico automático, decisão clínica ou predição não validada.
 
 **RH completo** — folha, ponto e banco de horas — permanece fora das 14 fases e fora do escopo do FacILPI neste ciclo.
+
+## 18. Mapa do FacILPI — Ondas 0 e 1 integradas (20–24/10/2026)
+
+Exceção ao FEATURE_FREEZE dada pelo responsável em 20/10/2026, só para os itens destas ondas. Todos os PRs entraram na `fase-3b` com os três jobs de CI verdes.
+
+- **Onda 0 (governança e prontuário):** M19 (#161, PR #162), M20 (#167, PR #168), N1 (#169, PR #170).
+- **Onda 1 (núcleo):** N2 saída do residente (#171, PR #174, migration 030), M14 situação fora da escrita (#172, PR #175), M1 Passar plantão (#176, PR #181), M5 destinos dos alertas (#177, PR #180), N4 404 uniforme (#178, PR #179).
+- **Follow-ups abertos:** #163 (cursor com `data` nula), #164 (documentos no prontuário), #165 (conclusão da admissão), #166 (familiares), #173 (encerramento `saida` dos alertas), validação visual do M1 (Onda 3), tela de estorno da saída.
+- **Homologação:** 029 e 030 aplicadas em ordem no Neon só por decisão humana.
+- **Ondas 2–8:** somente PLAN até nova autorização. Dependem das decisões D1 (medicação/receita), D2 (estorno de dose), D3 (transição do `ilpi_admin`), D5 (ordem dos complementares), D6 (percentual de refeição) e da identidade visual.
