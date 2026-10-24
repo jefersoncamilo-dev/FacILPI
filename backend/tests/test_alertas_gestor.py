@@ -22,7 +22,8 @@ from .test_d2_rotina import (
     _prog_payload, _setup_pais_vigente,
 )
 from .test_d3_admissao import ALL as ADMISSOES, _client
-from .test_d3_admissao_migration import _migrate, _ref
+from .test_d3_admissao_migration import _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from src.infrastructure import models as m
 
 HEAD = "026_alerta_estados"
@@ -38,7 +39,7 @@ GESTOR = {"alertas:ler"} | FONTES | ADMISSOES | PAIS6 | D2_ALL | C5_KEYS
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def alertas_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
+    migrar_de_modelo(_url(ref), ESQUEMA_DOS_MODELOS)
     return ref
 
 

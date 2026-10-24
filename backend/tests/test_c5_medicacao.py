@@ -15,7 +15,8 @@ from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from . import test_fase5a3b_sinais_vitais_rbac_tenant as h
-from .test_c5_medicacao_migration import KEYS, _migrate, c5_migration_db
+from .banco_modelo import migrar_de_modelo
+from .test_c5_medicacao_migration import KEYS, REV_012, _url, c5_migration_db
 
 NOW = datetime(2026, 9, 8, 12, 0, tzinfo=timezone.utc)
 MED = "/api/medicamentos/"
@@ -26,7 +27,7 @@ ADM = "/api/administracoes/"
 
 @pytest.fixture
 def c5_db(c5_migration_db):
-    _migrate(c5_migration_db)
+    migrar_de_modelo(_url(c5_migration_db), REV_012)
     return c5_migration_db
 
 

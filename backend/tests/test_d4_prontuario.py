@@ -22,6 +22,7 @@ OFFICIAL_DB = ROOT / "storage" / "app.db"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from tests.banco_modelo import migrar_de_modelo
 from src import main
 from src.application import auth
 from src.application.auth import create_access_token
@@ -73,11 +74,7 @@ def _run_migration(ref):
     else:
         _assert_disposable_postgres(ref)
     url=_database_url(ref)
-    env=os.environ.copy()
-    env["DATABASE_URL"]=url
-    env.pop("APP_DATABASE_URL",None)
-    result=subprocess.run([sys.executable,"-m","alembic","-x",f"database_url={url}","upgrade","head"], cwd=BACKEND, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    assert result.returncode==0, result.stdout+result.stderr
+    migrar_de_modelo(url)
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D4_TEST_POSTGRES_URL") else []))
 def prontuario_db(request, tmp_path):

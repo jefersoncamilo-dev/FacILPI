@@ -16,7 +16,8 @@ from .revisoes import ESQUEMA_DOS_MODELOS
 from .test_alertas_gestor import GESTOR, _agora, _alertas, _gestor, _residente
 from .test_d2_rotina import _create_funcionario, _new_id, _prog_payload, _setup_pais_vigente
 from .test_d3_admissao import _client
-from .test_d3_admissao_migration import _migrate, _ref
+from .test_d3_admissao_migration import _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from src.infrastructure import models as m
 
 HEAD = "028_alerta_expirado"
@@ -26,7 +27,7 @@ URL = "/api/central-alertas"
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def expirado_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
+    migrar_de_modelo(_url(ref), ESQUEMA_DOS_MODELOS)
     return ref
 
 

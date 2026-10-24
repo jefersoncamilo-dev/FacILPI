@@ -50,6 +50,7 @@ OFFICIAL_DB = ROOT / "storage" / "app.db"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from tests.banco_modelo import migrar_de_modelo
 from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application.auth import create_access_token  # noqa: E402
@@ -93,16 +94,7 @@ def _assert_disposable_database(database_ref: pathlib.Path | str) -> None:
 def _run_migration(database_ref: pathlib.Path | str) -> None:
     _assert_disposable_database(database_ref)
     url = _database_url(database_ref)
-    environment = os.environ.copy()
-    environment["DATABASE_URL"] = url
-    environment.pop("APP_DATABASE_URL", None)
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "-x", f"database_url={url}", "upgrade", "head"],
-        cwd=BACKEND,
-        env=environment,
-        capture_output=True, text=True, encoding="utf-8", errors="replace",
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+    migrar_de_modelo(url)
 
 
 async def _reset_postgres(url: str) -> None:
