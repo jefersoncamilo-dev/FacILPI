@@ -94,8 +94,10 @@ jobs:
 
       # -rs lista os skips no log: um teste pulado em silencio e indistinguivel
       # de um teste que passou, e a suite pula quando o alvo esta indisponivel.
+      # Issue #184: xdist com um processo por CPU; cada worker tem a propria raiz
+      # temporaria e o seu proprio banco modelo SQLite (tests/banco_modelo.py).
       - name: pytest
-        run: python -m pytest -rs
+        run: python -m pytest -rs -n auto --dist loadgroup
 
   backend-postgres:
     name: Backend (PostgreSQL)
@@ -283,5 +285,8 @@ jobs:
           print(f"11 variaveis conferidas: {len(portas)} portas, {len(databases)} databases")
           PY
 
+      # Issue #184: os databases descartaveis tem nome fixo, entao tudo que pode
+      # toca-los fica no grupo "postgresql" (tests/conftest.py), executado em
+      # serie por um unico worker; os testes so-SQLite se espalham pelos demais.
       - name: pytest
-        run: python -m pytest -rs
+        run: python -m pytest -rs -n auto --dist loadgroup

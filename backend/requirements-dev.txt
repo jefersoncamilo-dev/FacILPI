@@ -9,3 +9,6 @@
 # diretamente, sem pytest-asyncio, e o unico marcador usado e o parametrize
 # embutido — por isso nenhum plugin e necessario.
 pytest>=9.1
+
+# Issue #184: paraleliza a suite no CI (`-n auto --dist loadgroup`).
+pytest-xdist>=3.6
