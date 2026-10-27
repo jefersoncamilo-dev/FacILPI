@@ -71,9 +71,12 @@ def pytest_collection_modifyitems(config, items):
         if caminho not in fontes:
             texto = pathlib.Path(caminho).read_text(encoding="utf-8", errors="replace")
             fontes[caminho] = any(marcador in texto for marcador in _PG_MARCADORES)
-        if not fontes[caminho]:
-            continue
         callspec = getattr(item, "callspec", None)
-        if callspec is not None and "sqlite" in callspec.params.values():
+        valores = list(callspec.params.values()) if callspec is not None else []
+        # Fixtures importadas de outro modulo (ex.: c5_migration_db) nao deixam
+        # marcador no texto do arquivo: o param "postgresql" basta para agrupar.
+        if not fontes[caminho] and "postgresql" not in valores:
+            continue
+        if "sqlite" in valores and "postgresql" not in valores:
             continue
         item.add_marker(pytest.mark.xdist_group("postgresql"))
