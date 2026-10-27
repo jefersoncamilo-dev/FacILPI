@@ -32,7 +32,11 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Meu Plantão operacional (UX-00/UX-01, #138–#145): registro rápido de cuidado, visões por horário/cuidado/residente, filtros, seleção múltipla e registro em lote com persistência individual; local do residente (G3) e grau de dependência ativo (decisão C) na própria fila; horizonte de cuidados e doses renovado na leitura (G1, #139).
 - Matriz de permissões clínicas/institucionais.
 - Admissão ponta a ponta.
-- Saída do residente (N2, #171, migration 030): óbito, transferência, desligamento e retorno à família, com estorno; regras em `docs/DOMAIN_RULES.md`.
+- Saída do residente (N2, #171, migration 030): óbito, transferência, desligamento e retorno à família, com estorno; regras em `docs/DOMAIN_RULES.md`. O estorno ainda não tem tela (só API).
+- Situação do residente só pela Admissão e pela saída (M14, #172).
+- Meu Plantão: "Passar plantão" como ação principal e confirmação ao encerrar, com atrasados e estado da passagem (M1, #176). Validação visual no celular pendente para a Onda 3.
+- Destinos dos alertas com contexto do residente e do registro (M5, #177).
+- Vincular funcionário a usuário de outra ILPI devolve o mesmo 404 de id inexistente (N4, #178).
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
 
 ## Estado funcional importante
@@ -61,6 +65,8 @@ Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de regi
 - **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. O JWT segue em `localStorage`; a CSP sem script inline reduz o risco, e a saída para cookie fica como decisão futura.
 - **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 e React Router 7 (upgrades maiores, sem decisão).
 - **Branches:** a `main` foi promovida a partir da linha integrada pelo PR #160 (20/10/2026, v0.6.0), com conteúdo igual ao da `fase-3b`. A `fase-3b` continua sendo a linha integrada; a `main` só avança por promoção.
+
+- **Alerta de quem saiu:** o estado aberto de um alerta de residente que saiu fecha como "resolvido pela fonte"; o encerramento próprio `saida` é o #173 (exige migration 031).
 
 ### Critério de promoção para a `main` (decisão D4, 20/10/2026)
 Uma promoção da `fase-3b` para a `main` exige:
