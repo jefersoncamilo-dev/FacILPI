@@ -45,7 +45,7 @@ function evento(overrides: Partial<ProntuarioResponse['items'][number]> = {}) {
 
 function renderTela(idInicial = 'r1') {
   return render(
-    <MemoryRouter initialEntries={[`/residentes/${idInicial}`]}>
+    <MemoryRouter initialEntries={[`/residentes/${idInicial}?aba=linha-do-tempo`]}>
       <Routes>
         <Route path="/residentes" element={<Residentes />} />
         <Route path="/residentes/:id" element={<ResidenteProntuario />} />
@@ -248,7 +248,7 @@ describe('ResidenteProntuario', () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
     render(
-      <MemoryRouter initialEntries={['/residentes/r1']}>
+      <MemoryRouter initialEntries={['/residentes/r1?aba=linha-do-tempo']}>
         <Routes>
           <Route path="/residentes" element={<div>TELA-RESIDENTES</div>} />
           <Route path="/residentes/:id" element={<ResidenteProntuario />} />
@@ -472,7 +472,7 @@ describe('ResidenteProntuario', () => {
     expect(voltar.className).toContain('items-center')
   })
 
-  it('28. inicial decorativa do cabecalho e marcada como aria-hidden', async () => {
+  it('28. avatar decorativo do cabecalho (AvatarResidente, M4) e marcado como aria-hidden', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
     const { container } = renderTela()
@@ -480,7 +480,7 @@ describe('ResidenteProntuario', () => {
     // O h1 continua acessivel: o avatar e irmao dele, nao ancestral.
     expect(await screen.findByRole('heading', { name: 'Maria da Silva' })).toBeTruthy()
     const avatar = container.querySelector('[aria-hidden="true"]')
-    expect(avatar?.textContent).toBe('M')
+    expect(avatar?.textContent).toBe('MS')
   })
 
   it('29. nome acessivel do card nao comeca com a inicial duplicada', async () => {
