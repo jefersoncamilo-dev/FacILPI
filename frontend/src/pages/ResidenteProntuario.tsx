@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api } from '../services/api'
 import {
   fimDoDiaISO,
@@ -11,6 +11,7 @@ import {
 import { ResidenteCabecalho, ResidenteResumo } from '../components/prontuario/ResidenteCabecalho'
 import { FILTROS_INICIAIS, FiltrosValue, ProntuarioFiltros } from '../components/prontuario/ProntuarioFiltros'
 import { ProntuarioLinhaDoTempo } from '../components/prontuario/ProntuarioLinhaDoTempo'
+import { ResumoResidente } from '../components/prontuario/ResumoResidente'
 import { ProntuarioCarregando, ProntuarioErro, ProntuarioVazio } from '../components/prontuario/ProntuarioEstados'
 import { RegistrarSinalVitalModal } from '../components/sinaisVitais/RegistrarSinalVitalModal'
 import { RegistrarIntercorrenciaModal } from '../components/intercorrencias/RegistrarIntercorrenciaModal'
@@ -56,6 +57,15 @@ export function ResidenteProntuario() {
   const { id } = useParams<{ id: string }>()
   const { pode } = usePermissoesOuPadrao()
   const contexto = useContextoResidente(id)
+  // M4 (#186): Resumo é a aba padrão; `?aba=linha-do-tempo` abre direto a linha do tempo.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const aba: 'resumo' | 'linha-do-tempo' = searchParams.get('aba') === 'linha-do-tempo' ? 'linha-do-tempo' : 'resumo'
+  function trocarAba(nova: 'resumo' | 'linha-do-tempo') {
+    const p = new URLSearchParams(searchParams)
+    if (nova === 'resumo') p.delete('aba')
+    else p.set('aba', nova)
+    setSearchParams(p, { replace: true })
+  }
 
   const [residente, setResidente] = useState<ResidenteResumo | null>(null)
   const [residenteErro, setResidenteErro] = useState<string | null>(null)
@@ -290,41 +300,69 @@ export function ResidenteProntuario() {
               </div>
             )}
 
-            <VisoesRapidas filtros={filtros} pode={pode} aoEscolher={aplicarFiltros} />
+            <div role="tablist" aria-label="Prontuário do residente" className="flex gap-2 border-b border-border">
+              {([['resumo', 'Resumo'], ['linha-do-tempo', 'Linha do tempo']] as const).map(([valor, rotulo]) => (
+                <button
+                  key={valor}
+                  type="button"
+                  role="tab"
+                  id={`aba-${valor}`}
+                  aria-selected={aba === valor}
+                  aria-controls={`painel-${valor}`}
+                  onClick={() => trocarAba(valor)}
+                  className={cn(
+                    'min-h-[44px] -mb-px border-b-2 px-3 text-sm font-medium transition-colors',
+                    aba === valor ? 'border-brand text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
 
-            <ProntuarioFiltros value={filtros} onChange={aplicarFiltros} />
-
-            {erroFiltro && (
-              <div role="alert" className="card bg-red-50 border-red-200 p-3 text-sm text-danger">
-                {erroFiltro}
+            {aba === 'resumo' ? (
+              <div role="tabpanel" id="painel-resumo" aria-labelledby="aba-resumo">
+                {id && <ResumoResidente residenteId={id} />}
               </div>
-            )}
-
-            {carregandoInicial ? (
-              <ProntuarioCarregando />
-            ) : erroCarga ? (
-              <ProntuarioErro mensagem={erroCarga} onRetry={() => carregar(filtros)} />
-            ) : eventos.length === 0 ? (
-              <ProntuarioVazio />
             ) : (
-              <>
-                <ProntuarioLinhaDoTempo eventos={eventos} />
-                {erroPaginacao && (
-                  <p role="alert" className="text-sm text-danger text-center">{erroPaginacao}</p>
-                )}
-                {hasMore && (
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      onClick={carregarMais}
-                      disabled={carregandoMais}
-                      className="btn-secondary disabled:opacity-60"
-                    >
-                      {carregandoMais ? 'Carregando…' : 'Carregar mais'}
-                    </button>
-                  </div>
-                )}
-              </>
+              <div role="tabpanel" id="painel-linha-do-tempo" aria-labelledby="aba-linha-do-tempo" className="space-y-4">
+              <VisoesRapidas filtros={filtros} pode={pode} aoEscolher={aplicarFiltros} />
+
+              <ProntuarioFiltros value={filtros} onChange={aplicarFiltros} />
+
+              {erroFiltro && (
+                <div role="alert" className="card bg-red-50 border-red-200 p-3 text-sm text-danger">
+                  {erroFiltro}
+                </div>
+              )}
+
+              {carregandoInicial ? (
+                <ProntuarioCarregando />
+              ) : erroCarga ? (
+                <ProntuarioErro mensagem={erroCarga} onRetry={() => carregar(filtros)} />
+              ) : eventos.length === 0 ? (
+                <ProntuarioVazio />
+              ) : (
+                <>
+                  <ProntuarioLinhaDoTempo eventos={eventos} />
+                  {erroPaginacao && (
+                    <p role="alert" className="text-sm text-danger text-center">{erroPaginacao}</p>
+                  )}
+                  {hasMore && (
+                    <div className="text-center">
+                      <button
+                        type="button"
+                        onClick={carregarMais}
+                        disabled={carregandoMais}
+                        className="btn-secondary disabled:opacity-60"
+                      >
+                        {carregandoMais ? 'Carregando…' : 'Carregar mais'}
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+              </div>
             )}
           </div>
         </div>

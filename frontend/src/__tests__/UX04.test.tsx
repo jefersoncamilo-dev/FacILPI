@@ -109,7 +109,7 @@ describe('UX-04 — prontuário', () => {
 
   it('atalhos de visão só oferecem origens permitidas e aplicam o filtro de origem', async () => {
     const user = userEvent.setup()
-    renderEm('/residentes/r1', ['residentes:ler', 'sinais_vitais:ler', 'intercorrencias:ler'])
+    renderEm('/residentes/r1?aba=linha-do-tempo', ['residentes:ler', 'sinais_vitais:ler', 'intercorrencias:ler'])
     const grupo = within(await screen.findByRole('group', { name: 'Ver no prontuário' }))
     expect(grupo.getByRole('button', { name: 'Tudo' }).getAttribute('aria-pressed')).toBe('true')
     expect(grupo.queryByRole('button', { name: 'PAIS' })).toBeNull()
