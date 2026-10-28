@@ -607,3 +607,59 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(familiares_db):
         assert _detail_code(residentes_denied) == PERMISSION_DENIED
 
     asyncio.run(_with_client(familiares_db, scenario))
+
+
+def test_familiares_filtro_por_residente_respeita_tenant(familiares_db):
+    """M13 (#194): ?residente_id= devolve so os familiares daquele residente;
+    residente de outra ILPI ou inexistente compartilha o mesmo 404."""
+
+    async def scenario(client: httpx.AsyncClient, db: AsyncSession):
+        ilpi_a = _new_institution("ILPI A M13")
+        ilpi_b = _new_institution("ILPI B M13")
+        db.add_all([ilpi_a, ilpi_b])
+        await db.flush()
+        res_a1 = m.Residente(id=_new_id(), instituicao_id=ilpi_a.id, nome="Residente A1 M13", data_nascimento=date(1940, 1, 1))
+        res_a2 = m.Residente(id=_new_id(), instituicao_id=ilpi_a.id, nome="Residente A2 M13", data_nascimento=date(1941, 1, 1))
+        res_b = m.Residente(id=_new_id(), instituicao_id=ilpi_b.id, nome="Residente B M13", data_nascimento=date(1942, 1, 1))
+        db.add_all([res_a1, res_a2, res_b])
+        await db.flush()
+        writer_a = await _create_ilpi_user(
+            db, ilpi_a, permissions={"familiares:ler", "familiares:criar"}, profile_key="fam_m13_a"
+        )
+        writer_b = await _create_ilpi_user(
+            db, ilpi_b, permissions={"familiares:ler", "familiares:criar"}, profile_key="fam_m13_b"
+        )
+        sem_ler = await _create_ilpi_user(db, ilpi_a, permissions=set(), profile_key="fam_m13_none")
+        await db.commit()
+        headers_a = _auth_headers(writer_a, scope="ilpi", ilpi_id=ilpi_a.id)
+        headers_b = _auth_headers(writer_b, scope="ilpi", ilpi_id=ilpi_b.id)
+        headers_none = _auth_headers(sem_ler, scope="ilpi", ilpi_id=ilpi_a.id)
+
+        for headers, residente, nome in (
+            (headers_a, res_a1, "Familiar de A1"),
+            (headers_a, res_a2, "Familiar de A2"),
+            (headers_b, res_b, "Familiar de B"),
+        ):
+            r = await client.post("/api/familiares/", headers=headers, json=_familiar_payload(residente.id, nome))
+            assert r.status_code == 201, r.text
+
+        filtrado = await client.get("/api/familiares/", headers=headers_a, params={"residente_id": res_a1.id})
+        assert filtrado.status_code == 200
+        assert [f["nome"] for f in filtrado.json()] == ["Familiar de A1"]
+
+        # Sem o parametro, a resposta segue a de antes: todos os do tenant, nada da ILPI B.
+        todos = await client.get("/api/familiares/", headers=headers_a)
+        assert todos.status_code == 200
+        assert sorted(f["nome"] for f in todos.json()) == ["Familiar de A1", "Familiar de A2"]
+
+        cross = await client.get("/api/familiares/", headers=headers_a, params={"residente_id": res_b.id})
+        inexistente = await client.get("/api/familiares/", headers=headers_a, params={"residente_id": _new_id()})
+        assert cross.status_code == 404
+        assert inexistente.status_code == 404
+        assert _detail_code(cross) == _detail_code(inexistente)
+        assert "Familiar de B" not in cross.text
+
+        negado = await client.get("/api/familiares/", headers=headers_none, params={"residente_id": res_a1.id})
+        assert negado.status_code == 403
+
+    asyncio.run(_with_client(familiares_db, scenario))

@@ -8,6 +8,7 @@ import { ROTULO_PAIS, type Plano } from '../../services/pais'
 import { sinaisMedidos, type SinalVital } from '../../services/sinaisVitais'
 import { rotuloTipo, type Intercorrencia } from '../../services/intercorrencias'
 import { Badge } from '../ui/feedback'
+import { FamiliaresResidente } from './FamiliaresResidente'
 
 /**
  * M4 (#186): Resumo do residente. Cada card lê a sua fonte oficial e só existe
@@ -220,6 +221,7 @@ export function ResumoResidente({ residenteId }: { residenteId: string }) {
       <CardPais residenteId={residenteId} />
       <CardPrescricoes residenteId={residenteId} />
       <CardSinais residenteId={residenteId} />
+      <FamiliaresResidente residenteId={residenteId} />
     </div>
   )
 }
