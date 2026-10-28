@@ -437,10 +437,12 @@ def test_07_enfermagem_medica_medico(s1_db):
             "inicio": "2026-09-01"}, headers=hm)
         assert r.status_code == 201, r.text
         presc_id = r.json()["id"]
+        # D1 (M10, migration 031): enfermagem transcreve receita externa (prescricoes:criar);
+        # antes da 031 o esperado era 403.
         assert (await client.post("/api/prescricoes/", json={
-            "residente_id": res.id, "medicamento_id": med_id, "prescritor_nome": "Enf",
-            "prescritor_categoria": "Enfermeiro", "dose": "1", "unidade": "cp", "via": "oral",
-            "inicio": "2026-09-01"}, headers=he)).status_code == 403
+            "residente_id": res.id, "medicamento_id": med_id, "prescritor_nome": "Dr Externo",
+            "prescritor_categoria": "Medico", "dose": "1", "unidade": "cp", "via": "oral",
+            "inicio": "2026-09-01"}, headers=he)).status_code == 201
         inicio = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         r = await client.post(f"/api/prescricoes/{presc_id}/ativar", json={
             "horarios": ["08:00"], "timezone": "America/Sao_Paulo", "vigencia_inicio": inicio}, headers=ha)
