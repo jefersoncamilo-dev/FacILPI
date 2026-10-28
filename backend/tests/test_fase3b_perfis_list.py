@@ -348,6 +348,8 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
         # 99 + 2 e 202 + 9: a 027 (#125) cria passagem_plantao:ler/registrar (medico so ler).
         # 101 + 2 e 211 + 6: a 030 (#171) cria residentes:registrar_saida (ilpi_admin, RT,
         # enfermagem, administrativo) e residentes:estornar_saida (ilpi_admin, RT).
-        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 217}
+        # 217 + 8: a 031 (M10, D1) concede medicamentos:criar/atualizar e prescricoes:criar/atualizar
+        # a enfermagem e responsavel_tecnico (catalogo da 012, sem permissao nova).
+        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 225}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))
