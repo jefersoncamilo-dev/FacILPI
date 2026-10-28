@@ -21,6 +21,7 @@ import { Avaliacoes } from './pages/Avaliacoes'
 import { PassagemPlantao } from './pages/PassagemPlantao'
 import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
+import { Cuidados } from './pages/Cuidados'
 import { ModuleHub } from './pages/ModuleHub'
 import { ErrorBoundary } from './components/ui/states'
 import { Equipe } from './pages/Equipe'
@@ -60,7 +61,7 @@ export default function App() {
           <Route path="/avaliacoes" element={<Protected><Avaliacoes /></Protected>} />
           <Route path="/plano" element={<Protected><Pais /></Protected>} />
           <Route path="/plano/:id" element={<Protected><PaisDetalhe /></Protected>} />
-          <Route path="/cuidados" element={<Protected><Placeholder title="Cuidados Diários" /></Protected>} />
+          <Route path="/cuidados" element={<Protected><Cuidados /></Protected>} />
           <Route path="/medicacao" element={<Protected><Placeholder title="Medicação" /></Protected>} />
           <Route path="/sinais" element={<Protected><SinaisVitais /></Protected>} />
           <Route path="/intercorrencias" element={<Protected><Intercorrencias /></Protected>} />
