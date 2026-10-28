@@ -12,6 +12,7 @@ import { SinaisVitais } from './pages/SinaisVitais'
 import { Intercorrencias } from './pages/Intercorrencias'
 import { Documentos } from './pages/Documentos'
 import { Placeholder } from './pages/Placeholder'
+import { Medicacao } from './pages/Medicacao'
 import { Admissoes } from './pages/Admissoes'
 import { Alertas } from './pages/Alertas'
 import { Escala } from './pages/Escala'
@@ -56,13 +57,14 @@ export default function App() {
           <Route path="/plantao" element={<Protected><MeuPlantao /></Protected>} />
           <Route path="/residentes" element={<Protected><Residentes /></Protected>} />
           <Route path="/residentes/:id" element={<Protected><ResidenteProntuario /></Protected>} />
+          <Route path="/residentes/:id/medicacao" element={<Protected><Medicacao /></Protected>} />
           <Route path="/admissoes" element={<Protected><Admissoes /></Protected>} />
           <Route path="/admissoes/:id" element={<Protected><AdmissaoDetalhe /></Protected>} />
           <Route path="/avaliacoes" element={<Protected><Avaliacoes /></Protected>} />
           <Route path="/plano" element={<Protected><Pais /></Protected>} />
           <Route path="/plano/:id" element={<Protected><PaisDetalhe /></Protected>} />
           <Route path="/cuidados" element={<Protected><Cuidados /></Protected>} />
-          <Route path="/medicacao" element={<Protected><Placeholder title="Medicação" /></Protected>} />
+          <Route path="/medicacao" element={<Protected><Medicacao /></Protected>} />
           <Route path="/sinais" element={<Protected><SinaisVitais /></Protected>} />
           <Route path="/intercorrencias" element={<Protected><Intercorrencias /></Protected>} />
           <Route path="/documentos" element={<Protected><Documentos /></Protected>} />
