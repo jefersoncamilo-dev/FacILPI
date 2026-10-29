@@ -12,6 +12,7 @@ import { RegistrarLote } from '../components/plantao/RegistrarLote'
 import { ItemPlantao } from '../components/plantao/ItemPlantao'
 import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
 import { CorrigirRegistros } from '../components/plantao/CorrigirRegistros'
+import { FeitosExpirados } from '../components/plantao/FeitosExpirados'
 import {
   FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar, marcavelEmGrupo,
   type Filtros, type Situacao, type Visao,
@@ -425,6 +426,9 @@ export function MeuPlantao() {
           </div>
         )}
       </div>
+
+      {/* G5 (#198): feitos e expirados do turno, só leitura. */}
+      {pode('execucoes:ler') && <FeitosExpirados nomes={nomes} />}
 
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
 

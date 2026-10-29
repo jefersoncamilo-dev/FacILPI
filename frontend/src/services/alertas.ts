@@ -236,3 +236,19 @@ export const LIMIARES = [
   'Intercorrência grave aberta, ou qualquer intercorrência aberta há mais de 24 horas.',
   'Hospitalização ou saída sem retorno há mais de 7 dias; acesso criado e não usado há mais de 7 dias.',
 ]
+
+/** G5 (#198): episódio que expirou sem registro no período — só leitura. */
+export interface AlertaExpirado {
+  id: string
+  alerta_id: string
+  regra: string
+  residente_id: string | null
+  por_nome: string
+  assumido_em: string
+  encerrado_em: string
+}
+
+export async function listarExpirados(aPartirDe: string): Promise<AlertaExpirado[]> {
+  const { data } = await api.get<AlertaExpirado[]>('/central-alertas/expirados', { params: { a_partir_de: aPartirDe } })
+  return data
+}

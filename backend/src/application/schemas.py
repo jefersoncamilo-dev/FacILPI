@@ -136,6 +136,18 @@ class AlertaEstadoHistorico(BaseModel):
     encerramento: Optional[Literal["fonte", "liberado", "janela"]] = None
 
 
+class AlertaExpiradoItem(BaseModel):
+    """G5 (#198): episodio que expirou sem registro no periodo — leitura para o Meu Plantao."""
+
+    id: str
+    alerta_id: str
+    regra: str
+    residente_id: Optional[str] = None
+    por_nome: str
+    assumido_em: datetime
+    encerrado_em: datetime
+
+
 class AlertaGestorItem(BaseModel):
     # id estavel: regra:referencia[:contexto] — nunca muda so porque a projecao foi recalculada.
     id: str
