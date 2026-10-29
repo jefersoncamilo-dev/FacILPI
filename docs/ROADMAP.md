@@ -162,4 +162,14 @@ Exceção ao FEATURE_FREEZE dada pelo responsável em 20/10/2026, só para os it
 - **Onda 1 (núcleo):** N2 saída do residente (#171, PR #174, migration 030), M14 situação fora da escrita (#172, PR #175), M1 Passar plantão (#176, PR #181), M5 destinos dos alertas (#177, PR #180), N4 404 uniforme (#178, PR #179).
 - **Follow-ups abertos:** #163 (cursor com `data` nula), #164 (documentos no prontuário), #165 (conclusão da admissão), #166 (familiares), #173 (encerramento `saida` dos alertas), validação visual do M1 (Onda 3), tela de estorno da saída.
 - **Homologação:** 029 e 030 aplicadas em ordem no Neon só por decisão humana.
-- **Ondas 2–8:** somente PLAN até nova autorização. Dependem das decisões D1 (medicação/receita), D2 (estorno de dose), D3 (transição do `ilpi_admin`), D5 (ordem dos complementares), D6 (percentual de refeição) e da identidade visual.
+- **Ondas 2–8:** somente PLAN até nova autorização (a Onda 2 foi autorizada depois; ver §19). Dependem das decisões D1 (medicação/receita), D2 (estorno de dose), D3 (transição do `ilpi_admin`), D5 (ordem dos complementares), D6 (percentual de refeição) e da identidade visual.
+
+## 19. Mapa do FacILPI — Onda 2 integrada (27–29/10/2026)
+
+Exceção ao FEATURE_FREEZE dada pelo responsável em 27/10/2026, só para os itens desta onda, com a decisão D1 (Enfermagem e RT cadastram medicamento e transcrevem receita; o Médico mantém prescrever). Todos os PRs entraram na `fase-3b` com os três jobs de CI verdes.
+
+- **Onda 2:** M12 cuidados programados pela tela (#185, PR #189), M4 aba Resumo (#186, PR #190), M10 grants de medicação (#188, PR #191, migration 031), M9 tela de medicação (#192, PR #193), M13 familiares do residente (#194, PR #195, com filtro no backend autorizado).
+- **CI:** #184 (PR #187), job SQLite de cerca de 29 para cerca de 4 min.
+- **Follow-ups novos:** fuso horário da grade de doses (M9).
+- **Homologação:** 029, 030 e 031 aplicadas em ordem no Neon só por decisão humana.
+- **Ondas 3–8:** somente PLAN até nova autorização. Pendentes D2, D3, D5, D6 e a identidade visual.
