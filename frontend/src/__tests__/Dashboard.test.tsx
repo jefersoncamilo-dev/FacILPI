@@ -359,7 +359,25 @@ describe('Dashboard — Início visual (UX-11 / #101)', () => {
     const semResumo = within(await screen.findByRole('region', { name: 'Resumo do momento' }))
     expect(await semResumo.findByText('2 pendências no plantão')).toBeTruthy()
     expect(semResumo.queryByText(/intercorrência/)).toBeNull()
-    expect(semResumo.queryByRole('link')).toBeNull()
+    // Gestão não tem ações rápidas na faixa: o único link é o chip de pendências.
+    expect(semResumo.getAllByRole('link').map(l => l.getAttribute('href'))).toEqual(['/plantao'])
+  })
+
+  it('chips do "agora" levam à origem só com leitura do módulo (Onda 3)', async () => {
+    responde({ resumo: resumo({ intercorrencias_abertas: 2, ausencias_ativas: { total: 1, hospitalizacoes: 1 } }) })
+    const gestao = renderDashboard(GESTAO)
+    const faixa = within(await screen.findByRole('region', { name: 'Resumo do momento' }))
+    expect((await faixa.findByRole('link', { name: /2 intercorrências abertas/ })).getAttribute('href')).toBe('/intercorrencias')
+    expect((await faixa.findByRole('link', { name: /2 pendências no plantão/ })).getAttribute('href')).toBe('/plantao')
+    expect(faixa.getByRole('link', { name: /1 residente ausente/ }).getAttribute('href')).toBe('/quartos')
+    gestao.unmount()
+
+    // Cuidador não lê quartos: o chip de ausentes fica como texto, sem link morto.
+    responde({ resumo: resumo({ intercorrencias_abertas: 2, ausencias_ativas: { total: 1, hospitalizacoes: 1 } }) })
+    renderDashboard(CUIDADO)
+    const cuidado = within(await screen.findByRole('region', { name: 'Resumo do momento' }))
+    expect(await cuidado.findByText('1 residente ausente')).toBeTruthy()
+    expect(cuidado.queryByRole('link', { name: /residente ausente/ })).toBeNull()
   })
 
   it('ações rápidas: catálogo do perfil, 6 visíveis e o resto em "Mais ações"', async () => {

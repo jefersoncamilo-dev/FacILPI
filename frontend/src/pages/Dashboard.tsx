@@ -154,6 +154,7 @@ export function Dashboard() {
         resumo={resumo}
         pendencias={pendencias}
         gestao={gestao}
+        pode={pode}
         atalhos={gestao ? [] : acoes.filter(a => a.destaque)}
       />
 
@@ -208,27 +209,29 @@ export function Dashboard() {
  * Faixa de boas-vindas: saudação, contexto e o "agora" em fatos curtos, só com
  * fontes que a sessão lê. Fonte indisponível sai da frase — nunca vira zero.
  */
-function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, atalhos }: {
+function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, atalhos }: {
   ilpi?: string | null; perfil?: string | null; resumo: Carga<DashboardResumo>; pendencias: Carga<PlantaoItem[]>
-  gestao: boolean; atalhos: AcaoRapida[]
+  gestao: boolean; pode: (codigo: string) => boolean; atalhos: AcaoRapida[]
 }) {
-  const fatos: { texto: string; icone: LucideIcon; alerta?: boolean }[] = []
+  // Cada fato leva à sua origem só quando a sessão lê o módulo; senão fica como texto.
+  const fatos: { texto: string; icone: LucideIcon; alerta?: boolean; to?: string }[] = []
+  const destino = (to: string, permissao: string) => (pode(permissao) ? to : undefined)
   const dados = resumo.status === 'ok' ? resumo.dados : null
   if (dados?.intercorrencias_abertas != null) {
     const n = dados.intercorrencias_abertas
     fatos.push(n > 0
-      ? { texto: plural(n, 'intercorrência aberta', 'intercorrências abertas'), icone: TriangleAlert, alerta: true }
-      : { texto: 'Nenhuma intercorrência aberta', icone: TriangleAlert })
+      ? { texto: plural(n, 'intercorrência aberta', 'intercorrências abertas'), icone: TriangleAlert, alerta: true, to: destino('/intercorrencias', 'intercorrencias:ler') }
+      : { texto: 'Nenhuma intercorrência aberta', icone: TriangleAlert, to: destino('/intercorrencias', 'intercorrencias:ler') })
   }
   if (pendencias.status === 'ok') {
     const n = pendencias.dados.length
-    fatos.push({ texto: n === 0 ? 'Nenhuma pendência no plantão' : plural(n, 'pendência no plantão', 'pendências no plantão'), icone: ClipboardList })
+    fatos.push({ texto: n === 0 ? 'Nenhuma pendência no plantão' : plural(n, 'pendência no plantão', 'pendências no plantão'), icone: ClipboardList, to: destino('/plantao', 'plantao:ler') })
   }
   if (dados?.ausencias_ativas && dados.ausencias_ativas.total > 0) {
-    fatos.push({ texto: plural(dados.ausencias_ativas.total, 'residente ausente', 'residentes ausentes'), icone: DoorOpen })
+    fatos.push({ texto: plural(dados.ausencias_ativas.total, 'residente ausente', 'residentes ausentes'), icone: DoorOpen, to: destino('/quartos', 'quartos_leitos:ler') })
   }
   if (gestao && dados?.admissoes_em_andamento) {
-    fatos.push({ texto: plural(dados.admissoes_em_andamento, 'admissão em andamento', 'admissões em andamento'), icone: UserRoundPlus })
+    fatos.push({ texto: plural(dados.admissoes_em_andamento, 'admissão em andamento', 'admissões em andamento'), icone: UserRoundPlus, to: destino('/admissoes', 'admissoes:ler') })
   }
 
   return (
@@ -241,13 +244,19 @@ function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, atalhos }: {
           <p className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{saudacao()}!</p>
           <p className="text-sm text-slate-600">{[ilpi, perfil, dataPorExtenso()].filter(Boolean).join(' · ')}</p>
           {fatos.length > 0 && (
-            <ul aria-label="Agora" className="flex flex-wrap gap-2 pt-1">
-              {fatos.map(f => (
-                <li key={f.texto} className={cn('inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold',
-                  f.alerta ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-emerald-200 bg-white/80 text-emerald-900')}>
-                  <f.icone className="size-3.5" aria-hidden="true" />{f.texto}
-                </li>
-              ))}
+            <ul aria-label="Agora" className="flex flex-wrap gap-1.5 pt-1">
+              {fatos.map(f => {
+                const estilo = cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold',
+                  f.alerta ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-emerald-200 bg-white/80 text-emerald-900')
+                const conteudo = <><f.icone className="size-3.5" aria-hidden="true" />{f.texto}</>
+                return (
+                  <li key={f.texto} className="inline-flex">
+                    {f.to
+                      ? <Link to={f.to} className={cn(estilo, 'min-h-[32px] hover:underline')}>{conteudo}</Link>
+                      : <span className={estilo}>{conteudo}</span>}
+                  </li>
+                )
+              })}
             </ul>
           )}
         </div>
