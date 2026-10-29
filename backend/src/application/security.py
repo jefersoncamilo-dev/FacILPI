@@ -254,6 +254,9 @@ _CLINICAL_MODULES = frozenset(
         "supervisao",
         "compliance",
         "uploads",
+        # N6 (#206): ausencia e escala revelam afastamento/saude da equipe.
+        "ausencias",
+        "escala",
     }
 )
 
