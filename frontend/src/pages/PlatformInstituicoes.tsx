@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { listarInstituicoes, LIMITE_LISTAGEM } from '../services/platform'
 import { mensagemDeErro, formatDate } from '../services/api'
 import { rotuloSituacao, ehAtiva, ehInativa } from '../types/platform'

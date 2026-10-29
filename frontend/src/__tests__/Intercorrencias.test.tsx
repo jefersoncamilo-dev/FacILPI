@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router'
 import { Intercorrencias } from '../pages/Intercorrencias'
 import { ResidenteProntuario } from '../pages/ResidenteProntuario'
 import { api } from '../services/api'

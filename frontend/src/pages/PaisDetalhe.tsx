@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, Check, CheckCircle2, CircleDot, Clock, Copy, Loader2, Plus, Trash2, XCircle } from 'lucide-react'
 import { api, formatDate, formatDateTime, mensagemDeErro } from '../services/api'
 import {

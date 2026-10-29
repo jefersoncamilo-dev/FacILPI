@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { MemoryRouter, Routes, Route, Navigate } from 'react-router'
 import { AuthProvider } from '../context/AuthContext'
 import { PrivateRoute } from '../components/PrivateRoute'
 import { PlatformRoute } from '../components/PlatformRoute'

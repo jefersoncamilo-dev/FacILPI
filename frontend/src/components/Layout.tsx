@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
+import { Link, NavLink, useLocation } from 'react-router'
 import { Bell, ChevronRight, ClipboardList, KeyRound, Ellipsis, LayoutDashboard, Loader2, LogOut, Menu, Settings, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'

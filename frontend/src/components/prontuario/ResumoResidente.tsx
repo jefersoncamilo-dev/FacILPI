@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { api, formatDate, formatDateTime } from '../../services/api'
 import { usePermissoesOuPadrao } from '../../context/PermissoesContext'
 import { recarregarCentralAlertas, useCentralAlertas } from '../../hooks/useCentralAlertas'
