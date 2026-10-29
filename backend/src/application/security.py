@@ -33,6 +33,7 @@ from .auth import (
     AUTHENTICATION_REQUIRED,
     decode_access_token,
     get_current_user,
+    request_access_token,
 )
 
 
@@ -619,13 +620,13 @@ def _header(request: Request, *names: str) -> str | None:
 
 
 def _token_payload_from_request(request: Request) -> dict | None:
-    header = request.headers.get("authorization")
-    if not header:
+    try:
+        found = request_access_token(request)
+    except HTTPException:
         return None
-    scheme, _, token = header.partition(" ")
-    if scheme.lower() != "bearer" or not token:
+    if found is None:
         return None
-    return decode_access_token(token)
+    return decode_access_token(found[0])
 
 
 async def get_security_context(

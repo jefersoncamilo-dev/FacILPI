@@ -1,6 +1,6 @@
 import animate from "tailwindcss-animate"
 
-// UX-01 (#83): tokens da identidade FacILPI (Haze Esmeralda). As cores vivem
+// UX-01 (#83) / Onda 5 (#213): tokens da identidade FacILPI. As cores vivem
 // como variaveis HSL em index.css, no padrao shadcn/ui; aqui so as expomos.
 const token = (name) => `hsl(var(--${name}) / <alpha-value>)`
 
@@ -59,24 +59,57 @@ export default {
         surface: token("card"),
         textMain: token("foreground"),
         textMuted: token("muted-foreground"),
-        // Tons -700: texto pequeno sobre fundo claro precisa de contraste AA.
-        success: "#047857",
-        warning: "#C2410C",
-        danger: "#DC2626",
+        // Onda 5 (#213): estados semanticos viram tokens (AA nos dois temas).
+        success: token("primary"),
+        warning: token("alerta-forte"),
+        danger: token("critico-texto"),
+        avatar: {
+          DEFAULT: token("avatar"),
+          foreground: token("avatar-foreground"),
+        },
+        "alerta-soft": token("alerta-soft"),
+        "critico-soft": token("critico-soft"),
+        info: {
+          DEFAULT: token("info"),
+          soft: token("info-soft"),
+        },
+        "brand-light": token("brand-light"),
+        "background-desktop": token("background-desktop"),
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-        card: "calc(var(--radius) + 4px)",
+        card: "var(--radius-card)",
+        icon: "var(--radius-icon)",
       },
       boxShadow: {
-        card: "0 2px 8px rgb(0 0 0 / 0.04)",
-        cardHover: "0 6px 16px rgb(0 0 0 / 0.08)",
+        card: "var(--shadow-card)",
+        cardHover: "0 14px 32px rgba(11, 49, 45, 0.12)",
+        icon: "var(--shadow-icon)",
+        search: "var(--shadow-search)",
+        glass: "var(--shadow-glass)",
+      },
+      backgroundImage: {
+        side: "var(--gradient-side)",
+        highlight: "var(--gradient-highlight)",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
-        display: ["Manrope", "Inter", "sans-serif"],
+        display: ["Poppins", "Inter", "sans-serif"],
+      },
+      // Estilos de texto da Onda 5: [tamanho, { altura, espacamento, peso }].
+      fontSize: {
+        "titulo-tela": ["28px", { lineHeight: "34px", letterSpacing: "-0.02em", fontWeight: "600" }],
+        "titulo-secao": ["18px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" }],
+        "titulo-cartao": ["17px", { lineHeight: "24px", letterSpacing: "-0.01em", fontWeight: "600" }],
+        "numero-destaque": ["32px", { lineHeight: "36px", letterSpacing: "-0.02em", fontWeight: "600" }],
+        corpo: ["17px", { lineHeight: "26px" }],
+        "corpo-forte": ["17px", { lineHeight: "24px", letterSpacing: "-0.005em", fontWeight: "600" }],
+        apoio: ["15px", { lineHeight: "22px" }],
+        rotulo: ["13px", { lineHeight: "18px", letterSpacing: "0.01em", fontWeight: "600" }],
+        botao: ["17px", { lineHeight: "22px", fontWeight: "600" }],
+        navegacao: ["12px", { lineHeight: "16px", letterSpacing: "0.01em", fontWeight: "500" }],
       },
     },
   },

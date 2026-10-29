@@ -38,6 +38,28 @@ uma migration podia chegar ao ar depois do código que dependia dela.
    cabeçalhos abaixo presentes em `https://facilpi-web.onrender.com/`; login e
    telas principais sem violação de CSP no console.
 
+## API na mesma origem do frontend (#207, painel do Render)
+
+Desde o #207 a sessão vai em cookie HttpOnly `SameSite=Strict`. `onrender.com`
+está na Public Suffix List: `facilpi-web` e `facilpi-api` são sites diferentes,
+e um cookie entre eles seria de terceiros, bloqueado pelo Safari/iOS. Por isso o
+frontend chama `/api` na própria origem e o Render repassa para a API, como o
+Caddy faz na VPS. Passo manual, feito uma vez:
+
+1. `facilpi-web` → **Redirects/Rewrites**: regra `Source /api/*` →
+   `Destination https://facilpi-api.onrender.com/api/*`, `Action Rewrite`,
+   **acima** da regra do SPA (`/*` → `/index.html`).
+2. `facilpi-web` → **Environment**: `VITE_API_BASE_URL=/api` (vale no build;
+   disparar novo deploy depois de mudar).
+3. Verificar: `GET https://facilpi-web.onrender.com/api/health` → 200; o login
+   devolve `Set-Cookie` de `access_token` (HttpOnly) e `csrf_token`; telas
+   principais funcionam; sair e voltar exige novo login.
+
+Com a mudança, abas abertas com o bundle antigo continuam no Bearer (o servidor
+ainda o aceita na transição); quem abrir o bundle novo entra uma vez de novo.
+O rate limit por IP passa a ver o IP repassado pelo Render: conferir nos logs da
+API, depois da mudança, que `request.client.host` não é sempre o mesmo endereço.
+
 ## Cabeçalhos do `facilpi-web` (painel → Headers, Path `/*`)
 
 Os mesmos do `docker/Caddyfile`, com uma diferença: aqui a API está em outro
