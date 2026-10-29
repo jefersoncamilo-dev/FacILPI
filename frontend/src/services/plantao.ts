@@ -68,7 +68,12 @@ export interface ExecucaoCuidadoPayload {
   ocorrido_em: string
   observacao?: string
   justificativa?: string
+  percentual_consumido?: PercentualConsumido
 }
+
+// G4 (D6): quanto da refeição foi consumido; opcional e só com "executada".
+export type PercentualConsumido = 0 | 25 | 50 | 75 | 100
+export const PERCENTUAIS_CONSUMO: PercentualConsumido[] = [0, 25, 50, 75, 100]
 
 export async function registrarExecucaoCuidado(payload: ExecucaoCuidadoPayload) {
   const { data } = await api.post('/execucoes-cuidado/', payload)
@@ -88,6 +93,7 @@ export interface RegistroCuidado {
   observacao?: string
   // G7: horário real do cuidado (ISO), até 24 h para trás; ausente = agora.
   ocorrido_em?: string
+  percentual_consumido?: PercentualConsumido | null
 }
 
 /**
@@ -104,6 +110,8 @@ export async function registrarCuidado(item: Pick<PlantaoItem, 'registro_id'>, r
     ocorrido_em: registro.ocorrido_em ?? new Date().toISOString(),
     ...(registro.resultado !== 'executada' && justificativa ? { justificativa } : {}),
     ...(observacao ? { observacao } : {}),
+    ...(registro.resultado === 'executada' && registro.percentual_consumido != null
+      ? { percentual_consumido: registro.percentual_consumido } : {}),
   })
 }
 

@@ -671,6 +671,9 @@ class ExecucaoCuidado(Base):
             "AND motivo_estorno IS NOT NULL AND length(trim(motivo_estorno)) > 0)",
             name="ck_exec_estorno",
         ),
+        # G4 (032, D6): quanto da refeicao foi consumido; opcional.
+        CheckConstraint("percentual_consumido IS NULL OR percentual_consumido IN (0, 25, 50, 75, 100)",
+                        name="ck_exec_percentual"),
         Index("uq_exec_ocorrencia_vigente", "ocorrencia_id", unique=True, sqlite_where=sa.text("estornado_em IS NULL"), postgresql_where=sa.text("estornado_em IS NULL")),
         Index("uq_exec_substitui", "substitui_id", unique=True, sqlite_where=sa.text("substitui_id IS NOT NULL"), postgresql_where=sa.text("substitui_id IS NOT NULL")),
         Index("ix_exec_ilpi_residente_ocorrido", "ilpi_id", "residente_id", "ocorrido_em"),
@@ -686,6 +689,7 @@ class ExecucaoCuidado(Base):
     executor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=False)
     observacao: Mapped[str] = mapped_column(Text, nullable=True)
     justificativa: Mapped[str] = mapped_column(Text, nullable=True)
+    percentual_consumido: Mapped[int] = mapped_column(Integer, nullable=True)
     estornado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
     estornado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), nullable=True)
     motivo_estorno: Mapped[str] = mapped_column(Text, nullable=True)
