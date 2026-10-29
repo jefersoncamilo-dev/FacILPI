@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import { AuthProvider } from './context/AuthContext'
 import { Layout } from './components/Layout'
 import { PrivateRoute } from './components/PrivateRoute'
@@ -43,7 +43,7 @@ function Platform({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <BrowserRouter>
         <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<Login />} />

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { Modal } from '../Modal'
 import { mensagemDeErro } from '../../services/api'
 import { paraInputLocal } from '../../services/intercorrencias'

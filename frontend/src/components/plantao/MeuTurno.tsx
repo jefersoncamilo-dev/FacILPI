@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { ArrowRightLeft, Clock, LogIn, LogOut, MapPin } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../../services/api'
 import { escalaApi, plantoesApi, type Area, type PlantaoAtual, type Turno } from '../../services/escala'

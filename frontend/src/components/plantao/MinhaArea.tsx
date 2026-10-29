@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { ArrowRight, Inbox, UserRound } from 'lucide-react'
 import { formatDateTime } from '../../services/api'
 import type { MeuPlantaoResumo } from '../../services/meuPlantao'

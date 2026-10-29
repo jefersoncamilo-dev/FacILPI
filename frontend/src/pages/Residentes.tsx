@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { BedDouble, Loader2, Lock, Plus, Search, TriangleAlert } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
