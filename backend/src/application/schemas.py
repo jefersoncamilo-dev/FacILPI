@@ -1131,8 +1131,29 @@ class DocumentoUpdate(BaseModel):
     numero: Optional[str] = None
     validade: Optional[date] = None
     obrigatorio: Optional[bool] = None
-    situacao: Optional[str] = None
+    # N5: dominio fechado so na entrada. "validado" fica de fora: so
+    # POST /documentos/{id}/validar grava, com autoria e auditoria. A resposta
+    # segue `str` para nao quebrar registros antigos.
+    situacao: Optional[Literal["pendente", "rejeitado"]] = None
     responsavel_envio: Optional[str] = None
+
+    @field_validator("situacao", mode="before")
+    @classmethod
+    def _situacao_sem_espacos(cls, v):
+        # Preserva o .strip() que o PUT generico ja aplicava antes do N5.
+        v = v.strip() if isinstance(v, str) else v
+        if v == "validado":
+            # Mantem o codigo do contrato H03 (#25) em vez do erro generico do
+            # Literal: o cliente segue sabendo que deve usar o ato dedicado.
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "DOCUMENTO_TRANSICAO_PROTEGIDA",
+                    "message": "Transição de situação protegida; use POST /documentos/{id}/validar.",
+                },
+            )
+        return v
 
 class DocumentoResponse(BaseModel):
     id: str
