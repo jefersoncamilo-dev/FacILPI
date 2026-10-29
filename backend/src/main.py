@@ -551,6 +551,9 @@ familiares_router = make_crud_router(
         "id_field": "residente_id",
         "tenant_column": "instituicao_id",
     },
+    # M13 (#194): ?residente_id= para a secao do Resumo nao trazer familiares de
+    # outros residentes. Sem o parametro a resposta e identica a anterior.
+    parent_filter_param="residente_id",
 )
 # F5A-2C: Documentos do Residente protegido por RBAC + tenant (coluna
 # instituicao_id) + vínculo seguro com Residente (validado no POST;
@@ -578,7 +581,7 @@ documentos_router = make_crud_router(
         "id_field": "residente_id",
         "tenant_column": "instituicao_id",
     },
-    # D1: unico roteador da factory que expoe ?residente_id=. Sem o parametro a
+    # D1: expoe ?residente_id= (tambem em familiares, M13). Sem o parametro a
     # resposta e identica a anterior.
     parent_filter_param="residente_id",
 )

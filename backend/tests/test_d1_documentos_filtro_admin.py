@@ -167,7 +167,8 @@ def test_sem_documentos_ler_segue_403_antes_de_validar_residente(d1_db):
 
 
 def test_demais_roteadores_da_factory_seguem_sem_o_parametro(d1_db):
-    """A factory e compartilhada: so documentos expoe residente_id.
+    """A factory e compartilhada: so documentos e familiares (M13, #194) expoem
+    residente_id.
 
     Nos demais o parametro continua sendo IGNORADO, como antes da D1 — nao pode
     virar erro, que seria quebra silenciosa de contrato fora do escopo.
@@ -175,11 +176,12 @@ def test_demais_roteadores_da_factory_seguem_sem_o_parametro(d1_db):
     async def cenario(client, db):
         _, _, residente, headers = await _tenant(db)
 
-        parametros = {p["name"] for p in
-                      main.app.openapi()["paths"][DOCUMENTOS_URL]["get"].get("parameters", [])}
-        assert "residente_id" in parametros
+        for rota in (DOCUMENTOS_URL, "/api/familiares/"):
+            parametros = {p["name"] for p in
+                          main.app.openapi()["paths"][rota]["get"].get("parameters", [])}
+            assert "residente_id" in parametros, f"{rota} deveria expor residente_id"
 
-        for rota in ("/api/residentes/", "/api/familiares/", "/api/tarefas/", "/api/alertas/"):
+        for rota in ("/api/residentes/", "/api/tarefas/", "/api/alertas/"):
             nomes = {p["name"] for p in
                      main.app.openapi()["paths"][rota]["get"].get("parameters", [])}
             assert "residente_id" not in nomes, f"{rota} nao deveria expor residente_id"
