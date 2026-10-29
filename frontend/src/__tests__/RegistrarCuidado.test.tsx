@@ -153,3 +153,43 @@ describe('G7 — registrar em outro horário', () => {
     expect((mockPost.mock.calls[0][1] as any).ocorrido_em).toBe(new Date(duasHorasAtras).toISOString())
   })
 })
+
+describe('G4 — percentual de refeição (D6)', () => {
+  const ALMOCO = cuidado('oc-3', 'Almoço assistido', '12:00')
+
+  it('em refeição, cinco botões opcionais; o escolhido vai junto com "Realizado"', async () => {
+    const user = userEvent.setup()
+    responde([ALMOCO])
+    mockPost.mockResolvedValueOnce({ data: {} } as any)
+    render(<MemoryRouter><MeuPlantao /></MemoryRouter>)
+    const dialogo = await abrirRegistro(user)
+    const grupo = within(dialogo.getByRole('group', { name: /Quanto comeu/ }))
+    expect(grupo.getAllByRole('button').map(b => b.textContent)).toEqual(['0%', '25%', '50%', '75%', '100%'])
+    await user.click(grupo.getByRole('button', { name: '75%' }))
+    expect(grupo.getByRole('button', { name: '75%' }).getAttribute('aria-pressed')).toBe('true')
+    await user.click(dialogo.getByRole('button', { name: 'Realizado' }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1))
+    expect((mockPost.mock.calls[0][1] as any).percentual_consumido).toBe(75)
+  })
+
+  it('não é obrigatório: sem escolha, nada de percentual no envio', async () => {
+    const user = userEvent.setup()
+    responde([ALMOCO])
+    mockPost.mockResolvedValueOnce({ data: {} } as any)
+    render(<MemoryRouter><MeuPlantao /></MemoryRouter>)
+    const dialogo = await abrirRegistro(user)
+    await user.click(dialogo.getByRole('button', { name: 'Realizado' }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1))
+    expect('percentual_consumido' in (mockPost.mock.calls[0][1] as any)).toBe(false)
+  })
+
+  it('fora de refeição, fica recolhido atrás de "Informar quanto comeu"', async () => {
+    const user = userEvent.setup()
+    responde([BANHO])
+    render(<MemoryRouter><MeuPlantao /></MemoryRouter>)
+    const dialogo = await abrirRegistro(user)
+    expect(dialogo.queryByRole('group', { name: /Quanto comeu/ })).toBeNull()
+    await user.click(dialogo.getByRole('button', { name: /Informar quanto comeu/ }))
+    expect(dialogo.getByRole('group', { name: /Quanto comeu/ })).toBeTruthy()
+  })
+})
