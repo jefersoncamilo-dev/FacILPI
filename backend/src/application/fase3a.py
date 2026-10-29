@@ -15,6 +15,8 @@ from . import schemas as s
 from .audit import add_audit
 from .auth import (
     REFRESH_COOKIE_NAME,
+    clear_access_cookies,
+    set_access_cookies,
     access_session_identity,
     access_session_identity_for_logout,
     check_rate_limit,
@@ -349,6 +351,7 @@ async def issue_session_response(
     )
     access = create_access_token(user, sid=session_family, **context)
     set_refresh_cookie(response, refresh)
+    set_access_cookies(response, access)
     if audit_acao:
         # N3: o contexto auditado e o resolvido no servidor, nunca o pedido.
         # Senha e tokens nao entram; a familia identifica a sessao sem segredo.
@@ -484,6 +487,7 @@ async def refresh_session(
     )
     await db.commit()
     set_refresh_cookie(response, refresh)
+    set_access_cookies(response, access)
     return {
         "access_token": access,
         "token_type": "bearer",
@@ -526,6 +530,7 @@ async def logout_session(
             )
             await db.commit()
         clear_refresh_cookie(response)
+        clear_access_cookies(response)
         return {"mensagem": "Sessão encerrada"}
 
     target_identity = access_identity or cookie_identity
@@ -545,6 +550,7 @@ async def logout_session(
             await db.commit()
 
     clear_refresh_cookie(response)
+    clear_access_cookies(response)
     return {"mensagem": "Sessão encerrada"}
 
 
