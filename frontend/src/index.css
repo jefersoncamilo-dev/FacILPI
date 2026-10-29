@@ -3,45 +3,183 @@
 @tailwind utilities;
 
 /*
- * UX-01 (#83) — identidade FacILPI "Haze Esmeralda".
- * Canvas #F8FAFC, neutros amplos, esmeralda para identidade, acao e selecao.
- * `--primary` e o esmeralda -700 (#047857): texto branco sobre ele passa AA;
- * #10B981 e #059669 ficam para marca, foco e superficies grandes.
- *
- * UX-11 (#101) — Design System coeso: texto principal #1E293B; atencao em
- * laranja (#EA580C para icones/numeros, #C2410C para preenchido com texto
- * branco, AA) e critico em vermelho (#DC2626). Amarelo/ambar nao sinaliza
- * alerta de prioridade.
+ * Onda 5 (#213) — identidade "futurista": petróleo/verde-água, vidro fosco
+ * sobre fundo aurora, tema claro/escuro/automático. Valores de
+ * design/tokens-onda5/index.tokens.css (29/10/2026). Contraste AA conferido
+ * por src/__tests__/contrasteTokens.test.ts.
+ * Laranja (--alerta) só em faixas e ícones; texto de atenção usa --alerta-forte.
  */
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 217 33% 17%;
-    --card: 0 0% 100%;
-    --card-foreground: 217 33% 17%;
-    --primary: 163 94% 24%;
+    --background: 165 29% 86%; /* fundo do app no celular */
+    --background-desktop: 168 17% 94%; /* fundo do painel no computador (NOVO) */
+    --foreground: 174 63% 12%; /* texto principal */
+    --card: 165 33% 98%; /* cartões */
+    --card-foreground: 174 63% 12%;
+    --primary: 173 67% 18%; /* botões, links, ícone ativo */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 217 33% 17%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 152 81% 96%;
-    --accent-foreground: 163 88% 20%;
-    --destructive: 0 72% 51%;
+    --secondary: 165 26% 91%; /* controle segmentado, busca no computador */
+    --secondary-foreground: 174 63% 12%;
+    --muted: 168 23% 91%; /* chips neutros */
+    --muted-foreground: 169 15% 36%; /* texto secundário */
+    --accent: 164 37% 90%; /* fundo suave, blocos de ícone dentro de cartões */
+    --accent-foreground: 174 63% 12%;
+    --destructive: 0 71% 45%; /* crítico */
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 213 27% 84%;
-    --ring: 160 84% 39%;
-    --brand: 160 84% 39%;
-    --brand-strong: 161 94% 30%;
-    --brand-soft: 152 81% 96%;
-    --brand-ink: 164 86% 16%;
-    --alerta: 21 90% 48%;
-    --alerta-forte: 17 88% 40%;
-    --critico: 0 72% 51%;
-    --radius: 0.75rem;
+    --border: 166 26% 83%; /* bordas (uso mínimo: cartões não têm borda) */
+    --input: 169 12% 55%; /* borda de campos */
+    --ring: 170 78% 36%; /* foco */
+    --brand: 170 78% 36%; /* destaque verde-água */
+    --brand-strong: 172 55% 27%; /* cartão de destaque, início do degradê */
+    --brand-soft: 164 37% 90%;
+    --brand-ink: 174 63% 12%; /* títulos de tela e seção */
+    --brand-light: 170 42% 51%; /* fim de degradês (NOVO) */
+    --alerta: 32 95% 44%; /* atenção: SÓ faixas e ícones */
+    --alerta-forte: 26 90% 37%; /* atenção em TEXTO */
+    --alerta-soft: 48 96% 89%; /* fundo de chip de atenção (NOVO) */
+    --critico: 0 71% 45%; /* crítico */
+    --critico-texto: 0 71% 45%; /* crítico em texto (NOVO) */
+    --critico-soft: 0 81% 96%; /* fundo de alerta crítico (NOVO) */
+    --info: 224 76% 48%; /* informativo (NOVO) */
+    --info-soft: 218 92% 95%; /* (NOVO) */
+    --avatar: 170 16% 36%; /* fundo das iniciais (NOVO) */
+    --avatar-foreground: 0 0% 100%; /* (NOVO) */
+    --radius: 0.75rem;          /* 12 px: botões e campos (mantém o padrão shadcn do projeto) */
+    --radius-card: 1.25rem;     /* 20 px: cartões (Figma radius/lg) (NOVO) */
+    --radius-icon: 1.125rem;    /* 18 px: blocos das ações rápidas (NOVO) */
+    --shadow-card: 0 10px 25px rgba(11, 49, 45, 0.08);
+    --shadow-icon: 0 6px 16px rgba(11, 49, 45, 0.12);
+    --shadow-search: 0 4px 12px rgba(11, 49, 45, 0.04);
+    --gradient-side: linear-gradient(160deg, #165E52 0%, #0D453D 55%, #0B3630 100%);
+    --gradient-highlight: linear-gradient(135deg, rgba(15, 76, 69, 0.88) 0%, rgba(20, 163, 139, 0.78) 100%);
+    /* Direção futurista (vidro fosco + aurora), decidida em 29/10/2026 */
+    --glass-bg: rgba(255, 255, 255, 0.42);
+    --glass-bg-strong: rgba(255, 255, 255, 0.82);   /* folhas de formulário */
+    --glass-edge: rgba(255, 255, 255, 0.85);        /* borda de luz, 1px por dentro */
+    --glass-blur: 24px;
+    --shadow-glass: 0 12px 32px rgba(11, 49, 45, 0.10);
+    --aurora: radial-gradient(60% 50% at 95% 0%, rgba(20, 163, 139, 0.54) 0%, transparent 70%),
+              radial-gradient(65% 55% at 0% 45%, rgba(167, 199, 231, 0.9) 0%, transparent 70%),
+              radial-gradient(60% 50% at 70% 100%, rgba(110, 231, 200, 0.65) 0%, transparent 70%);
   }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --background: 174 46% 8%;
+      --background-desktop: 172 50% 6%;
+      --foreground: 168 37% 92%;
+      --card: 172 45% 13%;
+      --card-foreground: 168 37% 92%;
+      --primary: 169 57% 60%;
+      --primary-foreground: 173 74% 9%;
+      --secondary: 170 40% 15%;
+      --secondary-foreground: 168 37% 92%;
+      --muted: 170 37% 16%;
+      --muted-foreground: 168 17% 67%;
+      --accent: 171 49% 17%;
+      --accent-foreground: 168 61% 82%;
+      --destructive: 0 100% 74%;
+      --destructive-foreground: 173 74% 9%;
+      --border: 169 33% 20%;
+      --input: 169 20% 38%;
+      --ring: 170 63% 46%;
+      --brand: 170 63% 46%;
+      --brand-strong: 172 55% 27%;
+      --brand-soft: 171 49% 17%;
+      --brand-ink: 168 61% 82%;
+      --brand-light: 169 61% 69%;
+      --alerta: 40 90% 60%;
+      --alerta-forte: 46 97% 65%;
+      --alerta-soft: 43 57% 15%;
+      --critico: 0 100% 74%;
+      --critico-texto: 0 100% 77%;
+      --critico-soft: 358 44% 17%;
+      --info: 222 100% 81%;
+      --info-soft: 219 54% 20%;
+      --avatar: 171 22% 29%;
+      --avatar-foreground: 0 0% 100%;
+      --shadow-card: 0 10px 25px rgba(0, 0, 0, 0.35);
+      --gradient-side: linear-gradient(160deg, #10453D 0%, #061C19 100%);
+      --gradient-highlight: linear-gradient(135deg, #154F48 0%, #1F6B61 100%);
+      --glass-bg: rgba(18, 48, 44, 0.42);
+      --glass-bg-strong: rgba(18, 48, 44, 0.86);
+      --glass-edge: rgba(255, 255, 255, 0.16);
+      --shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.35);
+      --aurora: radial-gradient(60% 50% at 95% 0%, rgba(20, 163, 139, 0.65) 0%, transparent 70%),
+                radial-gradient(65% 55% at 0% 45%, rgba(43, 92, 138, 0.77) 0%, transparent 70%),
+                radial-gradient(60% 50% at 70% 100%, rgba(31, 107, 97, 0.9) 0%, transparent 70%);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --background: 174 46% 8%;
+    --background-desktop: 172 50% 6%;
+    --foreground: 168 37% 92%;
+    --card: 172 45% 13%;
+    --card-foreground: 168 37% 92%;
+    --primary: 169 57% 60%;
+    --primary-foreground: 173 74% 9%;
+    --secondary: 170 40% 15%;
+    --secondary-foreground: 168 37% 92%;
+    --muted: 170 37% 16%;
+    --muted-foreground: 168 17% 67%;
+    --accent: 171 49% 17%;
+    --accent-foreground: 168 61% 82%;
+    --destructive: 0 100% 74%;
+    --destructive-foreground: 173 74% 9%;
+    --border: 169 33% 20%;
+    --input: 169 20% 38%;
+    --ring: 170 63% 46%;
+    --brand: 170 63% 46%;
+    --brand-strong: 172 55% 27%;
+    --brand-soft: 171 49% 17%;
+    --brand-ink: 168 61% 82%;
+    --brand-light: 169 61% 69%;
+    --alerta: 40 90% 60%;
+    --alerta-forte: 46 97% 65%;
+    --alerta-soft: 43 57% 15%;
+    --critico: 0 100% 74%;
+    --critico-texto: 0 100% 77%;
+    --critico-soft: 358 44% 17%;
+    --info: 222 100% 81%;
+    --info-soft: 219 54% 20%;
+    --avatar: 171 22% 29%;
+    --avatar-foreground: 0 0% 100%;
+    --shadow-card: 0 10px 25px rgba(0, 0, 0, 0.35);
+    --gradient-side: linear-gradient(160deg, #10453D 0%, #061C19 100%);
+    --gradient-highlight: linear-gradient(135deg, #154F48 0%, #1F6B61 100%);
+    --glass-bg: rgba(18, 48, 44, 0.42);
+    --glass-bg-strong: rgba(18, 48, 44, 0.86);
+    --glass-edge: rgba(255, 255, 255, 0.16);
+    --shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.35);
+    --aurora: radial-gradient(60% 50% at 95% 0%, rgba(20, 163, 139, 0.65) 0%, transparent 70%),
+            radial-gradient(65% 55% at 0% 45%, rgba(43, 92, 138, 0.77) 0%, transparent 70%),
+            radial-gradient(60% 50% at 70% 100%, rgba(31, 107, 97, 0.9) 0%, transparent 70%);
+    color-scheme: dark;
+  }
+}
 
+/* Vidro: componentes de superfície. Celular simples, economia de energia ou pedido de menos transparência:
+   cai para superfície sólida (mesmo layout, sem desfoque). */
+@layer components {
+  .glass { background: var(--glass-bg); border: 1px solid var(--glass-edge); box-shadow: var(--shadow-glass);
+           -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
+  .glass-strong { background: var(--glass-bg-strong); border: 1px solid var(--glass-edge); box-shadow: var(--shadow-glass);
+           -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
+  .bg-aurora { background-color: hsl(var(--background)); background-image: var(--aurora); background-attachment: fixed; }
+  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .glass, .glass-strong { background: hsl(var(--card)); }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .glass, .glass-strong { background: hsl(var(--card)); -webkit-backdrop-filter: none; backdrop-filter: none; }
+    .bg-aurora { background-image: none; }
+  }
+  /* Ligado pelo app quando o aparelho é fraco (ex.: navigator.hardwareConcurrency <= 4 ou deviceMemory <= 2)
+     ou quando o usuário escolhe "Visual simples" nas preferências. */
+  :root[data-visual="simples"] .glass, :root[data-visual="simples"] .glass-strong { background: hsl(var(--card)); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  :root[data-visual="simples"] .bg-aurora { background-image: none; }
+}
+
+@layer base {
   body {
     @apply bg-background text-foreground antialiased;
   }
