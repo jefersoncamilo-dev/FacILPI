@@ -22,6 +22,7 @@ OFFICIAL_DB = ROOT / "storage" / "app.db"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from tests.banco_modelo import migrar_de_modelo
 from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application.fase3a import ADMIN_EMAIL, ILPI_DRAFT  # noqa: E402
@@ -97,13 +98,15 @@ def _database_backends() -> list[str]:
 def perfis_db(request: pytest.FixtureRequest, tmp_path: pathlib.Path) -> pathlib.Path | str:
     if request.param == "sqlite":
         path = tmp_path / "fase3b-perfis.db"
-        _run_migration(path, "upgrade", "head")
+        _assert_disposable_database(path)
+        migrar_de_modelo(_database_url(path))
         return path
 
     url = os.environ.get("FASE3B_TEST_POSTGRES_URL") or os.environ["FASE3A_TEST_POSTGRES_URL"]
     try:
         asyncio.run(_reset_postgres(url))
-        _run_migration(url, "upgrade", "head")
+        _assert_disposable_database(url)
+        migrar_de_modelo(_database_url(url))
     except Exception as error:
         pytest.skip(f"PostgreSQL descartável indisponível: {error}")
     return url

@@ -8,6 +8,8 @@ import sqlite3
 import tempfile
 import uuid
 
+import pytest
+
 from .db_safety import register_temp_root, validate_sqlite_path, validate_target
 
 _ORIGINAL_CONNECT = sqlite3.connect
@@ -48,3 +50,33 @@ def pytest_configure(config):
 def pytest_unconfigure(config):
     sqlite3.connect = _ORIGINAL_CONNECT
     sqlite3.dbapi2.connect = _ORIGINAL_DBAPI2_CONNECT
+
+
+_PG_MARCADORES = ("POSTGRES_URL", "PG_MANIFEST", "reset_postgres", "validate_pg_target")
+_PG_ATIVO = any(nome.endswith("_TEST_POSTGRES_URL") and valor for nome, valor in os.environ.items())
+
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(config, items):
+    # Issue #184: com pytest-xdist (`--dist loadgroup`), os databases PostgreSQL
+    # descartaveis tem nomes fixos e sao compartilhados entre arquivos. Tudo que
+    # pode toca-los vai para um unico grupo, executado em serie por um so worker;
+    # so o que comprovadamente roda em SQLite (param "sqlite") fica livre.
+    if not _PG_ATIVO:
+        return
+
+    fontes: dict[str, bool] = {}
+    for item in items:
+        caminho = str(item.path)
+        if caminho not in fontes:
+            texto = pathlib.Path(caminho).read_text(encoding="utf-8", errors="replace")
+            fontes[caminho] = any(marcador in texto for marcador in _PG_MARCADORES)
+        callspec = getattr(item, "callspec", None)
+        valores = list(callspec.params.values()) if callspec is not None else []
+        # Fixtures importadas de outro modulo (ex.: c5_migration_db) nao deixam
+        # marcador no texto do arquivo: o param "postgresql" basta para agrupar.
+        if not fontes[caminho] and "postgresql" not in valores:
+            continue
+        if "sqlite" in valores and "postgresql" not in valores:
+            continue
+        item.add_marker(pytest.mark.xdist_group("postgresql"))

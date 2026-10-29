@@ -10,7 +10,8 @@ import os
 import pytest
 from sqlalchemy import select, text
 
-from .test_d3_admissao_migration import _migrate, _ref
+from .test_d3_admissao_migration import _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from .test_d3_admissao import ALL, DOMAIN, _client
 from .test_d2_rotina import (
     _create_ilpi_user, _create_residente, _headers, _new_id, _new_institution, _code,
@@ -35,7 +36,7 @@ def d1_db(request, tmp_path):
     # ponta movel faria este teste quebrar na proxima migration, como a 020
     # acabou de fazer com a suite da B1.
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    migrar_de_modelo(_url(ref), HEAD)
     return ref
 
 
