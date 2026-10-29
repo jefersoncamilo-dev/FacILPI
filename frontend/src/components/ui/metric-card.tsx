@@ -12,8 +12,8 @@ export type TomIndicador = 'normal' | 'alerta' | 'critico' | 'neutro'
 
 const TONS: Record<TomIndicador, { icone: string; valor: string }> = {
   normal: { icone: 'bg-brand-soft text-brand-strong', valor: 'text-primary' },
-  alerta: { icone: 'bg-orange-50 text-alerta', valor: 'text-alerta-forte' },
-  critico: { icone: 'bg-red-50 text-critico', valor: 'text-red-700' },
+  alerta: { icone: 'bg-alerta-soft text-alerta', valor: 'text-alerta-forte' },
+  critico: { icone: 'bg-critico-soft text-critico', valor: 'text-critico-texto' },
   neutro: { icone: 'bg-muted text-muted-foreground', valor: 'text-foreground' },
 }
 

@@ -9,12 +9,12 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground hover:bg-brand-ink',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-slate-200 active:bg-slate-300',
-        outline: 'border border-input bg-card text-foreground hover:bg-muted active:bg-slate-200',
+        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-border',
+        outline: 'border border-input bg-card text-foreground hover:bg-muted active:bg-secondary',
         ghost: 'text-foreground hover:bg-muted',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-red-700',
+        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
         // UX-11: ação que pede atenção (ex.: registrar intercorrência). #C2410C: branco a 5,2:1 (AA).
-        alerta: 'bg-alerta-forte text-white hover:bg-orange-800',
+        alerta: 'bg-alerta-forte text-primary-foreground hover:bg-alerta-forte/90',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {
