@@ -37,6 +37,10 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Meu Plantão: "Passar plantão" como ação principal e confirmação ao encerrar, com atrasados e estado da passagem (M1, #176). Validação visual no celular pendente para a Onda 3.
 - Destinos dos alertas com contexto do residente e do registro (M5, #177).
 - Vincular funcionário a usuário de outra ILPI devolve o mesmo 404 de id inexistente (N4, #178).
+- Cuidados programados criados e editados pela tela (M12, #185).
+- Aba Resumo do residente (M4, #186) com os familiares do residente, filtrados no servidor (M13, #194).
+- Medicação (migration 031, D1): Enfermagem e RT cadastram medicamento e transcrevem receita; o Médico mantém prescrever (M10, #188). Tela de medicação substitui o placeholder (M9, #192); a grade de doses ainda mostra o horário no fuso do navegador.
+- CI mais rápido (#184): o job SQLite caiu de cerca de 29 para cerca de 4 min.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
 
 ## Estado funcional importante
