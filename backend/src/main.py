@@ -153,6 +153,21 @@ async def register(request: Request):
         },
     )
 
+async def _audit_login_recusado(db: AsyncSession, request: Request, user, motivo: str) -> None:
+    # N3: login inexistente nao vira registro com o e-mail digitado (pode ser
+    # a senha colada no campo errado); so a conta real fica referenciada.
+    add_audit(
+        db,
+        acao="auth.login_recusado",
+        entidade="users" if user else None,
+        registro_id=user.id if user else None,
+        usuario_id=user.id if user else None,
+        valores_posteriores={"motivo": motivo},
+        request=request,
+    )
+    await db.commit()
+
+
 @auth_router.post("/token", response_model=s.TokenResponse)
 async def token(payload: s.UserLogin, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
@@ -169,10 +184,12 @@ async def token(payload: s.UserLogin, request: Request, response: Response, db: 
         if not user or not verify_password(payload.password, user.password_hash):
             register_login_failure(login, reservation)
             reservation = ""
+            await _audit_login_recusado(db, request, user, "credenciais_invalidas")
             raise HTTPException(status_code=401, detail="Credenciais inválidas")
         if not user.ativo:
             release_login_reservation(login, reservation)
             reservation = ""
+            await _audit_login_recusado(db, request, user, "usuario_inativo")
             raise HTTPException(status_code=401, detail="Usuário inativo")
 
         # Credencial correta encerra a janela de falhas da conta. Erros posteriores
@@ -187,6 +204,7 @@ async def token(payload: s.UserLogin, request: Request, response: Response, db: 
             scope=payload.scope,
             ilpi_id=payload.ilpi_id,
             perfil_id=payload.perfil_id,
+            audit_acao="auth.login",
         )
         await db.commit()
         return session_payload
@@ -240,7 +258,7 @@ async def update_password(payload: s.PasswordUpdate, request: Request, db: Async
         entidade="users",
         registro_id=current_user.id,
         usuario_id=current_user.id,
-        valores_posteriores={"exige_troca_senha": False},
+        valores_posteriores={"exige_troca_senha": False, "primeiro_acesso": mandatory_change},
         request=request,
     )
     await db.commit()

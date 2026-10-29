@@ -328,6 +328,7 @@ async def issue_session_response(
     scope: str | None = None,
     ilpi_id: str | None = None,
     perfil_id: str | None = None,
+    audit_acao: str | None = None,
 ) -> dict:
     context = await resolve_token_context(
         db,
@@ -348,6 +349,23 @@ async def issue_session_response(
     )
     access = create_access_token(user, sid=session_family, **context)
     set_refresh_cookie(response, refresh)
+    if audit_acao:
+        # N3: o contexto auditado e o resolvido no servidor, nunca o pedido.
+        # Senha e tokens nao entram; a familia identifica a sessao sem segredo.
+        add_audit(
+            db,
+            acao=audit_acao,
+            entidade="users",
+            registro_id=user.id,
+            usuario_id=user.id,
+            ilpi_id=context["ilpi_id"],
+            valores_posteriores={
+                "scope": context["scope"],
+                "perfil_id": context["perfil_id"],
+                "sessao": session_family,
+            },
+            request=request,
+        )
     return {
         "access_token": access,
         "token_type": "bearer",
@@ -609,6 +627,7 @@ async def selecionar_contexto(
         scope=payload.scope,
         ilpi_id=payload.ilpi_id,
         perfil_id=payload.perfil_id,
+        audit_acao="auth.contexto_selecionado",
     )
     await db.commit()
     return session_payload
