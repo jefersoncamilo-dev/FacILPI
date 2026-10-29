@@ -3,6 +3,7 @@ import time
 import logging
 import hashlib
 import secrets
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
@@ -110,6 +111,40 @@ _rate_store: Dict[str, list] = {}
 _login_failure_store = _rate_store
 _LOGIN_FAILURE_PREFIX = "login-fail:"
 _LOGIN_PENDING_PREFIX = "login-pending:"
+
+
+def _requested_workers(env, argv) -> int:
+    """Workers pedidos via WEB_CONCURRENCY (padrao do uvicorn) ou --workers/-w."""
+    values = []
+    if env.get("WEB_CONCURRENCY"):
+        values.append(env["WEB_CONCURRENCY"])
+    for i, arg in enumerate(argv):
+        if arg in ("--workers", "-w") and i + 1 < len(argv):
+            values.append(argv[i + 1])
+        elif arg.startswith("--workers="):
+            values.append(arg.split("=", 1)[1])
+    workers = 1
+    for value in values:
+        try:
+            workers = max(workers, int(value))
+        except ValueError:
+            raise RuntimeError(f"Numero de workers invalido: {value!r}") from None
+    return workers
+
+
+def assert_rate_limit_single_process(env=None, argv=None) -> None:
+    """#211: `_rate_store` e process-local. Com mais de 1 worker cada processo
+    teria o proprio contador e o limite de login se multiplicaria em silencio.
+    Enquanto nao houver armazenamento compartilhado, o boot recusa."""
+    env = os.environ if env is None else env
+    argv = sys.argv if argv is None else argv
+    workers = _requested_workers(env, argv)
+    if workers > 1:
+        raise RuntimeError(
+            f"{workers} workers pedidos, mas o rate limit de login fica na memoria "
+            "do processo e nao ha armazenamento compartilhado: rode com 1 worker "
+            "(ver docs/RUNBOOK_PILOT.md)."
+        )
 
 
 def _key_rule(key: str) -> tuple[int, int] | None:

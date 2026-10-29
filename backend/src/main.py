@@ -17,6 +17,7 @@ from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
 from .application.auth import (
+    assert_rate_limit_single_process,
     access_session_identity,
     check_rate_limit,
     clear_login_failures,
@@ -1549,6 +1550,8 @@ ALLOW_CREATE_ALL = os.getenv("ALLOW_CREATE_ALL", "false").lower() == "true"
 
 @app.on_event("startup")
 async def on_startup():
+    # #211: falha cedo se houver mais de 1 worker com rate limit em memoria.
+    assert_rate_limit_single_process()
     if not ALLOW_CREATE_ALL:
         return
     # Permitido apenas em testes descartáveis explicitamente configurados
