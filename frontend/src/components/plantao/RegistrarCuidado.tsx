@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Ban, CircleCheck, CircleX, MessageSquarePlus } from 'lucide-react'
+import { Ban, CircleCheck, CircleX, Clock, MessageSquarePlus } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../../services/api'
 import { Dialog, DialogContent } from '../ui/dialog'
 import { cn } from '../../lib/utils'
@@ -13,6 +13,26 @@ import {
 } from '../../services/plantao'
 
 const FALHA = 'Não foi possível salvar. Tentar novamente.'
+
+// G7: até 24 h para trás; futuro nunca (o backend também recusa).
+const JANELA_OUTRO_HORARIO_MS = 24 * 60 * 60 * 1000
+
+// `datetime-local` trabalha no fuso do aparelho, sem segundos.
+function paraCampoLocal(ms: number): string {
+  const d = new Date(ms)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** ISO do horário escolhido, ou mensagem de erro se fora da janela. */
+export function validarOutroHorario(valor: string, agora = Date.now()): { iso: string } | { erro: string } {
+  const t = Date.parse(valor)
+  if (!valor || !Number.isFinite(t)) return { erro: 'Informe o horário do cuidado.' }
+  // Mesmo minuto de agora conta como agora (o campo não tem segundos).
+  if (t > agora) return { erro: 'O horário não pode ser no futuro.' }
+  if (t < agora - JANELA_OUTRO_HORARIO_MS) return { erro: 'Só é possível registrar até 24 horas para trás.' }
+  return { iso: new Date(t).toISOString() }
+}
 
 // Atalhos de texto para o motivo; o campo continua livre e editável.
 const SUGESTOES: Record<Exclude<ResultadoCuidado, 'executada'>, string[]> = {
@@ -77,6 +97,7 @@ function Formulario({
   const [motivo, setMotivo] = useState('')
   const [observacao, setObservacao] = useState('')
   const [comObservacao, setComObservacao] = useState(false)
+  const [outroHorario, setOutroHorario] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
 
@@ -85,10 +106,19 @@ function Formulario({
       setErro('Informe o motivo.')
       return
     }
+    let ocorrido_em: string | undefined
+    if (outroHorario !== null) {
+      const v = validarOutroHorario(outroHorario)
+      if ('erro' in v) {
+        setErro(v.erro)
+        return
+      }
+      ocorrido_em = v.iso
+    }
     setSalvando(true)
     setErro('')
     try {
-      await registrarCuidado(item, { resultado: valor, justificativa: motivo, observacao })
+      await registrarCuidado(item, { resultado: valor, justificativa: motivo, observacao, ocorrido_em })
       onSalvo(item)
     } catch (e) {
       // Sem resposta (rede/servidor fora) vale a mensagem operacional; com resposta,
@@ -121,6 +151,38 @@ function Formulario({
           {item.previsto_em ? ` • ${formatDateTime(item.previsto_em)}` : ''}
         </div>
       </div>
+
+      {/* G7: escolhido antes do resultado, porque "Realizado" salva com um toque. */}
+      {outroHorario !== null ? (
+        <div className="space-y-1">
+          <label htmlFor="outro-horario-cuidado" className="block text-sm font-medium">
+            Horário do cuidado <span className="text-muted-foreground">(até 24 h atrás)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="outro-horario-cuidado"
+              type="datetime-local"
+              className="input"
+              min={paraCampoLocal(Date.now() - JANELA_OUTRO_HORARIO_MS)}
+              max={paraCampoLocal(Date.now())}
+              value={outroHorario}
+              onChange={e => { setOutroHorario(e.target.value); setErro('') }}
+            />
+            <button type="button" onClick={() => { setOutroHorario(null); setErro('') }}
+              className="min-h-[44px] shrink-0 px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Usar agora
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOutroHorario(paraCampoLocal(Date.now()))}
+          className="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-primary hover:underline"
+        >
+          <Clock className="size-4" aria-hidden="true" /> Registrar em outro horário
+        </button>
+      )}
 
       <div className="grid gap-2" role="group" aria-label="Resultado">
         {OPCOES.map(({ valor, Icone, classe }) => (

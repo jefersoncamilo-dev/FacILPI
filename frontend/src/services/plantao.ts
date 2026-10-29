@@ -86,10 +86,12 @@ export interface RegistroCuidado {
   resultado: ResultadoCuidado
   justificativa?: string
   observacao?: string
+  // G7: horário real do cuidado (ISO), até 24 h para trás; ausente = agora.
+  ocorrido_em?: string
 }
 
 /**
- * Registro de UM cuidado do plantão, no instante atual. Ponto único de escrita
+ * Registro de UM cuidado do plantão, no instante atual (ou no informado). Ponto único de escrita
  * da tela: o registro em lote (UX-01C) chama esta função item a item — o banco
  * continua recebendo uma execução por ocorrência.
  */
@@ -99,7 +101,7 @@ export async function registrarCuidado(item: Pick<PlantaoItem, 'registro_id'>, r
   return registrarExecucaoCuidado({
     ocorrencia_id: item.registro_id,
     resultado: registro.resultado,
-    ocorrido_em: new Date().toISOString(),
+    ocorrido_em: registro.ocorrido_em ?? new Date().toISOString(),
     ...(registro.resultado !== 'executada' && justificativa ? { justificativa } : {}),
     ...(observacao ? { observacao } : {}),
   })

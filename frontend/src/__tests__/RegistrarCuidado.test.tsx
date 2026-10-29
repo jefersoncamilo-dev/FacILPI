@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { MeuPlantao } from '../pages/MeuPlantao'
+import { validarOutroHorario } from '../components/plantao/RegistrarCuidado'
 import { api } from '../services/api'
 
 vi.mock('../services/api', async () => {
@@ -100,5 +101,55 @@ describe('UX-01A.1 — Registrar rápido', () => {
     await waitFor(() => expect(screen.queryByText('Banho assistido')).toBeNull())
     expect(screen.queryByRole('dialog')).toBeNull()
     await waitFor(() => expect(document.activeElement?.getAttribute('data-acao-plantao')).toBe('cuidado:oc-2'))
+  })
+})
+
+describe('G7 — registrar em outro horário', () => {
+  const AGORA = Date.parse('2026-10-29T12:00:00Z')
+
+  it('aceita até 24 h para trás; recusa futuro, mais de 24 h e vazio', () => {
+    expect(validarOutroHorario('2026-10-29T08:30:00Z', AGORA)).toEqual({ iso: '2026-10-29T08:30:00.000Z' })
+    expect(validarOutroHorario('2026-10-28T12:00:00Z', AGORA)).toEqual({ iso: '2026-10-28T12:00:00.000Z' })
+    expect(validarOutroHorario('2026-10-29T12:01:00Z', AGORA)).toEqual({ erro: 'O horário não pode ser no futuro.' })
+    expect(validarOutroHorario('2026-10-28T11:59:00Z', AGORA)).toEqual({ erro: 'Só é possível registrar até 24 horas para trás.' })
+    expect(validarOutroHorario('', AGORA)).toEqual({ erro: 'Informe o horário do cuidado.' })
+  })
+
+  it('sem escolher horário, o registro vai no instante atual', async () => {
+    const user = userEvent.setup()
+    responde([BANHO])
+    mockPost.mockResolvedValueOnce({ data: {} } as any)
+    render(<MemoryRouter><MeuPlantao /></MemoryRouter>)
+    const dialogo = await abrirRegistro(user)
+    expect(dialogo.queryByLabelText(/Horário do cuidado/)).toBeNull()
+    const antes = Date.now()
+    await user.click(dialogo.getByRole('button', { name: 'Realizado' }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1))
+    expect(Date.parse((mockPost.mock.calls[0][1] as any).ocorrido_em)).toBeGreaterThanOrEqual(antes - 1000)
+  })
+
+  it('horário escolhido vai como ocorrido_em; fora da janela não envia', async () => {
+    const user = userEvent.setup()
+    responde([BANHO])
+    mockPost.mockResolvedValueOnce({ data: {} } as any)
+    render(<MemoryRouter><MeuPlantao /></MemoryRouter>)
+    const dialogo = await abrirRegistro(user)
+    await user.click(dialogo.getByRole('button', { name: 'Registrar em outro horário' }))
+    const campo = dialogo.getByLabelText(/Horário do cuidado/) as HTMLInputElement
+    const local = (ms: number) => {
+      const d = new Date(ms); const p = (n: number) => String(n).padStart(2, '0')
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+    }
+
+    fireEvent.change(campo, { target: { value: local(Date.now() + 2 * 60 * 60 * 1000) } })
+    await user.click(dialogo.getByRole('button', { name: 'Realizado' }))
+    expect(await dialogo.findByText('O horário não pode ser no futuro.')).toBeTruthy()
+    expect(mockPost).not.toHaveBeenCalled()
+
+    const duasHorasAtras = local(Date.now() - 2 * 60 * 60 * 1000)
+    fireEvent.change(campo, { target: { value: duasHorasAtras } })
+    await user.click(dialogo.getByRole('button', { name: 'Realizado' }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledTimes(1))
+    expect((mockPost.mock.calls[0][1] as any).ocorrido_em).toBe(new Date(duasHorasAtras).toISOString())
   })
 })
