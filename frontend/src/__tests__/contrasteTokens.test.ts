@@ -57,6 +57,8 @@ const PARES: [string, string, number][] = [
   ['brand-ink', 'background', 4.5],
   ['brand-ink', 'card', 4.5],
   ['destructive-foreground', 'destructive', 4.5],
+  // Botão de atenção preenchido (btn-alerta, Button variant alerta).
+  ['primary-foreground', 'alerta-forte', 4.5],
   ['critico-texto', 'card', 4.5],
   ['critico-texto', 'critico-soft', 4.5],
   ['alerta-forte', 'card', 4.5],
