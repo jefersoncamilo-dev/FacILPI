@@ -94,7 +94,7 @@ const FORM_VAZIO: FormAcao = {
  * `?desde=` (ISO) amplia o início da projeção para trás — vem da Passagem de
  * Plantão, para que cuidados e doses previstos antes da abertura da tela e
  * ainda sem registro apareçam em "Atrasadas" com as ações de sempre. Sem o
- * parâmetro, a projeção é a padrão do backend (agora → +24 h).
+ * parâmetro, a fila começa 24 h atrás (JANELA_ATRASO_MS) e vai até +24 h.
  */
 export function lerDesde(valor: string | null, agora = Date.now()): string | null {
   if (!valor) return null
@@ -343,7 +343,7 @@ export function MeuPlantao() {
       <div className="space-y-1">
         {/* O nome de quem está no plantão; sem vínculo de funcionário, o título da tela. */}
         <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{resumo?.funcionario_nome || 'Meu Plantão'}</h1>
-        <p className="text-sm text-muted-foreground max-sm:sr-only">
+        <p className="text-xs text-muted-foreground sm:text-sm">
           {desde
             ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">voltar à fila padrão</Link></>
             : 'Atrasos das últimas 24 h e pendências das próximas 24 h'}

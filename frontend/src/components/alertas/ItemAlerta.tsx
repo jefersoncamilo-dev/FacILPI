@@ -92,12 +92,6 @@ export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssum
           {erro && <p role="alert" className="text-xs font-medium text-red-700">{erro}</p>}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
-          {acoes.map(x => (
-            <button key={x.acao} type="button" className={BOTAO} disabled={salvando} onClick={() => agir(x.acao)}
-              aria-label={`${x.rotulo}: ${a.titulo}`}>
-              {x.rotulo}
-            </button>
-          ))}
           <Link
             to={destino.to}
             aria-label={`${destino.acao} em ${destino.rotulo}`}
@@ -105,6 +99,12 @@ export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssum
           >
             {destino.acao} <ArrowRight className="size-4" aria-hidden="true" />
           </Link>
+          {acoes.map(x => (
+            <button key={x.acao} type="button" className={BOTAO} disabled={salvando} onClick={() => agir(x.acao)}
+              aria-label={`${x.rotulo}: ${a.titulo}`}>
+              {x.rotulo}
+            </button>
+          ))}
         </div>
       </div>
     </div>

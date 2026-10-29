@@ -11,7 +11,6 @@ import { MeuPlantao } from './pages/MeuPlantao'
 import { SinaisVitais } from './pages/SinaisVitais'
 import { Intercorrencias } from './pages/Intercorrencias'
 import { Documentos } from './pages/Documentos'
-import { Placeholder } from './pages/Placeholder'
 import { Medicacao } from './pages/Medicacao'
 import { Admissoes } from './pages/Admissoes'
 import { Alertas } from './pages/Alertas'
@@ -68,18 +67,9 @@ export default function App() {
           <Route path="/sinais" element={<Protected><SinaisVitais /></Protected>} />
           <Route path="/intercorrencias" element={<Protected><Intercorrencias /></Protected>} />
           <Route path="/documentos" element={<Protected><Documentos /></Protected>} />
-          <Route path="/agenda" element={<Protected><Placeholder title="Agenda Clínica" /></Protected>} />
           <Route path="/passagem" element={<Protected><PassagemPlantao /></Protected>} />
           <Route path="/quartos" element={<Protected><QuartosLeitos /></Protected>} />
           <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
-          <Route path="/estoque" element={<Protected><Placeholder title="Estoque" /></Protected>} />
-          <Route path="/financeiro" element={<Protected><Placeholder title="Financeiro" /></Protected>} />
-          <Route path="/familia" element={<Protected><Placeholder title="Portal da Família" /></Protected>} />
-          <Route path="/relatorios" element={<Protected><Placeholder title="Relatórios" /></Protected>} />
-          <Route path="/supervisao" element={<Protected><Placeholder title="Supervisão" /></Protected>} />
-          <Route path="/compliance" element={<Protected><Placeholder title="Compliance e Fiscalização" /></Protected>} />
-          <Route path="/auditoria" element={<Protected><Placeholder title="Auditoria" /></Protected>} />
-          <Route path="/config" element={<Protected><Placeholder title="Configurações" /></Protected>} />
           <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
           <Route path="/escala" element={<Protected><Escala /></Protected>} />
           {/* UX-00C: página-hub de cada módulo (slug inválido volta ao Início). */}
