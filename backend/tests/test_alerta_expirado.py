@@ -167,3 +167,38 @@ def test_item_anterior_a_janela_do_episodio_nao_expira_o_estado(expirado_db):
             m.Auditoria.acao.in_(("alerta_estados.resolvido_pela_fonte", "alerta_estados.expirado_sem_registro"))))).all()
         assert len(encerramentos) == 1, "duas consultas, uma auditoria"
     _run(expirado_db, op)
+
+
+def test_g5_expirados_do_periodo_so_leitura_tenant_e_origem(expirado_db):
+    """G5 (#198): GET /expirados lista o episodio expirado no periodo, sem escrever nada;
+    outra ILPI nao ve; sem a permissao de origem da regra, nao ve; antes do periodo, nao entra."""
+    async def op(client, db):
+        h, res, alvo = await _cuidado_na_janela(client, db)
+        alerta = f"cuidados_sem_registro:{res.id}"
+        assert (await client.post(f"{URL}/assumir", headers=h, json={"alerta_id": alerta})).status_code == 200
+        await db.execute(update(m.AlertaEstado).where(m.AlertaEstado.alerta_id == alerta)
+                         .values(assumido_em=_agora() - timedelta(hours=3)))
+        await db.execute(update(m.OcorrenciaCuidado).where(m.OcorrenciaCuidado.id == alvo.id)
+                         .values(previsto_em=_agora() - timedelta(hours=25)))
+        await db.commit()
+        await _alertas(client, h)  # a projecao encerra o estado como expirado
+        desde = {"a_partir_de": (_agora() - timedelta(hours=1)).isoformat()}
+
+        auditorias = await db.scalar(text("SELECT COUNT(*) FROM auditoria"))
+        r = await client.get(f"{URL}/expirados", headers=h, params=desde)
+        assert r.status_code == 200, r.text
+        assert [(i["alerta_id"], i["residente_id"]) for i in r.json()] == [(alerta, res.id)]
+        assert await db.scalar(text("SELECT COUNT(*) FROM auditoria")) == auditorias, "leitura nao audita nem grava"
+
+        futuro = {"a_partir_de": (_agora() + timedelta(minutes=5)).isoformat()}
+        assert (await client.get(f"{URL}/expirados", headers=h, params=futuro)).json() == []
+
+        _, _, outra = await _gestor(db, "ILPI Outra G5")
+        assert (await client.get(f"{URL}/expirados", headers=outra, params=desde)).json() == []
+
+        _, _, sem_origem = await _gestor(db, "ILPI Sem Origem G5", permissions={"alertas:ler"})
+        assert (await client.get(f"{URL}/expirados", headers=sem_origem, params=desde)).json() == []
+
+        _, _, sem_alertas = await _gestor(db, "ILPI Sem Alertas G5", permissions={"plantao:ler"})
+        assert (await client.get(f"{URL}/expirados", headers=sem_alertas, params=desde)).status_code == 403
+    _run(expirado_db, op)

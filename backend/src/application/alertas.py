@@ -725,6 +725,26 @@ async def liberar_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSessi
     return await _responder_estado(db, context.ilpi_id, context.user.id, payload.alerta_id)
 
 
+@central_alertas_router.get("/expirados", response_model=list[s.AlertaExpiradoItem])
+async def alertas_expirados(a_partir_de: datetime, db: AsyncSession = Depends(get_db),
+                            context: SecurityContext = Depends(require_permission("alertas:ler"))):
+    """G5 (#198): so leitura. Estados ``expirado`` encerrados desde ``a_partir_de``, da ILPI da
+    sessao e apenas das regras cuja origem a sessao le (mesmo filtro do historico)."""
+    permitidas = set(await allowed_permission_keys(db, context))
+    regras = [regra for regra, exige in ORIGEM_DA_REGRA.items() if exige <= permitidas]
+    if not regras:
+        return []
+    estados = (await db.scalars(select(m.AlertaEstado).where(
+        m.AlertaEstado.ilpi_id == context.ilpi_id, m.AlertaEstado.situacao == "expirado",
+        m.AlertaEstado.regra.in_(regras), m.AlertaEstado.encerrado_em >= _utc(a_partir_de))
+        .order_by(m.AlertaEstado.encerrado_em.desc(), m.AlertaEstado.id).limit(200))).all()
+    nomes = await _nomes_de(db, context.ilpi_id, estados)
+    return [{
+        "id": e.id, "alerta_id": e.alerta_id, "regra": e.regra, "residente_id": e.residente_id,
+        "por_nome": nomes.get(e.assumido_por, ""), "assumido_em": _utc(e.assumido_em), "encerrado_em": _utc(e.encerrado_em),
+    } for e in estados]
+
+
 @central_alertas_router.get("/historico", response_model=list[s.AlertaEstadoHistorico])
 async def historico_do_alerta(alerta_id: str, request: Request, db: AsyncSession = Depends(get_db),
                               context: SecurityContext = Depends(require_permission("alertas:ler"))):
