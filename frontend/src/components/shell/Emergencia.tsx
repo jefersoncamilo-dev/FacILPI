@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, matchPath, useLocation } from 'react-router-dom'
+import { Link, matchPath, useLocation } from 'react-router'
 import { ChevronRight, FileText, Search, Siren } from 'lucide-react'
 import { Dialog, DialogContent } from '../ui/dialog'
 import { usePermissoes } from '../../context/PermissoesContext'

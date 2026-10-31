@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { ChevronRight, ClipboardList, Loader2, Plus, Search, UserPlus } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
 import {

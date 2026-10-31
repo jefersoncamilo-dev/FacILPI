@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter } from 'react-router'
 import { FuncionarioCard } from '../components/equipe/FuncionarioCard'
 import { RevogarAcessoModal } from '../components/equipe/RevogarAcessoModal'
 import { InativarFuncionarioModal } from '../components/equipe/InativarFuncionarioModal'

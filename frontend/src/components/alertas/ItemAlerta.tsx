@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { ArrowRight, MapPin, UserCheck } from 'lucide-react'
 import {
   agirNoAlerta, destinoDoAlerta, quandoDoAlerta, rotuloEstado, ROTULO_GRAVIDADE, ROTULO_NATUREZA,

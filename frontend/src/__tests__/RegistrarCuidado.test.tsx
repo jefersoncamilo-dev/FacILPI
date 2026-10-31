@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import { MeuPlantao } from '../pages/MeuPlantao'
 import { validarOutroHorario } from '../components/plantao/RegistrarCuidado'
 import { api } from '../services/api'

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { ArrowRight, BedDouble, ClipboardList, Pill, RefreshCw, TriangleAlert } from 'lucide-react'
 import { formatDateTime } from '../services/api'
 import { getPlantao, getResidentesResumo, rotuloDoItem, type PlantaoItem } from '../services/plantao'

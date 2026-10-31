@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { Pill } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'

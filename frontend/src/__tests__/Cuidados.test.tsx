@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { AuthProvider } from '../context/AuthContext'
 import { PermissoesProvider } from '../context/PermissoesContext'
 import { Cuidados } from '../pages/Cuidados'

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { ListChecks, TriangleAlert } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'

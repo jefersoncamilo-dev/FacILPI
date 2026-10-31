@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { InstituicaoForm } from '../components/platform/InstituicaoForm'
 import { criarInstituicao } from '../services/platform'
 import { mensagemDeErro } from '../services/api'

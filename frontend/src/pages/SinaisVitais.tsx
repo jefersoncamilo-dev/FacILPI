@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { TriangleAlert } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'
