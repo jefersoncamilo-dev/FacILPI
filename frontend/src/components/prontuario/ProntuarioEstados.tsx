@@ -17,7 +17,7 @@ export function ProntuarioVazio() {
 
 export function ProntuarioErro({ mensagem, onRetry }: { mensagem: string; onRetry: () => void }) {
   return (
-    <div role="alert" className="card bg-red-50 border-red-200 py-10 text-center">
+    <div role="alert" className="card bg-critico-soft border-critico/30 py-10 text-center">
       <p className="text-sm text-danger">{mensagem}</p>
       <button type="button" onClick={onRetry} className="btn-secondary mt-4">Tentar novamente</button>
     </div>

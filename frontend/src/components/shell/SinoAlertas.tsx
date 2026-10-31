@@ -61,7 +61,7 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
           {total ? (
             <span
               aria-hidden="true"
-              className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-critico px-1 text-center text-[11px] font-semibold leading-[18px] text-white"
+              className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-critico px-1 text-center text-[11px] font-semibold leading-[18px] text-destructive-foreground"
             >
               {total > 99 ? '99+' : total}
             </span>
@@ -92,7 +92,7 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-foreground">{a.titulo}</span>
                           {meta && <span className="block truncate text-xs font-normal text-muted-foreground">{meta}</span>}
-                          {a.estado && <span className="block truncate text-xs font-semibold text-emerald-800">{rotuloEstado(a.estado)}</span>}
+                          {a.estado && <span className="block truncate text-xs font-semibold text-primary">{rotuloEstado(a.estado)}</span>}
                           <span className="block text-xs font-semibold text-primary">{destino.acao}</span>
                         </span>
                       </Link>

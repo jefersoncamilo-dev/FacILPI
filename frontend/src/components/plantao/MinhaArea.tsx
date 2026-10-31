@@ -30,7 +30,7 @@ export function MinhaArea({ resumo, podeAssumir, onMudou }: { resumo: MeuPlantao
       </div>
 
       {resumo.passagens_a_receber !== null && resumo.passagens_a_receber > 0 && (
-        <Link to="/passagem" className="flex min-h-[44px] items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 text-sm font-semibold text-orange-900">
+        <Link to="/passagem" className="flex min-h-[44px] items-center gap-2 rounded-md border border-alerta/30 bg-alerta-soft px-3 text-sm font-semibold text-alerta-forte">
           <Inbox className="size-4" aria-hidden="true" />
           {resumo.passagens_a_receber === 1 ? '1 passagem de plantão aguardando você' : `${resumo.passagens_a_receber} passagens de plantão aguardando você`}
           <ArrowRight className="ml-auto size-4" aria-hidden="true" />
@@ -46,7 +46,7 @@ export function MinhaArea({ resumo, podeAssumir, onMudou }: { resumo: MeuPlantao
                 <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
                 <Link to={`/residentes/${r.id}`} className="inline-flex min-h-[44px] items-center font-medium text-primary hover:underline">{r.nome}</Link>
                 {r.local && <span className="text-muted-foreground">{r.local}</span>}
-                <span className="text-xs text-orange-800">{r.motivos.join(' · ')}</span>
+                <span className="text-xs text-alerta-forte">{r.motivos.join(' · ')}</span>
               </li>
             ))}
           </ul>
@@ -68,7 +68,7 @@ export function MinhaArea({ resumo, podeAssumir, onMudou }: { resumo: MeuPlantao
 
       {resumo.atividades !== null && (
         <div className="space-y-2">
-          <p className="text-sm text-slate-700">
+          <p className="text-sm text-foreground">
             Atividades da área: <span className="font-semibold">{atrasadas.length} atrasada{atrasadas.length === 1 ? '' : 's'}</span>
             {' · '}{proximas.length} nas próximas horas
             {proximas[0]?.previsto_em ? ` (a próxima às ${formatDateTime(proximas[0].previsto_em)})` : ''}.

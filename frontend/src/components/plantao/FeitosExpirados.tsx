@@ -77,7 +77,7 @@ export function FeitosExpirados({ nomes }: { nomes: Record<string, string> }) {
                   onClick={() => setAba(opcao.valor)}
                   className={cn(
                     'min-h-[44px] rounded-md px-2 text-sm font-medium',
-                    aba === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+                    aba === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {opcao.rotulo}{opcao.total !== undefined ? ` (${opcao.total})` : ''}
@@ -87,7 +87,7 @@ export function FeitosExpirados({ nomes }: { nomes: Record<string, string> }) {
           )}
           {desde && <p className="text-xs text-muted-foreground">Desde {formatDateTime(desde)}</p>}
           {erro ? (
-            <p role="alert" className="text-sm text-red-700">{erro}</p>
+            <p role="alert" className="text-sm text-critico-texto">{erro}</p>
           ) : feitos === null ? (
             <p className="text-sm text-muted-foreground">Carregando…</p>
           ) : aba === 'feitos' || !veExpirados ? (

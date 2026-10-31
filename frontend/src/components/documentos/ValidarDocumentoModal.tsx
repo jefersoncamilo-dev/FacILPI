@@ -79,7 +79,7 @@ export function ValidarDocumentoModal({
         {documento && !documento.arquivo_presente && (
           // Depois de validado, o backend recusa novo arquivo (409): avisar antes
           // é o único momento em que isso ainda pode ser evitado.
-          <p className="rounded-lg border-l-4 border-l-warning bg-orange-50/60 px-3 py-2 text-sm text-textMain">
+          <p className="rounded-lg border-l-4 border-l-warning bg-alerta-soft/60 px-3 py-2 text-sm text-textMain">
             Este documento está sem arquivo anexado. Depois de validado, não será possível anexar.
           </p>
         )}

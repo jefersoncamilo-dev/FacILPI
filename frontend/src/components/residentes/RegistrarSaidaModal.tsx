@@ -154,7 +154,7 @@ export function RegistrarSaidaModal({ open, onClose, onRegistrado, residente, po
         </div>
 
         {pendencias && (outras.length > 0 || pendencias.origens_sem_leitura.length > 0) && (
-          <section className="rounded-xl border border-slate-200 p-3 space-y-2" aria-label="Pendências do residente">
+          <section className="rounded-xl border border-border p-3 space-y-2" aria-label="Pendências do residente">
             <p className="text-sm font-medium text-textMain">O que continua ativo</p>
             <p className="text-xs text-textMuted">Nada é encerrado automaticamente. Encerre cada item na tela própria.</p>
             <ul className="space-y-1">

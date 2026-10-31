@@ -66,7 +66,7 @@ function Shell({ children }: { children: ReactNode }) {
             <Menu className="!size-5" aria-hidden="true" />
           </Button>
           <Logo />
-          <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-slate-600 sm:block">
+          <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground sm:block">
             {contextTitle(activeContext)}
           </span>
           <div className="ml-auto flex items-center gap-1.5 sm:ml-0">
@@ -161,7 +161,7 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
             <DropdownMenuItem onSelect={onAlterarSenha}>
               <KeyRound aria-hidden="true" /> Alterar senha
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => { void logout() }} className="text-red-700 [&_svg]:text-red-700">
+            <DropdownMenuItem onSelect={() => { void logout() }} className="text-critico-texto [&_svg]:text-critico-texto">
               <LogOut aria-hidden="true" /> Sair
             </DropdownMenuItem>
           </DropdownMenuContent>
@@ -237,7 +237,7 @@ function NavegacaoInferior({ onMenu, menuAberto, sino }: { onMenu: () => void; m
                 {'badge' in d && d.badge ? (
                   <span
                     aria-hidden="true"
-                    className="absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-critico px-1 text-center text-[10px] font-semibold leading-4 text-white"
+                    className="absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-critico px-1 text-center text-[10px] font-semibold leading-4 text-destructive-foreground"
                   >
                     {d.badge > 99 ? '99+' : d.badge}
                   </span>

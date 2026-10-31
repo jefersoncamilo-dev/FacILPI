@@ -136,15 +136,15 @@ export function FuncionarioFormModal({ open, onClose, funcionario, perfis = [], 
       {senhaTemp ? (
         <div className="space-y-4">
           <div className="text-center">
-            <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-              <CheckCircle2 className="size-7 text-emerald-700" aria-hidden="true" />
+            <div className="w-14 h-14 rounded-full bg-accent flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="size-7 text-primary" aria-hidden="true" />
             </div>
             <h4 className="font-semibold text-textMain">Funcionário criado com acesso</h4>
             <p className="text-sm text-textMuted mt-1">Senha temporária para o novo usuário:</p>
           </div>
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <div className="bg-muted border border-border rounded-xl p-4">
             <label className="text-xs text-textMuted font-medium">Senha temporária</label>
-            <div className="mt-1 p-3 bg-white rounded-lg border border-slate-200 font-mono text-sm break-all select-all">
+            <div className="mt-1 p-3 bg-card rounded-lg border border-border font-mono text-sm break-all select-all">
               {senhaTemp}
             </div>
           </div>
@@ -189,7 +189,7 @@ export function FuncionarioFormModal({ open, onClose, funcionario, perfis = [], 
           </div>
 
           {showConselho && (
-            <div className="p-3 rounded-xl bg-blue-50 border border-blue-100 space-y-3">
+            <div className="p-3 rounded-xl bg-info-soft border border-info/20 space-y-3">
               <p className="flex items-center gap-1.5 text-xs text-primary font-medium"><IdCard className="size-4" aria-hidden="true" /> Dados do conselho profissional (obrigatórios)</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
@@ -212,13 +212,13 @@ export function FuncionarioFormModal({ open, onClose, funcionario, perfis = [], 
           )}
 
           {!isEdit && (
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+            <div className="p-3 rounded-xl bg-muted border border-border">
               <label className="flex items-start gap-3 cursor-pointer min-h-[44px]">
                 <input
                   type="checkbox"
                   checked={!!form.criar_usuario}
                   onChange={e => update('criar_usuario', e.target.checked)}
-                  className="mt-1 w-5 h-5 rounded border-slate-300 text-primary focus:ring-primary"
+                  className="mt-1 w-5 h-5 rounded border-input text-primary focus:ring-primary"
                 />
                 <div>
                   <span className="font-medium text-sm text-textMain">Criar usuário com acesso ao sistema</span>
@@ -239,7 +239,7 @@ export function FuncionarioFormModal({ open, onClose, funcionario, perfis = [], 
             </div>
           )}
 
-          {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+          {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
 
           <div className="flex gap-3">
             <button type="button" onClick={handleClose} className="btn-secondary flex-1">Cancelar</button>

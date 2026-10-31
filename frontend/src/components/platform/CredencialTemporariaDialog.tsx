@@ -46,7 +46,7 @@ export function CredencialTemporariaDialog({
           definir uma nova senha no primeiro acesso.
         </p>
 
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+        <div className="p-3 rounded-xl bg-muted border border-border">
           <div className="text-xs text-textMuted mb-1">Senha temporária</div>
           <code data-testid="senha-temporaria" className="font-mono text-base break-all">
             {senha}
@@ -59,7 +59,7 @@ export function CredencialTemporariaDialog({
 
         <div
           role="alert"
-          className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200"
+          className="text-sm p-3 rounded-xl bg-alerta-soft text-alerta-forte border border-alerta/30"
         >
           <strong>Esta senha será exibida somente agora.</strong> Ela não fica guardada e não pode
           ser consultada novamente por esta tela. Se for perdida, não há reenvio disponível neste

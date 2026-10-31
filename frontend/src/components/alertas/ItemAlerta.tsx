@@ -10,9 +10,9 @@ import { cn } from '../../lib/utils'
 
 // Classes completas: o Tailwind não enxerga nomes montados em tempo de execução.
 export const ESTILO_GRAVIDADE: Record<Gravidade, { faixa: string; ficha: string; ponto: string }> = {
-  critico: { faixa: 'bg-critico', ficha: 'border-red-200 bg-red-50 text-red-800', ponto: 'bg-critico' },
-  atencao: { faixa: 'bg-alerta', ficha: 'border-orange-200 bg-orange-50 text-orange-800', ponto: 'bg-alerta' },
-  aviso: { faixa: 'bg-slate-400', ficha: 'border-border bg-muted text-slate-700', ponto: 'bg-slate-400' },
+  critico: { faixa: 'bg-critico', ficha: 'border-critico/30 bg-critico-soft text-critico-texto', ponto: 'bg-critico' },
+  atencao: { faixa: 'bg-alerta', ficha: 'border-alerta/30 bg-alerta-soft text-alerta-forte', ponto: 'bg-alerta' },
+  aviso: { faixa: 'bg-input', ficha: 'border-border bg-muted text-foreground', ponto: 'bg-input' },
 }
 
 const BOTAO = 'inline-flex min-h-[44px] items-center rounded-md border border-border px-3 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50 sm:min-h-[36px]'
@@ -73,7 +73,7 @@ export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssum
             <span className="sr-only">{ROTULO_GRAVIDADE[a.gravidade]}: </span>{a.titulo}
           </p>
           {(a.residente_nome || a.local) && (
-            <p className="flex flex-wrap items-center gap-x-2 text-sm text-slate-700">
+            <p className="flex flex-wrap items-center gap-x-2 text-sm text-foreground">
               {a.residente_nome && <span className="font-medium">{a.residente_nome}</span>}
               {a.local && (
                 <span className="inline-flex items-center gap-1 text-muted-foreground">
@@ -85,11 +85,11 @@ export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssum
           )}
           {meta && <p className="text-xs text-muted-foreground">{meta}</p>}
           {cuidando && (
-            <p className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800">
+            <p className="inline-flex items-center gap-1 text-xs font-semibold text-primary">
               <UserCheck className="size-3.5" aria-hidden="true" /> {cuidando}
             </p>
           )}
-          {erro && <p role="alert" className="text-xs font-medium text-red-700">{erro}</p>}
+          {erro && <p role="alert" className="text-xs font-medium text-critico-texto">{erro}</p>}
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
           <Link
