@@ -1658,11 +1658,15 @@ class ExecucaoCreate(D2Input):
     ocorrido_em: AwareDatetime
     observacao: Optional[str] = None
     justificativa: Optional[Annotated[str, Field(min_length=1)]] = None
+    # G4 (D6): quanto da refeicao foi consumido; opcional, so com "executada".
+    percentual_consumido: Optional[Literal[0, 25, 50, 75, 100]] = None
 
     @model_validator(mode="after")
     def outcome_fields(self):
         if self.resultado != "executada" and not self.justificativa:
             raise ValueError("Justificativa obrigatoria para recusa ou omissao")
+        if self.resultado != "executada" and self.percentual_consumido is not None:
+            raise ValueError("Percentual consumido so vale para cuidado realizado")
         return self
 
 
@@ -1722,6 +1726,7 @@ class ExecucaoResponse(BaseModel):
     executor_id: str
     observacao: Optional[str] = None
     justificativa: Optional[str] = None
+    percentual_consumido: Optional[int] = None
     estornado_em: Optional[datetime] = None
     estornado_por: Optional[str] = None
     motivo_estorno: Optional[str] = None
