@@ -51,6 +51,7 @@ export default {
           forte: token("alerta-forte"),
         },
         critico: token("critico"),
+        "critico-texto": token("critico-texto"),
         // Nomes legados das telas existentes, remapeados para a nova
         // identidade. Cada jornada migra as proprias telas para os tokens acima.
         primaryDeep: token("foreground"),
