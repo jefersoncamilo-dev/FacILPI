@@ -40,8 +40,8 @@ export function ErrorState({
   retryLabel?: string
 }) {
   return (
-    <div role="alert" className="flex flex-col items-center rounded-card border border-red-200 bg-card px-6 py-14 text-center">
-      <span className="mb-4 inline-flex size-12 items-center justify-center rounded-full bg-red-50 text-red-700">
+    <div role="alert" className="flex flex-col items-center rounded-card border border-critico/30 bg-card px-6 py-14 text-center">
+      <span className="mb-4 inline-flex size-12 items-center justify-center rounded-full bg-critico-soft text-critico-texto">
         <AlertTriangle className="size-6" aria-hidden="true" />
       </span>
       <p className="font-display text-base font-semibold text-foreground">{title}</p>
