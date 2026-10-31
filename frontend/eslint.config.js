@@ -6,7 +6,7 @@ import tseslint from 'typescript-eslint'
 // QA-01: lint mínimo e honesto — regras que pegam defeito real (hooks, código
 // morto, erros de JS/TS). Estilo fica de fora de propósito.
 export default tseslint.config(
-  { ignores: ['dist', 'coverage', 'node_modules'] },
+  { ignores: ['dist', 'coverage', 'node_modules', 'playwright-report', 'test-results'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
