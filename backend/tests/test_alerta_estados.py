@@ -12,7 +12,7 @@ import os
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 
 from .revisoes import ESQUEMA_DOS_MODELOS
@@ -195,6 +195,13 @@ def test_026_concede_cria_e_reverte(pre026_db):
         ilpi, _, queda, _ = await _cenario(db)
         _, h, _ = await _institucional(db, ilpi, "cuidador")
         await _acao(client, h, "assumir", f"intercorrencia_grave_aberta:{queda.id}")
+        # A descida passa pela 031, que recusa vinculos externos aos seus grants; os
+        # perfis locais da fixture nao sao objeto deste teste (o alvo e a recusa da 026).
+        await db.execute(text(
+            "DELETE FROM perfil_permissoes WHERE perfil_id IN (SELECT id FROM perfis WHERE ilpi_id IS NOT NULL) "
+            "AND permissao_id IN (SELECT id FROM permissoes WHERE chave IN "
+            "('medicamentos:criar', 'medicamentos:atualizar', 'prescricoes:criar', 'prescricoes:atualizar'))"))
+        await db.commit()
     asyncio.run(_client(pre026_db, historico))
     falha = _migrate(pre026_db, target="025_escala_planejada", command="downgrade", success=False)
     assert "alerta_estados tem historico" in falha.stdout + falha.stderr
