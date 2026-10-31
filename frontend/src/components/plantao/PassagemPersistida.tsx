@@ -31,7 +31,7 @@ function Item({ item }: { item: ItemPassagem }) {
       </div>
       {item.situacao_atual && (
         <span className={cn('shrink-0 self-start rounded-full border px-2.5 py-0.5 text-xs font-semibold sm:self-auto',
-          item.situacao_atual === 'aberto' ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800')}>
+          item.situacao_atual === 'aberto' ? 'border-alerta/30 bg-alerta-soft text-alerta-forte' : 'border-brand/30 bg-accent text-primary')}>
           {item.situacao_atual === 'aberto' ? 'Ainda aberto' : 'Resolvido desde então'}
         </span>
       )}
@@ -259,7 +259,7 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
               {observacoes.map((o, n) => (
                 <li key={n} className="flex items-center justify-between gap-2 text-sm">
                   <span>{ROTULO_CATEGORIA[o.categoria]}: {o.texto}</span>
-                  <button type="button" aria-label={`Remover observação ${n + 1}`} className="min-h-[44px] px-2 text-red-700"
+                  <button type="button" aria-label={`Remover observação ${n + 1}`} className="min-h-[44px] px-2 text-critico-texto"
                     onClick={() => setObservacoes(lista => lista.filter((_, i) => i !== n))}>
                     <Trash2 className="size-4" aria-hidden="true" />
                   </button>

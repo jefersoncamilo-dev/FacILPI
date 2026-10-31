@@ -3,9 +3,9 @@ import { cn } from '../../lib/utils'
 // Grau de dependência = prioridade de atenção: I verde, II amarelo, III vermelho.
 // O texto ("Grau II") vai sempre junto, para não depender só da cor.
 const ESTILO: Record<string, string> = {
-  'Grau I': 'border-emerald-300 bg-emerald-100 text-emerald-900',
-  'Grau II': 'border-yellow-300 bg-yellow-100 text-yellow-900',
-  'Grau III': 'border-red-300 bg-red-100 text-red-800',
+  'Grau I': 'border-brand/40 bg-accent text-brand-ink',
+  'Grau II': 'border-alerta/40 bg-alerta-soft text-alerta-forte',
+  'Grau III': 'border-critico/40 bg-critico-soft text-critico-texto',
 }
 
 export function SeloGrau({ classificacao, className }: { classificacao?: string | null; className?: string }) {

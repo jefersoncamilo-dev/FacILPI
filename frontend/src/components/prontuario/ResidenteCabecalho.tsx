@@ -96,9 +96,9 @@ export function ResidenteCabecalho({
       </dl>
 
       {alertas.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-red-100 bg-red-50 p-3">
+        <div className="space-y-2 rounded-lg border border-critico/20 bg-critico-soft p-3">
           {alertas.map(([rotulo, valor]) => (
-            <p key={rotulo} className="flex gap-2 text-sm text-red-800">
+            <p key={rotulo} className="flex gap-2 text-sm text-critico-texto">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span><strong className="font-semibold">{rotulo}:</strong> {valor}</span>
             </p>

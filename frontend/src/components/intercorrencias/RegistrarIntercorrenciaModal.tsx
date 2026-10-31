@@ -150,7 +150,7 @@ export function RegistrarIntercorrenciaModal({
 
         {/* SBAR e providência ficam recolhidos: são cinco campos longos e o
             registro precisa ser rápido em 360px. Continuam no DOM e acessíveis. */}
-        <details className="rounded-xl border border-slate-200">
+        <details className="rounded-xl border border-border">
           <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium min-h-[44px] flex items-center">
             Detalhamento SBAR e providência (opcional)
           </summary>

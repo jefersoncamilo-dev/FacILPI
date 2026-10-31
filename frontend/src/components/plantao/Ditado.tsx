@@ -128,7 +128,7 @@ export function BotaoDitar({ onTexto, rotulo }: { onTexto: (texto: string) => vo
         aria-label={ouvindo ? `Parar ditado — ${rotulo}` : `Ditar — ${rotulo}`}
         className={cn(
           'inline-flex min-h-[44px] items-center gap-2 rounded-lg border px-3 text-sm font-medium',
-          ouvindo ? 'border-red-300 bg-red-50 text-red-800' : 'border-border hover:bg-muted',
+          ouvindo ? 'border-critico/40 bg-critico-soft text-critico-texto' : 'border-border hover:bg-muted',
         )}
       >
         {ouvindo ? <Square className="size-4" aria-hidden="true" /> : <Mic className="size-4" aria-hidden="true" />}

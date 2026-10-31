@@ -52,7 +52,7 @@ export function VincularUsuarioModal({ open, onClose, funcionario, usuarios, onC
   return (
     <Modal open={open} onClose={handleClose} title="Vincular usuário existente">
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+        <div className="p-3 rounded-xl bg-muted border border-border">
           <p className="text-xs text-textMuted">Vinculando usuário ao funcionário:</p>
           <p className="text-sm text-textMain font-semibold mt-0.5">{funcionario?.nome}</p>
         </div>
@@ -67,7 +67,7 @@ export function VincularUsuarioModal({ open, onClose, funcionario, usuarios, onC
           />
         </div>
 
-        <div className="max-h-60 overflow-auto border border-slate-200 rounded-xl divide-y divide-slate-100">
+        <div className="max-h-60 overflow-auto border border-border rounded-xl divide-y divide-border">
           {availableUsers.length === 0 ? (
             <div className="p-4 text-center text-sm text-textMuted">
               Nenhum usuário disponível encontrado
@@ -76,7 +76,7 @@ export function VincularUsuarioModal({ open, onClose, funcionario, usuarios, onC
             availableUsers.map(u => (
               <label
                 key={u.id}
-                className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 transition min-h-[44px] ${selectedUserId === u.id ? 'bg-primaryLight/30' : ''}`}
+                className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-muted transition min-h-[44px] ${selectedUserId === u.id ? 'bg-primaryLight/30' : ''}`}
               >
                 <input
                   type="radio"
@@ -95,7 +95,7 @@ export function VincularUsuarioModal({ open, onClose, funcionario, usuarios, onC
           )}
         </div>
 
-        {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+        {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
 
         <div className="flex gap-3">
           <button type="button" onClick={handleClose} className="btn-secondary flex-1">Cancelar</button>
