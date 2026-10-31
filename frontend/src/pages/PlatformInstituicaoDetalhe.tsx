@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { InstituicaoForm } from '../components/platform/InstituicaoForm'
 import { PrimeiroGestorForm } from '../components/platform/PrimeiroGestorForm'
 import { CredencialTemporariaDialog } from '../components/platform/CredencialTemporariaDialog'

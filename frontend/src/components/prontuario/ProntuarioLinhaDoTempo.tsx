@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { formatDateTime } from '../../services/api'
 import { rotuloSituacaoEvento } from '../../lib/rotulos'
 import { ProntuarioCategoria, ProntuarioEvento } from '../../services/prontuario'

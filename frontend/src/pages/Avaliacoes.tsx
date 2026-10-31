@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { ClipboardCheck, Loader2, Plus, Search, ShieldCheck } from 'lucide-react'
 import { api, formatDate, formatDateTime, mensagemDeErro } from '../services/api'
 import {

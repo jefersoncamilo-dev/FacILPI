@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { CheckCircle2, Paperclip, TriangleAlert } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { formatDate, formatDateTime, mensagemDeErro } from '../services/api'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 // `GET /residentes/` já tem um consumidor tipado; duplicar a função criaria uma

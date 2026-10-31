@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router'
 import { ArrowRight, Bell } from 'lucide-react'
 import { usePermissoes } from '../../context/PermissoesContext'
 import { recarregarCentralAlertas, useCentralAlertas, type EstadoCentral } from '../../hooks/useCentralAlertas'

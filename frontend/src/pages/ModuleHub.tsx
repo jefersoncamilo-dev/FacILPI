@@ -1,4 +1,4 @@
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router'
 import { Lock } from 'lucide-react'
 import { usePermissoes } from '../context/PermissoesContext'
 import { ModuleHubCard } from '../components/shell/ModuleHubCard'

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ChevronRight, Loader2, NotebookPen, Plus } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
 import { paisApi, ROTULO_PAIS, TERMINAIS_PAIS, type Plano } from '../services/pais'
