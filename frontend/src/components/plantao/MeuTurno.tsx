@@ -127,7 +127,7 @@ export function MeuTurno({ onMudou, atrasados }: {
                 <Clock className="size-4" aria-hidden="true" /> Desde {formatDateTime(plantao.inicio_em)}
               </span>
             </p>
-            <p className="flex items-center gap-1.5 text-sm text-slate-700">
+            <p className="flex items-center gap-1.5 text-sm text-foreground">
               <MapPin className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span className="truncate">
                 {plantao.responsabilidades.length
@@ -160,7 +160,7 @@ export function MeuTurno({ onMudou, atrasados }: {
           <p className="font-display text-base font-semibold text-foreground">Você não está em plantão</p>
           {(atual.escalas_pendentes ?? []).slice(0, 1).map(e => (
             <div key={e.id} className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-slate-700">
+              <p className="text-sm text-foreground">
                 <span className="font-medium text-foreground">Sua escala:</span>{' '}
                 {[e.turno_nome, formatDateTime(e.inicio_previsto) + ' – ' + formatDateTime(e.fim_previsto), e.area_nome].filter(Boolean).join(' · ')}
               </p>

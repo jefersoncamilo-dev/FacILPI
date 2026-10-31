@@ -30,7 +30,7 @@ export function Logo({
       <LogoMark className={inverted ? 'from-white/25 to-white/10 ring-1 ring-white/30' : undefined} />
       <span className="min-w-0 text-left">
         <span className={cn('block font-display text-lg font-bold leading-none tracking-tight', inverted ? 'text-white' : 'text-foreground')}>
-          Fac<span className={inverted ? 'text-emerald-200' : 'text-brand-strong'}>ILPI</span>
+          Fac<span className={inverted ? 'text-brand-light' : 'text-brand-strong'}>ILPI</span>
         </span>
         {subtitle && (
           <span className={cn('mt-1 block truncate text-xs', inverted ? 'text-emerald-50/80' : 'text-muted-foreground')}>{subtitle}</span>

@@ -24,3 +24,7 @@ ops/offhost_verify.env
 *.uploaded
 *.offhost_manifest.json
 *.offhost_pending.json
+
+# Playwright (E2E)
+playwright-report/
+test-results/

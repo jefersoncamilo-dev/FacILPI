@@ -64,7 +64,7 @@ function SituacaoEvento({ evento }: { evento: ProntuarioEvento }) {
   if (evento.substituido) return <span className="badge-warning">Substituído</span>
   if (evento.situacao) {
     return (
-      <span className="px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 bg-slate-50 text-textMuted border border-slate-200">
+      <span className="px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 bg-muted text-textMuted border border-border">
         {rotuloSituacaoEvento(evento.situacao)}
       </span>
     )
@@ -79,12 +79,12 @@ export function ProntuarioLinhaDoTempo({ eventos }: { eventos: ProntuarioEvento[
       {grupos.map(grupo => (
         <div key={grupo.chave}>
           <h2 className="text-sm font-semibold text-textMuted mb-2">{rotuloDia(grupo.chave)}</h2>
-          <div className="card p-0 divide-y divide-slate-100">
+          <div className="card p-0 divide-y divide-border">
             {grupo.eventos.map(evento => (
               <div key={`${evento.origem}-${evento.registro_id}-${evento.tipo}`} className="p-4 flex gap-3">
                 <span
                   aria-hidden="true"
-                  className="w-7 h-7 shrink-0 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-semibold flex items-center justify-center"
+                  className="w-7 h-7 shrink-0 rounded-lg bg-muted text-muted-foreground text-[11px] font-semibold flex items-center justify-center"
                 >
                   {CATEGORIA_SIGLA[evento.categoria]}
                 </span>

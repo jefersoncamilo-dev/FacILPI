@@ -46,7 +46,7 @@ export function ItemPlantao({
     <div
       className={cn(
         'flex items-center gap-2 rounded-card border bg-card px-2.5 py-2.5 shadow-sm',
-        selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado ? 'border-orange-300' : 'border-border',
+        selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado ? 'border-alerta/40' : 'border-border',
       )}
     >
       {selecao && (
@@ -61,7 +61,7 @@ export function ItemPlantao({
         >
           <span className={cn(
             'flex size-6 items-center justify-center rounded-md border-2',
-            selecao.selecionado ? 'border-primary bg-primary text-primary-foreground' : 'border-slate-400 bg-card',
+            selecao.selecionado ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card',
           )}>
             {selecao.selecionado && <Check className="size-4" aria-hidden="true" />}
           </span>
@@ -79,14 +79,14 @@ export function ItemPlantao({
         {item.local && <div className="truncate text-[11px] leading-tight text-muted-foreground">{item.local}</div>}
         <div className="mt-0.5 flex min-w-0 items-baseline gap-1 whitespace-nowrap text-xs leading-snug">
           {previsto ? (
-            <span className={cn('inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums', atrasado ? 'font-semibold text-orange-800' : 'text-muted-foreground')}>
+            <span className={cn('inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums', atrasado ? 'font-semibold text-alerta-forte' : 'text-muted-foreground')}>
               {atrasado && <AlarmClock className="size-3 self-center" aria-hidden="true" />}
               {HORA.format(previsto)}
               {!mesmoDia(previsto, new Date(agora)) && ` ${DIA.format(previsto)}`}
               {atrasado && <span className="sr-only"> — atrasado {tempoDeAtraso(item.previsto_em!, agora)}</span>}
             </span>
           ) : (
-            <span className="inline-flex shrink-0 items-center text-orange-800">
+            <span className="inline-flex shrink-0 items-center text-alerta-forte">
               <TriangleAlert className="size-3.5 self-center" aria-hidden="true" /><span className="sr-only">Sem horário</span>
             </span>
           )}

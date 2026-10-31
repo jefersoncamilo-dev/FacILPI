@@ -148,13 +148,13 @@ export function PerfilFormModal({ open, onClose, perfil, permissoes, onSubmitPer
             <textarea className="input mt-1 min-h-[80px] resize-y" value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })} placeholder="Descreva as responsabilidades deste perfil..." />
           </div>
 
-          <div className="p-3 rounded-xl bg-blue-50 border border-blue-100">
+          <div className="p-3 rounded-xl bg-info-soft border border-info/20">
             <p className="text-xs text-primary">
               <strong>Nota:</strong> O perfil <code>platform_superuser</code> não pode ser criado por administradores ILPI. Apenas perfis com escopo institucional são permitidos.
             </p>
           </div>
 
-          {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+          {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
 
           <div className="flex gap-3">
             <button type="button" onClick={handleClose} className="btn-secondary flex-1">Cancelar</button>
@@ -165,7 +165,7 @@ export function PerfilFormModal({ open, onClose, perfil, permissoes, onSubmitPer
         </form>
       ) : (
         <div className="space-y-4">
-          <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="p-3 rounded-xl bg-muted border border-border">
             <p className="text-xs text-textMuted">Perfil:</p>
             <p className="text-sm font-semibold text-textMain">{createdPerfil?.nome}</p>
             <p className="text-xs text-textMuted">Chave: {createdPerfil?.chave}</p>
@@ -199,21 +199,21 @@ export function PerfilFormModal({ open, onClose, perfil, permissoes, onSubmitPer
                 </p>
                 <div className="space-y-3 max-h-[50vh] overflow-auto pr-1">
                   {Object.entries(permissoesAgrupadas).map(([modulo, lista]) => (
-                    <div key={modulo} className="border border-slate-200 rounded-xl overflow-hidden">
-                      <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <div key={modulo} className="border border-border rounded-xl overflow-hidden">
+                      <div className="px-3 py-2 bg-muted border-b border-border">
                         <span className="text-xs font-semibold text-textMain">{rotuloModulo(modulo)}</span>
                       </div>
                       <div className="p-2 space-y-1">
                         {lista.map(p => (
                           <label
                             key={p.chave}
-                            className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-50 cursor-pointer min-h-[44px]"
+                            className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted cursor-pointer min-h-[44px]"
                           >
                             <input
                               type="checkbox"
                               checked={selectedPermissoes.has(p.chave)}
                               onChange={() => togglePermissao(p.chave)}
-                              className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+                              className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
                             />
                             <div className="min-w-0">
                               <span className="text-sm text-textMain">{rotuloAcao(p.acao)}</span>
@@ -233,13 +233,13 @@ export function PerfilFormModal({ open, onClose, perfil, permissoes, onSubmitPer
 
           {podeEditar && atuais.status === 'ok' && !semMudanca && (
             <p className="text-xs text-textMain" role="status">
-              Ao salvar: {adicionadas.length > 0 && <strong className="text-emerald-800">+{adicionadas.length} concedida(s)</strong>}
+              Ao salvar: {adicionadas.length > 0 && <strong className="text-primary">+{adicionadas.length} concedida(s)</strong>}
               {adicionadas.length > 0 && removidas.length > 0 && ' · '}
-              {removidas.length > 0 && <strong className="text-red-700">−{removidas.length} retirada(s)</strong>}
+              {removidas.length > 0 && <strong className="text-critico-texto">−{removidas.length} retirada(s)</strong>}
             </p>
           )}
 
-          {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+          {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
 
           <div className="flex gap-3">
             <button type="button" onClick={handleClose} className="btn-secondary flex-1">{podeEditar ? 'Cancelar' : 'Fechar'}</button>
@@ -265,11 +265,11 @@ export function ListaSomenteLeitura({ dados }: { dados: PerfilPermissoes }) {
   return (
     <dl className="space-y-2">
       {Object.entries(grupos).map(([modulo, itens]) => (
-        <div key={modulo} className="rounded-lg border border-slate-200 px-3 py-2">
+        <div key={modulo} className="rounded-lg border border-border px-3 py-2">
           <dt className="text-xs font-semibold text-textMain">{rotuloModulo(modulo)}</dt>
           <dd className="mt-1 flex flex-wrap gap-1.5">
             {itens.map(p => (
-              <span key={p.chave} title={p.descricao || undefined} className="rounded-full bg-slate-100 px-2 py-1 text-xs text-textMain">{rotuloAcao(p.acao)}</span>
+              <span key={p.chave} title={p.descricao || undefined} className="rounded-full bg-muted px-2 py-1 text-xs text-textMain">{rotuloAcao(p.acao)}</span>
             ))}
           </dd>
         </div>

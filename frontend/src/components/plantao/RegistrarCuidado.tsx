@@ -46,9 +46,9 @@ const SUGESTOES: Record<Exclude<ResultadoCuidado, 'executada'>, string[]> = {
 }
 
 const OPCOES: { valor: ResultadoCuidado; Icone: typeof CircleCheck; classe: string }[] = [
-  { valor: 'executada', Icone: CircleCheck, classe: 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700' },
-  { valor: 'recusada', Icone: CircleX, classe: 'border-orange-300 bg-card text-orange-900 hover:bg-orange-50' },
-  { valor: 'omitida', Icone: Ban, classe: 'border-slate-300 bg-card text-slate-800 hover:bg-muted' },
+  { valor: 'executada', Icone: CircleCheck, classe: 'border-brand-strong bg-brand-strong text-white hover:bg-brand-strong/90' },
+  { valor: 'recusada', Icone: CircleX, classe: 'border-alerta/40 bg-card text-alerta-forte hover:bg-alerta-soft' },
+  { valor: 'omitida', Icone: Ban, classe: 'border-input bg-card text-foreground hover:bg-muted' },
 ]
 
 /**
