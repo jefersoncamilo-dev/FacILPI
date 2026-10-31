@@ -513,6 +513,7 @@ async def obter_dose(id: str, db: AsyncSession = Depends(get_db),
 
 @administracoes_router.get("/", response_model=list[s.C5AdministracaoResponse])
 async def listar_administracoes(residente_id: str | None = None, prescricao_id: str | None = None, dose_prevista_id: str | None = None,
+    a_partir_de: AwareDatetime | None = None,
     skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=500), db: AsyncSession = Depends(get_db),
     context: SecurityContext = Depends(require_permission("administracoes:ler"))):
     await _parents(db, context, residente_id, prescricao_id, dose_prevista_id)
@@ -520,8 +521,20 @@ async def listar_administracoes(residente_id: str | None = None, prescricao_id: 
     for key, value in (("residente_id", residente_id), ("prescricao_id", prescricao_id), ("dose_prevista_id", dose_prevista_id)):
         if value is not None:
             query = query.where(getattr(m.Administracao, key) == value)
-    return [_data(obj) for obj in (await db.scalars(query.order_by(
-        m.Administracao.ocorrido_em.desc(), m.Administracao.id).offset(skip).limit(limit))).all()]
+    if a_partir_de is not None:
+        query = query.where(m.Administracao.ocorrido_em >= _utc(a_partir_de))
+    objects = (await db.scalars(query.order_by(
+        m.Administracao.ocorrido_em.desc(), m.Administracao.id).offset(skip).limit(limit))).all()
+    # #11 (D2): o que foi dado e por quem, para a tela de correcao conferir sem
+    # novas consultas. Contexto do proprio registro (mesma ILPI), nao acesso novo.
+    prescricao_ids = {obj.prescricao_id for obj in objects}
+    medicamentos = dict((await db.execute(select(m.Prescricao.id, m.Medicamento.nome).join(
+        m.Medicamento, (m.Medicamento.id == m.Prescricao.medicamento_id) & (m.Medicamento.ilpi_id == m.Prescricao.ilpi_id)).where(
+        m.Prescricao.ilpi_id == context.ilpi_id, m.Prescricao.id.in_(prescricao_ids)))).all()) if prescricao_ids else {}
+    executor_ids = {obj.executor_id for obj in objects}
+    nomes = dict((await db.execute(select(m.User.id, m.User.nome).where(m.User.id.in_(executor_ids)))).all()) if executor_ids else {}
+    return [{**_data(obj), "descricao": medicamentos.get(obj.prescricao_id), "executor_nome": nomes.get(obj.executor_id)}
+            for obj in objects]
 
 
 @administracoes_router.get("/{id}", response_model=s.C5AdministracaoResponse)

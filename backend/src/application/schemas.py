@@ -926,6 +926,9 @@ class C5AdministracaoResponse(BaseModel):
     motivo_estorno: Optional[str] = None
     substitui_id: Optional[str] = None
     substituto: Optional["C5AdministracaoResponse"] = None
+    # #11: so na listagem — nome do medicamento e de quem registrou.
+    descricao: Optional[str] = None
+    executor_nome: Optional[str] = None
 
     @field_validator("quantidade_realizada", mode="before")
     @classmethod

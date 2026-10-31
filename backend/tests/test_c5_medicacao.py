@@ -509,3 +509,55 @@ def test_database_constraints_enforce_chain(c5_db, clock, violation):
                 await db.flush()
         await db.rollback()
     asyncio.run(h._with_client(c5_db, scenario))
+
+
+@pytest.fixture
+def c5_head_db(c5_migration_db):
+    migrar_de_modelo(_url(c5_migration_db), "head")
+    return c5_migration_db
+
+
+async def _clone_do_template(db, ilpi, chave):
+    """Perfil local com a chave e os grants do template (clone por chave)."""
+    grants = set((await db.execute(text(
+        "SELECT p.chave FROM perfil_permissoes pp JOIN permissoes p ON p.id = pp.permissao_id "
+        "JOIN perfis pe ON pe.id = pp.perfil_id WHERE pe.chave = :c AND pe.ilpi_id IS NULL"), {"c": chave})).scalars())
+    assert grants, chave
+    user = await h._create_ilpi_user(db, ilpi, permissions=grants, profile_key=chave, nome=f"Pessoa {chave}")
+    await db.commit()
+    return h._auth_headers(user, scope="ilpi", ilpi_id=ilpi.id)
+
+
+def test_11_estorno_de_dose_so_enfermagem_e_rt(c5_head_db, clock):
+    """#11 (D2 = sim): estorno de dose pela tela so por Enfermagem e RT, com motivo."""
+    async def scenario(client, db):
+        ilpi, user, _, headers, medicine, _, doses = await _chain(client, db)
+        clock[0] = NOW + timedelta(minutes=2)
+        original = await _post(client, ADM, headers, _outcome(doses[0]))
+        # Listagem da janela de correcao: medicamento e quem registrou, filtro por periodo.
+        lista = (await client.get(ADM, headers=headers, params={"a_partir_de": (NOW - timedelta(hours=24)).isoformat()})).json()
+        assert [r["id"] for r in lista] == [original["id"]]
+        assert lista[0]["descricao"] == medicine["nome"] and lista[0]["executor_nome"] == user.nome
+        assert (await client.get(ADM, headers=headers, params={"a_partir_de": (NOW + timedelta(hours=1)).isoformat()})).json() == []
+        url = ADM + original["id"] + "/estornar"
+        for chave in ("cuidador", "medico", "ilpi_admin"):
+            negado = await client.post(url, headers=await _clone_do_template(db, ilpi, chave), json={"motivo": "Erro"})
+            assert negado.status_code == 403, (chave, negado.text)
+        enfermagem = await _clone_do_template(db, ilpi, "enfermagem")
+        assert (await client.post(url, headers=enfermagem, json={"motivo": "  "})).status_code == 422
+        r = await client.post(url, headers=enfermagem, json={"motivo": "Dose registrada no residente errado"})
+        assert r.status_code == 200, r.text
+        assert r.json()["estornado_em"] and r.json()["motivo_estorno"] == "Dose registrada no residente errado"
+        # Nada apagado: o original continua listado, marcado como estornado; a dose volta a pendente.
+        lista = (await client.get(ADM, headers=headers)).json()
+        assert [x["id"] for x in lista] == [original["id"]] and lista[0]["estornado_em"]
+        assert (await client.get(DOSE + doses[0]["id"], headers=headers)).json()["pendente"] is True
+        # RT corrige com substituto.
+        segunda = await _post(client, ADM, headers, _outcome(doses[0]))
+        rt = await _clone_do_template(db, ilpi, "responsavel_tecnico")
+        r = await client.post(ADM + segunda["id"] + "/estornar", headers=rt, json={
+            "motivo": "Residente recusou", "substituto": {
+                "resultado": "recusada", "justificativa": "Recusou", "ocorrido_em": segunda["ocorrido_em"]}})
+        assert r.status_code == 200, r.text
+        assert r.json()["substituto"]["substitui_id"] == segunda["id"]
+    asyncio.run(h._with_client(c5_head_db, scenario))
