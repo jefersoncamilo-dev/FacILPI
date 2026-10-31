@@ -12,6 +12,7 @@ import { RegistrarLote } from '../components/plantao/RegistrarLote'
 import { ItemPlantao } from '../components/plantao/ItemPlantao'
 import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
 import { CorrigirRegistros } from '../components/plantao/CorrigirRegistros'
+import { CorrigirDoses } from '../components/plantao/CorrigirDoses'
 import { FeitosExpirados } from '../components/plantao/FeitosExpirados'
 import {
   FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar, marcavelEmGrupo,
@@ -417,12 +418,21 @@ export function MeuPlantao() {
           <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
         </div>
         {/* UX-01F (decisão A): só quem corrige (Enfermagem, RT, administrador) vê. */}
-        {pode('execucoes:corrigir') && pode('execucoes:ler') && (
-          <div className="flex justify-end">
-            <CorrigirRegistros
-              nomes={nomes}
-              onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
-            />
+        {((pode('execucoes:corrigir') && pode('execucoes:ler')) || (pode('administracoes:corrigir') && pode('administracoes:ler'))) && (
+          <div className="flex flex-wrap justify-end gap-x-4">
+            {pode('execucoes:corrigir') && pode('execucoes:ler') && (
+              <CorrigirRegistros
+                nomes={nomes}
+                onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
+              />
+            )}
+            {/* #11 (D2 = sim): estorno de dose só por Enfermagem e RT. */}
+            {pode('administracoes:corrigir') && pode('administracoes:ler') && (
+              <CorrigirDoses
+                nomes={nomes}
+                onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
+              />
+            )}
           </div>
         )}
       </div>

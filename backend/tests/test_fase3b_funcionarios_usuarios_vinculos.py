@@ -569,7 +569,9 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
         # enfermagem, administrativo) e residentes:estornar_saida (ilpi_admin, RT).
         # 217 + 8: a 031 (M10, D1) concede medicamentos:criar/atualizar e prescricoes:criar/atualizar
         # a enfermagem e responsavel_tecnico (catalogo da 012, sem permissao nova).
-        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 225}
+        # 225 + 1: a 033 (#11, D2) concede administracoes:corrigir ao responsavel_tecnico
+        # (enfermagem ja tinha desde a 015; catalogo da 012, sem permissao nova).
+        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 226}
 
         platform_still_works = await client.get("/api/instituicoes/", headers=_auth_headers(context["global_access"]))
         assert platform_still_works.status_code == 200, platform_still_works.text
