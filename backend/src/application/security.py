@@ -474,6 +474,15 @@ async def _carencia_clinica(db: AsyncSession, candidate, permissions) -> frozens
     ).first()
     if template_ainda_tem is not None:
         return frozenset()
+    # Em revisoes anteriores as escritas nem existem no catalogo (o template nao
+    # as tem por outro motivo): so o estado pos-034 tem catalogo sem o vinculo.
+    no_catalogo = (
+        await db.execute(
+            select(Permissao.id).where(Permissao.chave.in_(ESCRITAS_CLINICAS_ADMIN)).limit(1)
+        )
+    ).first()
+    if no_catalogo is None:
+        return frozenset()
     prazo = (
         await db.execute(
             select(TransicaoAdminClinico.prazo).where(TransicaoAdminClinico.ilpi_id == candidate.ilpi_id)
