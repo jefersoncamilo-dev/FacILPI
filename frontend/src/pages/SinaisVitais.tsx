@@ -153,7 +153,7 @@ export function SinaisVitais() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
@@ -178,7 +178,7 @@ export function SinaisVitais() {
               </div>
               <ul className="mt-3 flex flex-wrap gap-2">
                 {sinaisMedidos(registro).map(medido => (
-                  <li key={medido.label} className="px-2.5 py-1 bg-slate-100 rounded-full text-xs">
+                  <li key={medido.label} className="px-2.5 py-1 bg-muted rounded-full text-xs">
                     <span className="text-textMuted">{medido.label}:</span> <span className="font-semibold">{medido.texto}</span>
                   </li>
                 ))}

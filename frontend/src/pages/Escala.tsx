@@ -61,7 +61,7 @@ export function Escala() {
             aria-selected={aba === x.id}
             onClick={() => setAba(x.id)}
             className={cn('min-h-[44px] flex-1 rounded-md px-3 text-sm font-medium sm:flex-none',
-              aba === x.id ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground')}
+              aba === x.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}
           >
             {x.rotulo}
           </button>
@@ -119,11 +119,11 @@ function Agora({ gerenciar }: { gerenciar: boolean }) {
                   </span>
                 </div>
                 {responsaveis.length === 0 ? (
-                  <p className="text-sm font-medium text-orange-800">Ninguém responde por esta área agora.</p>
+                  <p className="text-sm font-medium text-alerta-forte">Ninguém responde por esta área agora.</p>
                 ) : (
                   <ul className="space-y-1">
                     {responsaveis.map(r => (
-                      <li key={r.id} className="flex items-center gap-2 text-sm text-slate-700">
+                      <li key={r.id} className="flex items-center gap-2 text-sm text-foreground">
                         <UserRound className="size-4 text-muted-foreground" aria-hidden="true" />
                         <span className="font-medium">{r.funcionario_nome}</span>
                         <span className="text-xs text-muted-foreground">desde {formatDateTime(r.inicio_em)}</span>
@@ -146,7 +146,7 @@ function Agora({ gerenciar }: { gerenciar: boolean }) {
       {plantoes_sem_area.length > 0 && (
         <section aria-label="Em plantão sem área" className="space-y-2">
           <h2 className="font-display text-base font-semibold text-foreground">Em plantão sem área</h2>
-          <ul className="space-y-1 text-sm text-slate-700">
+          <ul className="space-y-1 text-sm text-foreground">
             {plantoes_sem_area.map(p => (
               <li key={p.id}>{p.funcionario_nome}{p.turno_nome ? ` · ${p.turno_nome}` : ''} · desde {formatDateTime(p.inicio_em)}</li>
             ))}
@@ -259,12 +259,12 @@ function Areas({ gerenciar, podeLeitos }: { gerenciar: boolean; podeLeitos: bool
                 ) : (
                   <ul className="space-y-1">
                     {a.leitos.map(l => (
-                      <li key={l.vinculo_id} className="flex items-center justify-between gap-2 text-sm text-slate-700">
+                      <li key={l.vinculo_id} className="flex items-center justify-between gap-2 text-sm text-foreground">
                         <span>{rotuloLeitoDaArea(l)}{l.ocupado === false ? ' · livre' : ''}</span>
                         {gerenciar && (
                           <button
                             type="button"
-                            className="min-h-[44px] px-2 text-xs font-medium text-red-700 hover:underline"
+                            className="min-h-[44px] px-2 text-xs font-medium text-critico-texto hover:underline"
                             onClick={() => acao(() => escalaApi.removerLeito(a.id, l.quarto_leito_id), 'Não foi possível remover o leito.')}
                           >
                             Remover
@@ -397,13 +397,13 @@ function Turnos({ gerenciar }: { gerenciar: boolean }) {
 
 // Classes completas: o Tailwind não enxerga nomes montados em tempo de execução.
 const ESTILO_ESTADO: Record<EstadoEscala, string> = {
-  prevista: 'border-border bg-muted text-slate-700',
-  presente: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  realizada: 'border-border bg-muted text-slate-700',
-  nao_iniciada: 'border-orange-200 bg-orange-50 text-orange-800',
-  ausente: 'border-red-200 bg-red-50 text-red-800',
-  substituida: 'border-sky-200 bg-sky-50 text-sky-800',
-  cancelada: 'border-border bg-muted text-slate-500',
+  prevista: 'border-border bg-muted text-foreground',
+  presente: 'border-brand/30 bg-accent text-primary',
+  realizada: 'border-border bg-muted text-foreground',
+  nao_iniciada: 'border-alerta/30 bg-alerta-soft text-alerta-forte',
+  ausente: 'border-critico/30 bg-critico-soft text-critico-texto',
+  substituida: 'border-info/30 bg-info-soft text-info',
+  cancelada: 'border-border bg-muted text-muted-foreground',
 }
 // Horário no fuso da ILPI (vem da API); São Paulo só até a primeira resposta.
 const horaNoFuso = (fuso: string) => new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: fuso })
@@ -543,7 +543,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
                         </p>
                         <span className={cn('rounded-full border px-2.5 py-0.5 text-xs font-semibold', ESTILO_ESTADO[e.estado])}>{ROTULO_ESTADO_ESCALA[e.estado]}</span>
                       </div>
-                      <p className="text-sm text-slate-700">{[e.turno_nome, horario(e, carga.dados.fuso), e.area_nome].filter(Boolean).join(' · ')}</p>
+                      <p className="text-sm text-foreground">{[e.turno_nome, horario(e, carga.dados.fuso), e.area_nome].filter(Boolean).join(' · ')}</p>
                       {e.motivo && <p className="text-xs text-muted-foreground">Motivo: {e.motivo}</p>}
                       {e.substituto_nome && <p className="text-xs text-muted-foreground">Substituído(a) por {e.substituto_nome}</p>}
                       {(editavel || substituivel) && acao?.escalaId !== e.id && (
@@ -559,7 +559,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
                             </button>
                           )}
                           {editavel && (
-                            <button type="button" className="min-h-[44px] text-xs font-medium text-red-700 hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'cancelar' })}>
+                            <button type="button" className="min-h-[44px] text-xs font-medium text-critico-texto hover:underline" onClick={() => setAcao({ escalaId: e.id, tipo: 'cancelar' })}>
                               Cancelar escala
                             </button>
                           )}
@@ -594,7 +594,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
             {carga.dados.coberturas_sem_escala.length > 0 && (
               <section aria-label="Cobertura sem escala" className="space-y-2">
                 <h2 className="font-display text-base font-semibold text-foreground">Cobertura sem escala</h2>
-                <ul className="space-y-1 text-sm text-slate-700">
+                <ul className="space-y-1 text-sm text-foreground">
                   {carga.dados.coberturas_sem_escala.map(p => (
                     <li key={p.id}>
                       {p.funcionario_nome} · desde {formatDateTime(p.inicio_em)}

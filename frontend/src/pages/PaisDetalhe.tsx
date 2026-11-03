@@ -137,7 +137,7 @@ export function PaisDetalhe() {
             return (
               <li key={etapa} aria-current={corrente ? 'step' : undefined} className="flex flex-col items-center gap-1.5 text-center">
                 <span className={cn('flex size-8 items-center justify-center rounded-full border-2 text-xs font-semibold',
-                  feito && 'border-brand bg-brand text-white', corrente && !feito && 'border-brand bg-brand-soft text-primary ring-4 ring-brand/15',
+                  feito && 'border-primary bg-primary text-primary-foreground', corrente && !feito && 'border-brand bg-brand-soft text-primary ring-4 ring-brand/15',
                   !feito && !corrente && 'border-border bg-card text-muted-foreground')}>
                   {feito ? <Check className="size-4" aria-hidden="true" /> : i + 1}
                 </span>
@@ -164,7 +164,7 @@ export function PaisDetalhe() {
               {SECOES.map(s => {
                 const ok = ativos[s.tipo].length > 0
                 return (
-                  <li key={s.tipo} className={cn('flex items-center gap-2', ok ? 'text-emerald-800' : 'text-orange-800')}>
+                  <li key={s.tipo} className={cn('flex items-center gap-2', ok ? 'text-primary' : 'text-alerta-forte')}>
                     {ok ? <CheckCircle2 className="size-4" aria-hidden="true" /> : <CircleDot className="size-4" aria-hidden="true" />}
                     Ao menos uma {s.singular} ativa{ok ? '' : ' — pendente'}
                   </li>
@@ -233,7 +233,7 @@ export function PaisDetalhe() {
                     {editavel && (
                       <button type="button" aria-label={`Remover ${s.singular}: ${item.descricao}`} disabled={executando}
                         onClick={() => executar(() => paisApi.inativar(p.id, s.tipo, item.id), `${s.singular[0].toUpperCase()}${s.singular.slice(1)} removida do plano.`)}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-red-50 hover:text-red-700">
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-critico-soft hover:text-critico-texto">
                         <Trash2 className="size-4" aria-hidden="true" />
                       </button>
                     )}
@@ -254,7 +254,7 @@ export function PaisDetalhe() {
             <Button variant="outline" onClick={() => setDialogo('versao')}><Copy aria-hidden="true" /> Criar nova versão</Button>
           )}
           {p.situacao === 'vigente' && pode('planos_cuidados:encerrar') && (
-            <Button variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => setDialogo('encerrar')}><XCircle aria-hidden="true" /> Encerrar plano</Button>
+            <Button variant="ghost" className="text-critico-texto hover:bg-critico-soft" onClick={() => setDialogo('encerrar')}><XCircle aria-hidden="true" /> Encerrar plano</Button>
           )}
         </section>
       )}
@@ -433,7 +433,7 @@ function DialogoProgramar({ plano, intervencao, aoFechar, aoSalvar }: {
                   onChange={e => setHorarios(horarios.map((x, j) => (j === i ? e.target.value : x)))} />
                 {horarios.length > 1 && (
                   <button type="button" aria-label={`Remover horário ${i + 1}`} onClick={() => setHorarios(horarios.filter((_, j) => j !== i))}
-                    className="inline-flex size-12 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-red-50 hover:text-red-700">
+                    className="inline-flex size-12 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-critico-soft hover:text-critico-texto">
                     <Trash2 className="size-4" aria-hidden="true" />
                   </button>
                 )}
@@ -442,7 +442,7 @@ function DialogoProgramar({ plano, intervencao, aoFechar, aoSalvar }: {
             {horarios.length < 48 && (
               <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => setHorarios([...horarios, ''])}><Plus aria-hidden="true" /> Outro horário</Button>
             )}
-            {repetido && <p className="text-sm text-red-700">Há horários repetidos.</p>}
+            {repetido && <p className="text-sm text-critico-texto">Há horários repetidos.</p>}
           </fieldset>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2"><Label htmlFor="prog-inicio">A partir de</Label><Input id="prog-inicio" type="date" required min={inicioMinimo} max={plano.data_final || undefined} value={inicio} onChange={e => setInicio(e.target.value)} /></div>

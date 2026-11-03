@@ -198,7 +198,7 @@ export function Intercorrencias() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
