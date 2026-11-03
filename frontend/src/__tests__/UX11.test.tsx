@@ -90,8 +90,8 @@ describe('UX-11 — indicador (KPI)', () => {
 describe('UX-11 — Início visual: gráficos com dado real', () => {
   const LEITOS: Segmento[] = [
     { rotulo: 'Ocupados', valor: 3, fundo: 'bg-primary', traco: 'stroke-primary' },
-    { rotulo: 'Livres', valor: 1, fundo: 'bg-emerald-300', traco: 'stroke-emerald-300' },
-    { rotulo: 'Indisponíveis', valor: 0, fundo: 'bg-slate-300', traco: 'stroke-slate-300' },
+    { rotulo: 'Livres', valor: 1, fundo: 'bg-brand-light', traco: 'stroke-brand-light' },
+    { rotulo: 'Indisponíveis', valor: 0, fundo: 'bg-border', traco: 'stroke-border' },
   ]
 
   it('rosca e barra expõem os números e respeitam as proporções', () => {

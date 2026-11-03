@@ -136,7 +136,7 @@ export function Equipe() {
             className={`flex-1 min-w-0 px-2 sm:px-4 py-3 rounded-lg text-[13px] sm:text-sm font-medium transition min-h-[44px] whitespace-nowrap ${
               tab === t.key
                 ? 'bg-card text-primary shadow-sm'
-                : 'text-slate-600 hover:text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
           >
             {t.label}
@@ -165,8 +165,8 @@ export function Equipe() {
                 onClick={() => setSituacaoFilter(f.value)}
                 className={`px-3 py-2 rounded-lg text-xs font-medium whitespace-nowrap transition min-h-[44px] ${
                   situacaoFilter === f.value
-                    ? 'bg-primary text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-muted text-muted-foreground hover:bg-secondary'
                 }`}
               >
                 {f.label}
@@ -188,10 +188,10 @@ export function Equipe() {
           {[1, 2, 3].map(i => (
             <div key={i} className="card animate-pulse">
               <div className="flex gap-3">
-                <div className="w-11 h-11 rounded-full bg-slate-200" />
+                <div className="w-11 h-11 rounded-full bg-secondary" />
                 <div className="flex-1 space-y-2">
-                  <div className="h-4 bg-slate-200 rounded w-1/3" />
-                  <div className="h-3 bg-slate-100 rounded w-1/2" />
+                  <div className="h-4 bg-secondary rounded w-1/3" />
+                  <div className="h-3 bg-muted rounded w-1/2" />
                 </div>
               </div>
             </div>
@@ -258,7 +258,7 @@ export function Equipe() {
                 <div className="mt-3 flex gap-2">
                   <button
                     onClick={() => perfilModal.open(p)}
-                    className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
+                    className="text-xs px-3 py-2 rounded-lg border border-border hover:bg-muted text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
                   >
                     <ShieldCheck className="size-3.5" aria-hidden="true" />
                     {pode('perfis:atribuir_permissao') ? 'Ver e editar permissões' : 'Ver permissões'}

@@ -102,7 +102,7 @@ export function Alertas() {
               <span aria-hidden="true" className={cn('size-2 rounded-full', ESTILO_GRAVIDADE.atencao.ponto)} />
               Atenção: <span className="tabular-nums">{dados.contagem.atencao}</span>
             </li>
-            <li className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-slate-700">
+            <li className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1.5 text-sm font-semibold text-foreground">
               Pendências: <span className="tabular-nums">{dados.contagem.pendencia}</span>
             </li>
           </ul>
@@ -116,7 +116,7 @@ export function Alertas() {
                 onClick={() => setAba(x.id)}
                 className={cn(
                   'min-h-[44px] flex-1 rounded-md px-3 text-sm font-medium transition-colors sm:flex-none',
-                  aba === x.id ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+                  aba === x.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {x.rotulo} <span className="text-xs text-muted-foreground">({todos.filter(x.filtro).length})</span>

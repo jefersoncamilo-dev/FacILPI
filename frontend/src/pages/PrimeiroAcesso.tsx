@@ -148,7 +148,7 @@ export function PrimeiroAcesso() {
             {RULES.map(r => {
               const ok = r.ok(nova)
               return (
-                <li key={r.label} className={ok ? 'flex items-center gap-2 text-emerald-800' : 'flex items-center gap-2 text-muted-foreground'}>
+                <li key={r.label} className={ok ? 'flex items-center gap-2 text-primary' : 'flex items-center gap-2 text-muted-foreground'}>
                   {ok ? <Check className="size-3.5" aria-hidden="true" /> : <Circle className="size-3.5" aria-hidden="true" />}
                   <span>
                     {r.label}

@@ -131,7 +131,7 @@ export function Cuidados() {
                             <li key={o.id} className="flex items-center justify-between gap-2">
                               <span>{formatDateTime(o.previsto_em)}</span>
                               {pode('ocorrencias:cancelar') && (
-                                <Button variant="ghost" size="sm" className="h-9 text-red-700 hover:bg-red-50"
+                                <Button variant="ghost" size="sm" className="h-9 text-critico-texto hover:bg-critico-soft"
                                   aria-label={`Cancelar ocorrência de ${formatDateTime(o.previsto_em)}`} onClick={() => setCancelar(o)}>
                                   <XCircle aria-hidden="true" /> Cancelar
                                 </Button>

@@ -203,9 +203,9 @@ export function PassagemPlantao() {
 
 function Numero({ rotulo, valor, destaque }: { rotulo: string; valor: number | null; destaque?: boolean }) {
   return (
-    <div className={cn('rounded-card border bg-card p-4 shadow-card', destaque ? 'border-orange-300' : 'border-border')}>
+    <div className={cn('rounded-card border bg-card p-4 shadow-card', destaque ? 'border-alerta/40' : 'border-border')}>
       <dt className="text-xs text-muted-foreground">{rotulo}</dt>
-      <dd className={cn('mt-1 font-display text-2xl font-bold', destaque ? 'text-orange-800' : 'text-foreground')}>{valor ?? '—'}</dd>
+      <dd className={cn('mt-1 font-display text-2xl font-bold', destaque ? 'text-alerta-forte' : 'text-foreground')}>{valor ?? '—'}</dd>
     </div>
   )
 }
@@ -243,11 +243,11 @@ function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; j
       )}
 
       {r.abertas.map(({ item, detalhe }) => (
-        <div key={item.registro_id} className="rounded-lg border border-orange-200 bg-orange-50/60 px-3 py-2 text-sm">
-          <p className="flex items-center gap-2 font-medium text-orange-900"><TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+        <div key={item.registro_id} className="rounded-lg border border-alerta/30 bg-alerta-soft/60 px-3 py-2 text-sm">
+          <p className="flex items-center gap-2 font-medium text-alerta-forte"><TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
             {detalhe ? <>{rotuloTipo(detalhe.tipo)} · {detalhe.gravidade?.trim() ? ROTULO_GRAVIDADE[detalhe.gravidade] || detalhe.gravidade : 'Gravidade não informada'}</> : rotuloDoItem(item)}
           </p>
-          {detalhe?.ocorrido_em && <p className="text-xs text-orange-900/80">Aberta desde {formatDateTime(detalhe.ocorrido_em)}{detalhe.responsavel ? ` · ${detalhe.responsavel}` : ''}</p>}
+          {detalhe?.ocorrido_em && <p className="text-xs text-alerta-forte/80">Aberta desde {formatDateTime(detalhe.ocorrido_em)}{detalhe.responsavel ? ` · ${detalhe.responsavel}` : ''}</p>}
           {detalhe?.sbar_recomendacao && <p className="mt-1 text-foreground"><strong className="font-semibold">Recomendação:</strong> {detalhe.sbar_recomendacao}</p>}
           {detalhe?.providencia && <p className="text-foreground"><strong className="font-semibold">Providência:</strong> {detalhe.providencia}</p>}
         </div>
