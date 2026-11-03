@@ -571,7 +571,9 @@ def test_fase3b_funcionarios_usuarios_vinculos_backend(fase3b_db, monkeypatch):
         # a enfermagem e responsavel_tecnico (catalogo da 012, sem permissao nova).
         # 225 + 1: a 033 (#11, D2) concede administracoes:corrigir ao responsavel_tecnico
         # (enfermagem ja tinha desde a 015; catalogo da 012, sem permissao nova).
-        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 226}
+        # 226 - 17: a 034 (#15, D3) retira do template ilpi_admin as 17 escritas clinicas
+        # (security.ESCRITAS_CLINICAS_ADMIN); a transicao de 30 dias e por ILPI, fora do template.
+        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 209}
 
         platform_still_works = await client.get("/api/instituicoes/", headers=_auth_headers(context["global_access"]))
         assert platform_still_works.status_code == 200, platform_still_works.text

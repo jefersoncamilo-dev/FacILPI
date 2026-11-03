@@ -59,6 +59,7 @@ from .application.fase3a import (
     issue_session_response,
 )
 from .application.platform import platform_router
+from .application.transicao_clinica import platform_transicao_router, transicao_router
 from .application.prontuario import prontuario_router
 from .application.saida_residente import router as saida_residente_router
 from .application.dashboard import dashboard_router
@@ -1519,6 +1520,8 @@ app.include_router(instituicoes_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
 # PLATFORM-1A: porta de provisionamento repetivel, separada do bootstrap acima.
 app.include_router(platform_router, prefix="/api")
+app.include_router(platform_transicao_router, prefix="/api")
+app.include_router(transicao_router, prefix="/api")
 app.include_router(usuarios_router, prefix="/api")
 app.include_router(funcionarios_router, prefix="/api")
 app.include_router(perfis_router, prefix="/api")
