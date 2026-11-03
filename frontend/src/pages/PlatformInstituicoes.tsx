@@ -7,10 +7,10 @@ import type { Instituicao } from '../types/platform'
 
 function Selo({ situacao }: { situacao: string }) {
   const cor = ehAtiva(situacao)
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    ? 'bg-accent text-primary border-brand/30'
     : ehInativa(situacao)
-      ? 'bg-slate-100 text-slate-600 border-slate-200'
-      : 'bg-orange-50 text-orange-800 border-orange-200'
+      ? 'bg-muted text-muted-foreground border-border'
+      : 'bg-alerta-soft text-alerta-forte border-alerta/30'
   return (
     <span className={`inline-block text-xs font-medium px-2 py-1 rounded-lg border ${cor}`}>
       {rotuloSituacao(situacao)}
@@ -66,7 +66,7 @@ export function PlatformInstituicoes() {
       />
 
       {erro && (
-        <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
+        <div role="alert" className="text-sm p-3 rounded-xl bg-alerta-soft text-alerta-forte border border-alerta/30">
           {erro}
         </div>
       )}

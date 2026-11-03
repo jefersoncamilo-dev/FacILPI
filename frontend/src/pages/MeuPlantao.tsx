@@ -370,7 +370,7 @@ export function MeuPlantao() {
               onClick={() => setVisao(opcao.valor)}
               className={cn(
                 'min-h-[44px] rounded-md px-2 text-sm font-medium transition-colors',
-                visao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+                visao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <span className="sm:hidden">{opcao.curto}</span>
@@ -386,13 +386,13 @@ export function MeuPlantao() {
                 onClick={() => setFiltros({ ...filtros, situacao: opcao.valor })}
                 className={cn(
                   'inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-sm font-medium transition-colors',
-                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {opcao.rotulo}{' '}
                 <span className={cn(
                   'rounded-full px-1.5 text-xs tabular-nums',
-                  opcao.valor === 'atrasados' && contagens.atrasados > 0 ? 'bg-orange-100 font-semibold text-orange-900' : 'bg-slate-200/70 text-slate-700',
+                  opcao.valor === 'atrasados' && contagens.atrasados > 0 ? 'bg-alerta-soft font-semibold text-alerta-forte' : 'bg-secondary/70 text-foreground',
                 )}>
                   {contagens[opcao.valor]}
                 </span>
@@ -443,7 +443,7 @@ export function MeuPlantao() {
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
 
       {itens.length >= PLANTAO_LIMIT_PADRAO && !erro && (
-        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
+        <div className="rounded-lg border border-alerta/30 bg-alerta-soft px-4 py-3">
           <span className="text-sm text-muted-foreground">Exibindo as primeiras {PLANTAO_LIMIT_PADRAO} pendências. Pode haver mais no período.</span>
         </div>
       )}
@@ -452,8 +452,8 @@ export function MeuPlantao() {
         <div className="card py-16 text-center text-muted-foreground">Carregando plantão…</div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
-          <p className="text-sm font-medium text-red-700">{erro}</p>
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
+          <p className="text-sm font-medium text-critico-texto">{erro}</p>
           <button onClick={() => carregar()} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
       ) : lista.length === 0 ? (

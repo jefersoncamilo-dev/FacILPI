@@ -157,7 +157,7 @@ export function AdmissaoDetalhe() {
               <div className="rounded-lg border border-border p-4">
                 {a.contrato_registrado_em ? (
                   <p className="flex items-center gap-2 text-sm text-foreground">
-                    <CheckCircle2 className="size-4 text-emerald-700" aria-hidden="true" /> Contrato registrado em {formatDateTime(a.contrato_registrado_em)}
+                    <CheckCircle2 className="size-4 text-primary" aria-hidden="true" /> Contrato registrado em {formatDateTime(a.contrato_registrado_em)}
                   </p>
                 ) : (
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -175,7 +175,7 @@ export function AdmissaoDetalhe() {
             {pendenciasDaEtapa.length > 0 ? (
               <ListaPendencias pendencias={pendenciasDaEtapa} residenteId={a.residente_id} />
             ) : (
-              <p className="flex items-center gap-2 text-sm text-emerald-800">
+              <p className="flex items-center gap-2 text-sm text-primary">
                 <Check className="size-4" aria-hidden="true" /> Nenhuma pendência nesta etapa.
               </p>
             )}
@@ -210,7 +210,7 @@ export function AdmissaoDetalhe() {
             <section className="rounded-card border border-border bg-card p-5 shadow-card" aria-label="Situação geral">
               <h2 className="font-display text-base font-semibold text-foreground">Para concluir</h2>
               {verificacao.requisitos_cumpridos ? (
-                <p className="mt-2 flex items-center gap-2 text-sm text-emerald-800"><Check className="size-4" aria-hidden="true" /> Todos os requisitos cumpridos.</p>
+                <p className="mt-2 flex items-center gap-2 text-sm text-primary"><Check className="size-4" aria-hidden="true" /> Todos os requisitos cumpridos.</p>
               ) : (
                 <ListaPendencias pendencias={verificacao.pendencias} compacta />
               )}
@@ -222,7 +222,7 @@ export function AdmissaoDetalhe() {
                 <p className="mt-1 text-xs text-muted-foreground">O histórico é sempre preservado.</p>
                 <div className="mt-3 grid gap-2">
                   <Button variant="outline" onClick={() => setDialogo('desistir')}>Registrar desistência</Button>
-                  <Button variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => setDialogo('cancelar')}>
+                  <Button variant="ghost" className="text-critico-texto hover:bg-critico-soft" onClick={() => setDialogo('cancelar')}>
                     <XCircle aria-hidden="true" /> Cancelar admissão
                   </Button>
                 </div>
@@ -274,7 +274,7 @@ function Stepper({ admissao: a, verificacao }: { admissao: Admissao; verificacao
               <span
                 className={cn(
                   'flex size-8 items-center justify-center rounded-full border-2 text-xs font-semibold',
-                  feito && 'border-brand bg-brand text-white',
+                  feito && 'border-primary bg-primary text-primary-foreground',
                   corrente && !feito && 'border-brand bg-brand-soft text-primary ring-4 ring-brand/15',
                   !feito && !corrente && 'border-border bg-card text-muted-foreground',
                 )}
@@ -286,7 +286,7 @@ function Stepper({ admissao: a, verificacao }: { admissao: Admissao; verificacao
               </span>
               <span className="sr-only">{feito ? 'concluída' : corrente ? 'etapa atual' : 'pendente'}</span>
               {pendente && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-orange-800">
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-alerta-forte">
                   <CircleDot className="size-3" aria-hidden="true" /> pendência
                 </span>
               )}
@@ -319,8 +319,8 @@ function ListaPendencias({ pendencias, compacta = false, residenteId }: { penden
         const etapa = ETAPA_DA_PENDENCIA[p.codigo]
         const onde = ONDE_RESOLVER[etapa]
         return (
-          <li key={`${p.codigo}-${p.referencia_id ?? i}`} className="flex items-start gap-2.5 rounded-lg bg-orange-50/60 px-3 py-2 text-sm">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-orange-700" aria-hidden="true" />
+          <li key={`${p.codigo}-${p.referencia_id ?? i}`} className="flex items-start gap-2.5 rounded-lg bg-alerta-soft/60 px-3 py-2 text-sm">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-alerta-forte" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="text-foreground">{descreverPendencia(p)}</p>
               {compacta ? (
@@ -348,9 +348,9 @@ function Conclusao({ admissao: a, nome }: { admissao: Admissao; nome: string }) 
     { to: '/intercorrencias', label: 'Registrar intercorrência', icon: TriangleAlert, permissao: 'intercorrencias:criar' },
   ].filter(x => pode(x.permissao))
   return (
-    <section className="rounded-card border border-emerald-200 bg-emerald-50/50 p-5 shadow-card" aria-label="Admissão concluída">
+    <section className="rounded-card border border-brand/30 bg-accent/50 p-5 shadow-card" aria-label="Admissão concluída">
       <div className="flex items-start gap-3">
-        <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-emerald-700" aria-hidden="true" />
+        <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden="true" />
         <div>
           <h2 className="font-display text-lg font-semibold text-foreground">Admissão concluída</h2>
           <p className="text-sm text-muted-foreground">

@@ -331,7 +331,7 @@ export function ResidenteProntuario() {
               <ProntuarioFiltros value={filtros} onChange={aplicarFiltros} />
 
               {erroFiltro && (
-                <div role="alert" className="card bg-red-50 border-red-200 p-3 text-sm text-danger">
+                <div role="alert" className="card bg-critico-soft border-critico/30 p-3 text-sm text-danger">
                   {erroFiltro}
                 </div>
               )}

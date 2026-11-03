@@ -63,9 +63,9 @@ type Carga<T> = { status: 'carregando' } | { status: 'ok'; dados: T } | { status
 type ResidenteResumo = { id: string; nome: string; situacao?: string | null; grau_dependencia?: string | null }
 
 const ORIGEM: Record<PlantaoItem['origem'], { rotulo: string; icone: LucideIcon; bolha: string }> = {
-  cuidado: { rotulo: 'Cuidado', icone: ClipboardList, bolha: 'bg-brand-soft text-emerald-800' },
-  medicacao: { rotulo: 'Medicação', icone: Pill, bolha: 'bg-sky-50 text-sky-800' },
-  intercorrencia: { rotulo: 'Intercorrência', icone: TriangleAlert, bolha: 'bg-orange-50 text-orange-800' },
+  cuidado: { rotulo: 'Cuidado', icone: ClipboardList, bolha: 'bg-brand-soft text-primary' },
+  medicacao: { rotulo: 'Medicação', icone: Pill, bolha: 'bg-info-soft text-info' },
+  intercorrencia: { rotulo: 'Intercorrência', icone: TriangleAlert, bolha: 'bg-alerta-soft text-alerta-forte' },
 }
 
 function saudacao(agora = new Date()): string {
@@ -239,19 +239,19 @@ function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, atalhos }:
   }
 
   return (
-    <section aria-label="Resumo do momento" className="relative overflow-hidden rounded-card border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-5 shadow-card sm:p-7">
-      <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-emerald-200/40 blur-3xl" />
-      <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 right-40 size-56 rounded-full bg-teal-200/30 blur-3xl" />
+    <section aria-label="Resumo do momento" className="relative overflow-hidden rounded-card border border-brand-soft bg-gradient-to-br from-accent via-white to-accent p-5 shadow-card sm:p-7">
+      <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-brand-soft/40 blur-3xl" />
+      <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 right-40 size-56 rounded-full bg-brand-light/30 blur-3xl" />
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
-          <h1 className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">Início</h1>
+          <h1 className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Início</h1>
           <p className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{saudacao()}!</p>
-          <p className="text-sm text-slate-600">{[ilpi, perfil, dataPorExtenso()].filter(Boolean).join(' · ')}</p>
+          <p className="text-sm text-muted-foreground">{[ilpi, perfil, dataPorExtenso()].filter(Boolean).join(' · ')}</p>
           {fatos.length > 0 && (
             <ul aria-label="Agora" className="flex flex-wrap gap-1.5 pt-1">
               {fatos.map(f => {
                 const estilo = cn('inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold',
-                  f.alerta ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-emerald-200 bg-white/80 text-emerald-900')
+                  f.alerta ? 'border-alerta/30 bg-alerta-soft text-alerta-forte' : 'border-brand/30 bg-card/80 text-brand-ink')
                 const conteudo = <><f.icone className="size-3.5" aria-hidden="true" />{f.texto}</>
                 return (
                   <li key={f.texto} className="inline-flex">
@@ -265,7 +265,7 @@ function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, atalhos }:
           )}
         </div>
         {atalhos.length === 0 && (
-          <span aria-hidden="true" className="hidden size-20 shrink-0 items-center justify-center rounded-3xl bg-white/70 text-emerald-700 shadow-sm ring-1 ring-emerald-100 lg:inline-flex">
+          <span aria-hidden="true" className="hidden size-20 shrink-0 items-center justify-center rounded-3xl bg-card/70 text-primary shadow-sm ring-1 ring-brand-soft lg:inline-flex">
             <HeartHandshake className="size-10" />
           </span>
         )}
@@ -335,7 +335,7 @@ function montarIndicadores({
         valor={dados?.residentes_total ?? INDISPONIVEL}
         tom={dados ? 'normal' : 'neutro'}
         visual={dados?.admissoes_em_andamento
-          ? <span className="inline-flex rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">{dados.admissoes_em_andamento} em admissão</span>
+          ? <span className="inline-flex rounded-full bg-info-soft px-2.5 py-1 text-xs font-semibold text-info">{dados.admissoes_em_andamento} em admissão</span>
           : undefined}
         detalhe={dados ? undefined : indisponivel}
         acao={<Link to="/residentes" className={LINK}>Ver residentes</Link>}
@@ -395,8 +395,8 @@ function montarIndicadores({
 function segmentosLeitos(o: NonNullable<DashboardResumo['ocupacao']>): Segmento[] {
   return [
     { rotulo: 'Ocupados', valor: o.ocupados, fundo: 'bg-primary', traco: 'stroke-primary' },
-    { rotulo: 'Livres', valor: o.livres, fundo: 'bg-emerald-300', traco: 'stroke-emerald-300' },
-    { rotulo: 'Indisponíveis', valor: o.indisponiveis, fundo: 'bg-slate-300', traco: 'stroke-slate-300' },
+    { rotulo: 'Livres', valor: o.livres, fundo: 'bg-brand-light', traco: 'stroke-brand-light' },
+    { rotulo: 'Indisponíveis', valor: o.indisponiveis, fundo: 'bg-border', traco: 'stroke-border' },
   ]
 }
 
@@ -414,12 +414,12 @@ function AcoesRapidas({ acoes }: { acoes: AcaoRapida[] }) {
               className={cn(
                 'group flex h-full min-h-[92px] flex-col justify-between gap-3 rounded-xl p-3 text-sm font-semibold leading-tight transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0',
                 a.destaque === 'primario' && 'bg-primary text-primary-foreground hover:bg-brand-ink',
-                a.destaque === 'alerta' && 'bg-alerta-forte text-white hover:bg-orange-800',
+                a.destaque === 'alerta' && 'bg-alerta-forte text-primary-foreground hover:bg-alerta-forte/90',
                 !a.destaque && 'border border-border bg-card text-foreground hover:border-brand/40 hover:bg-brand-soft/60',
               )}
             >
               <span aria-hidden="true" className={cn('inline-flex size-9 items-center justify-center rounded-full',
-                a.destaque ? 'bg-white/20' : 'bg-brand-soft text-emerald-800')}>
+                a.destaque ? 'bg-card/20' : 'bg-brand-soft text-primary')}>
                 <a.icone className="size-[18px]" />
               </span>
               {a.rotulo}
@@ -495,7 +495,7 @@ function AtividadeRecente({ nomes }: { nomes: Map<string, string> }) {
     <Painel titulo="Atividade recente no turno" icone={Activity}>
       {carga.status === 'carregando' ? <Carregando /> : (
         <div className="space-y-3">
-          {carga.parcial && <p className="text-xs text-orange-800">Parte da atividade não pôde ser consultada agora.</p>}
+          {carga.parcial && <p className="text-xs text-alerta-forte">Parte da atividade não pôde ser consultada agora.</p>}
           {carga.registros.length === 0 ? (
             carga.parcial ? null : <Vazio icon={Activity} titulo={`Nenhum registro nas últimas ${JANELA_ATIVIDADE_H} horas`} texto="Sinais vitais e intercorrências registrados aparecem aqui." />
           ) : (
@@ -561,7 +561,7 @@ function Painel({ titulo, acao, icone: Icone, children }: { titulo: string; acao
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
         <h2 className="flex items-center gap-2 font-display text-base font-semibold text-foreground">
           {Icone && (
-            <span aria-hidden="true" className="inline-flex size-7 items-center justify-center rounded-lg bg-brand-soft text-emerald-800">
+            <span aria-hidden="true" className="inline-flex size-7 items-center justify-center rounded-lg bg-brand-soft text-primary">
               <Icone className="size-4" />
             </span>
           )}
@@ -577,7 +577,7 @@ function Painel({ titulo, acao, icone: Icone, children }: { titulo: string; acao
 function Vazio({ icon: Icon, titulo, texto, children }: { icon: LucideIcon; titulo: string; texto?: string; children?: ReactNode }) {
   return (
     <div className="flex flex-col items-center py-6 text-center">
-      <span aria-hidden="true" className="mb-3 inline-flex size-12 items-center justify-center rounded-full bg-brand-soft text-emerald-800">
+      <span aria-hidden="true" className="mb-3 inline-flex size-12 items-center justify-center rounded-full bg-brand-soft text-primary">
         <Icon className="size-6" />
       </span>
       <p className="text-sm font-medium text-foreground">{titulo}</p>
@@ -590,7 +590,7 @@ function Vazio({ icon: Icon, titulo, texto, children }: { icon: LucideIcon; titu
 function Falha({ titulo, texto }: { titulo: string; texto: string }) {
   return (
     <div role="alert" className="flex flex-col items-center py-6 text-center">
-      <span aria-hidden="true" className="mb-3 inline-flex size-12 items-center justify-center rounded-full bg-orange-50 text-orange-700">
+      <span aria-hidden="true" className="mb-3 inline-flex size-12 items-center justify-center rounded-full bg-alerta-soft text-alerta-forte">
         <TriangleAlert className="size-6" />
       </span>
       <p className="text-sm font-medium text-foreground">{titulo}</p>
@@ -630,8 +630,8 @@ function LinhaDoTempo({ carga, nomes }: { carga: Carga<PlantaoItem[]>; nomes: Ma
           <li key={`${item.origem}:${item.registro_id}`} className="relative">
             {indice === indiceAgora && indice > 0 && (
               <div className="flex items-center gap-2 py-1 pl-[3.6rem]">
-                <span className="rounded-full bg-emerald-800 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-white">Agora</span>
-                <span aria-hidden="true" className="h-px flex-1 bg-emerald-200" />
+                <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary-foreground">Agora</span>
+                <span aria-hidden="true" className="h-px flex-1 bg-brand-soft" />
               </div>
             )}
             <div className="flex items-start gap-3 py-2.5">
@@ -658,7 +658,7 @@ function LinhaDoTempo({ carga, nomes }: { carga: Carga<PlantaoItem[]>; nomes: Ma
   )
 }
 
-const AVATAR = ['bg-emerald-50 text-emerald-800', 'bg-sky-50 text-sky-800', 'bg-violet-50 text-violet-800', 'bg-orange-50 text-orange-800', 'bg-rose-50 text-rose-800']
+const AVATAR = ['bg-accent text-primary', 'bg-info-soft text-info', 'bg-info-soft text-info', 'bg-alerta-soft text-alerta-forte', 'bg-critico-soft text-critico-texto']
 
 function ListaResidentes({ carga, podeCriar }: { carga: Carga<ResidenteResumo[]>; podeCriar: boolean }) {
   if (carga.status === 'carregando') return <Carregando />
@@ -710,7 +710,7 @@ function VisaoDaInstituicao({ resumo }: { resumo: Carga<DashboardResumo> }) {
   const { ocupacao, admissoes_em_andamento: admissoes, planos, equipe } = resumo.dados
   const temProcessos = admissoes !== null || planos !== null || equipe !== null
   if (!ocupacao && !temProcessos) return null
-  const Titulo = ({ children }: { children: ReactNode }) => <p className="pb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">{children}</p>
+  const Titulo = ({ children }: { children: ReactNode }) => <p className="pb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{children}</p>
   return (
     <div className={cn('grid gap-6', ocupacao && temProcessos && '2xl:grid-cols-2')}>
       {ocupacao && (
@@ -732,15 +732,15 @@ function VisaoDaInstituicao({ resumo }: { resumo: Carga<DashboardResumo> }) {
             {admissoes !== null && (
               <div>
                 <Titulo>Admissões</Titulo>
-                <Legenda segmentos={[{ rotulo: 'Em andamento', valor: admissoes, fundo: 'bg-sky-500', traco: 'stroke-sky-500' }]} />
+                <Legenda segmentos={[{ rotulo: 'Em andamento', valor: admissoes, fundo: 'bg-info', traco: 'stroke-info' }]} />
               </div>
             )}
             {planos !== null && (() => {
               const segmentos: Segmento[] = [
                 { rotulo: 'Vigentes', valor: planos.vigentes, fundo: 'bg-primary', traco: 'stroke-primary' },
-                { rotulo: 'Aguardando vigência', valor: planos.aprovados_aguardando_vigencia, fundo: 'bg-emerald-300', traco: 'stroke-emerald-300' },
+                { rotulo: 'Aguardando vigência', valor: planos.aprovados_aguardando_vigencia, fundo: 'bg-brand-light', traco: 'stroke-brand-light' },
                 { rotulo: 'Em revisão', valor: planos.em_revisao, fundo: 'bg-alerta', traco: 'stroke-alerta' },
-                { rotulo: 'Em elaboração', valor: planos.em_elaboracao, fundo: 'bg-sky-400', traco: 'stroke-sky-400' },
+                { rotulo: 'Em elaboração', valor: planos.em_elaboracao, fundo: 'bg-info/70', traco: 'stroke-info/70' },
               ]
               return (
                 <div className="space-y-2.5">
@@ -753,7 +753,7 @@ function VisaoDaInstituicao({ resumo }: { resumo: Carga<DashboardResumo> }) {
             {equipe !== null && (() => {
               const segmentos: Segmento[] = [
                 { rotulo: 'Ativos', valor: equipe.ativos, fundo: 'bg-primary', traco: 'stroke-primary' },
-                { rotulo: 'Afastados', valor: equipe.afastados, fundo: 'bg-slate-300', traco: 'stroke-slate-300' },
+                { rotulo: 'Afastados', valor: equipe.afastados, fundo: 'bg-border', traco: 'stroke-border' },
               ]
               return (
                 <div className="space-y-2.5">

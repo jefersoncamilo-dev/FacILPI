@@ -239,7 +239,7 @@ export function Documentos() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-2 size-9 text-orange-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-2 size-9 text-alerta-forte" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>

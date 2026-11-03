@@ -164,8 +164,8 @@ export function Residentes() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
-          <p className="text-sm font-medium text-red-700">{erro}</p>
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
+          <p className="text-sm font-medium text-critico-texto">{erro}</p>
           <p className="mt-1 text-xs text-muted-foreground">Isso não significa que não há residentes cadastrados.</p>
           <Button onClick={load} className="mt-4">Tentar novamente</Button>
         </div>
@@ -201,7 +201,7 @@ export function Residentes() {
               </div>
             </Link>
             {(r.alergias || r.restricoes) && (
-              <div className="mt-3 flex gap-2 rounded-lg border border-red-100 bg-red-50 p-2 text-xs text-red-700">
+              <div className="mt-3 flex gap-2 rounded-lg border border-critico/20 bg-critico-soft p-2 text-xs text-critico-texto">
                 <TriangleAlert data-icone="alerta" className="size-4 shrink-0" aria-hidden="true" />
                 <span className="truncate">{r.alergias || r.restricoes}</span>
               </div>
@@ -211,11 +211,11 @@ export function Residentes() {
                   exibida no prontuário). Mantido aqui por compatibilidade (Issue #34). */}
               <span className="badge-success">{r.grau_dependencia || 'Sem grau'}</span>
               {leito && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-muted-foreground">
                   <BedDouble className="size-3.5" aria-hidden="true" /> {leito}
                 </span>
               )}
-              {r.cpf && <span className="rounded-full bg-muted px-2 py-1 text-slate-600">CPF {r.cpf}</span>}
+              {r.cpf && <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">CPF {r.cpf}</span>}
             </div>
           </div>
           )
