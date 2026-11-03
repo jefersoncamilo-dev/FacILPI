@@ -948,6 +948,14 @@ class Alerta(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
+class TransicaoAdminClinico(Base):
+    """#15 (034, D3): prazo, por ILPI, da carencia das escritas clinicas do ilpi_admin."""
+    __tablename__ = "transicao_admin_clinico"
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="CASCADE"), primary_key=True)
+    prazo: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False, server_default=func.now())
+
+
 # ===== FASE 1 — Novos modelos multi-tenant / auditoria / tokens =====
 
 class BootstrapState(Base):

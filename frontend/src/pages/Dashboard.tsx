@@ -34,6 +34,7 @@ import { BarraSegmentada, Legenda, MiniBarras, percentual, Rosca, type Segmento 
 import { acoesDoPerfil, type AcaoRapida } from '../components/shell/acoesRapidas'
 import { rotuloSituacaoResidente } from '../lib/rotulos'
 import { cn } from '../lib/utils'
+import { AvisoTransicaoClinica } from '../components/transicao/AvisoTransicaoClinica'
 
 /**
  * Início (UX-02 / #85; visual UX-11 / #101). Responde à pergunta de quem abre:
@@ -157,6 +158,9 @@ export function Dashboard() {
         pode={pode}
         atalhos={gestao ? [] : acoes.filter(a => a.destaque)}
       />
+
+      {/* #15 (D3): transição das escritas clínicas do administrador da ILPI. */}
+      {activeContext?.scope === 'ilpi' && <AvisoTransicaoClinica podeAtribuir={pode('usuarios:atribuir_perfil')} />}
 
       {cards.length > 0 && (
         <section aria-label="Indicadores" className={`grid grid-cols-2 gap-3 sm:gap-4 ${COLUNAS_INDICADORES[cards.length] ?? 'xl:grid-cols-4'}`}>

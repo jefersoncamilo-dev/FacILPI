@@ -25,6 +25,7 @@ from ..infrastructure.models import (
     Perfil,
     PerfilPermissao,
     Permissao,
+    TransicaoAdminClinico,
     User,
     UsuarioIlpiPerfil,
 )
@@ -123,6 +124,24 @@ _GLOBAL_ONLY_PERMISSIONS = frozenset(
         "ilpis:inativar",
     }
 )
+
+# #15 (034, D3 = opcao B): escritas clinicas retiradas do ilpi_admin. Mesma lista
+# congelada na 034. Ate o prazo da ILPI em `transicao_admin_clinico`, a sessao do
+# ilpi_admin ainda as tem (carencia); depois, so leituras, Dashboard e Alertas.
+ESCRITAS_CLINICAS_ADMIN = frozenset(
+    {
+        "avaliacoes:criar", "avaliacoes:atualizar",
+        "grau_dependencia:criar",
+        "sinais_vitais:criar",
+        "intercorrencias:criar", "intercorrencias:atualizar",
+        "planos_cuidados:criar", "planos_cuidados:atualizar", "planos_cuidados:revisar",
+        "planos_cuidados:aprovar", "planos_cuidados:encerrar",
+        "programacoes:criar", "programacoes:atualizar", "programacoes:inativar",
+        "ocorrencias:cancelar",
+        "execucoes:criar", "execucoes:corrigir",
+    }
+)
+ILPI_ADMIN_KEY = "ilpi_admin"
 _ILPI_ONLY_PERMISSIONS = frozenset(
     {
         # Administrative password reset is an institutional capability.
@@ -276,6 +295,8 @@ class SecurityContext:
     # em contexto global e para quem constroi o contexto direto — e nesse caso
     # nenhuma restricao de rascunho se aplica, porque nao ha instituicao.
     ilpi_situacao: str | None = None
+    # #15: escritas clinicas que o ilpi_admin ainda tem por carencia (vazio fora dela).
+    carencia_clinica: frozenset[str] = field(default_factory=frozenset)
 
     @property
     def profile(self) -> Perfil:
@@ -426,6 +447,50 @@ def _context_is_valid(context: SecurityContext) -> bool:
     )
 
 
+async def _carencia_clinica(db: AsyncSession, candidate, permissions) -> frozenset[str]:
+    """#15: escritas clinicas do ilpi_admin ainda dentro do prazo da ILPI.
+
+    So consulta o prazo quando o perfil e ilpi_admin e as escritas ja nao estao
+    nos grants (depois da 034); antes dela nada muda.
+    """
+    if candidate.scope != ILPI_SCOPE or candidate.perfil.chave != ILPI_ADMIN_KEY:
+        return frozenset()
+    if ESCRITAS_CLINICAS_ADMIN & set(permissions):
+        return frozenset()
+    # Antes da 034 o template ainda tem as escritas: um clone sem elas foi
+    # recortado de proposito e nao ganha carencia (e a tabela de prazos nem existe).
+    template_ainda_tem = (
+        await db.execute(
+            select(PerfilPermissao.perfil_id)
+            .join(Perfil, Perfil.id == PerfilPermissao.perfil_id)
+            .join(Permissao, Permissao.id == PerfilPermissao.permissao_id)
+            .where(
+                Perfil.chave == ILPI_ADMIN_KEY,
+                Perfil.ilpi_id.is_(None),
+                Permissao.chave.in_(ESCRITAS_CLINICAS_ADMIN),
+            )
+            .limit(1)
+        )
+    ).first()
+    if template_ainda_tem is not None:
+        return frozenset()
+    prazo = (
+        await db.execute(
+            select(TransicaoAdminClinico.prazo).where(TransicaoAdminClinico.ilpi_id == candidate.ilpi_id)
+        )
+    ).scalar_one_or_none()
+    if prazo is None:
+        return frozenset()
+    if prazo.tzinfo is None:
+        prazo = prazo.replace(tzinfo=timezone.utc)
+    return ESCRITAS_CLINICAS_ADMIN if prazo > datetime.now(timezone.utc) else frozenset()
+
+
+def _permissao_sintetica(permission_key: str) -> Permissao:
+    modulo, _, acao = permission_key.partition(":")
+    return Permissao(chave=permission_key, modulo=modulo, acao=acao)
+
+
 async def load_security_context(
     db: AsyncSession,
     user: User | str,
@@ -533,6 +598,7 @@ async def load_security_context(
                 select(Instituicao.situacao).where(Instituicao.id == candidate.ilpi_id)
             )
         ).scalar_one_or_none()
+    carencia = await _carencia_clinica(db, candidate, permissions)
 
     context = SecurityContext(
         user=database_user,
@@ -544,9 +610,10 @@ async def load_security_context(
         # que ela nao pode usar. Isso protege inclusive quem le
         # `context.permission_keys` sem passar por `require_permission`.
         permission_keys=frozenset(
-            key for key in permissions if _permission_key_is_usable(key, ilpi_situacao)
+            key for key in (*permissions, *carencia) if _permission_key_is_usable(key, ilpi_situacao)
         ),
         ilpi_situacao=ilpi_situacao,
+        carencia_clinica=carencia,
     )
     if not _context_is_valid(context):
         _deny(
@@ -803,6 +870,9 @@ def require_permission(permission_key: str):
                     else "",
                 )
 
+        if permission is None and permission_key in context.carencia_clinica:
+            # #15: carencia do ilpi_admin; os demais filtros continuam valendo.
+            permission = _permissao_sintetica(permission_key)
         if permission is None or not _permission_is_allowed(context, permission):
             _deny(
                 code=PERMISSION_DENIED,
@@ -847,10 +917,13 @@ async def allowed_permission_keys(db: AsyncSession, context: SecurityContext) ->
             .where(PerfilPermissao.perfil_id == context.perfil.id)
         )
     ).scalars().all()
+    permissions = [*permissions, *(_permissao_sintetica(key) for key in context.carencia_clinica)]
     return sorted(
-        permission.chave
-        for permission in permissions
-        if _permission_is_allowed(context, permission)
+        {
+            permission.chave
+            for permission in permissions
+            if _permission_is_allowed(context, permission)
+        }
     )
 
 

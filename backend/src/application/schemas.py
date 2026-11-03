@@ -1780,3 +1780,23 @@ class MatrizPerfilResponse(BaseModel):
     descricao: Optional[str] = None
     clone_id: Optional[str] = None
     permissoes: list[str] = []
+
+
+# ---- #15 (034, D3 = opcao B): transicao das escritas clinicas do ilpi_admin ----
+
+class TransicaoClinicaResponse(BaseModel):
+    afeta_esta_sessao: bool
+    prazo: Optional[datetime] = None
+    em_carencia: bool
+    perfil_clinico_atribuido: bool
+    escritas_retiradas: list[str]
+
+
+class TransicaoClinicaIlpi(BaseModel):
+    ilpi_id: str
+    nome: str
+    situacao: Optional[str] = None
+    prazo: Optional[datetime] = None
+    em_carencia: bool
+    perfil_clinico_atribuido: bool
+    escritas_que_o_administrador_perde: list[str]
