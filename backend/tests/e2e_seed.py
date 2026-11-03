@@ -21,6 +21,7 @@ import pathlib
 import sys
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -102,7 +103,28 @@ def _h(user, ilpi) -> dict[str, str]:
     return {"Authorization": f"Bearer {token_de(user)}", "X-Scope": "ilpi", "X-ILPI-ID": ilpi.id}
 
 
+FUSO = ZoneInfo("America/Sao_Paulo")
+
+
+def _horarios_de_dose() -> list[str]:
+    """Dois horarios por dia, o primeiro daqui a 2 min no fuso da ILPI/navegador.
+
+    A geracao de doses parte de max(agora, vigencia): com horarios fixos
+    (08:00/20:00) nao sobrava dose "de hoje" entre 20:00 e 24:00 de Sao Paulo e o
+    E2E falhava conforme a hora. Se +2 min virar o dia, espera a virada.
+    """
+    agora = datetime.now(FUSO)
+    primeiro = agora + timedelta(minutes=2)
+    if primeiro.date() != agora.date():
+        import time
+        time.sleep((primeiro.replace(hour=0, minute=0, second=1, microsecond=0) - agora).total_seconds())
+        primeiro = datetime.now(FUSO) + timedelta(minutes=2)
+    segundo = primeiro + timedelta(hours=12)
+    return sorted({primeiro.strftime("%H:%M"), segundo.strftime("%H:%M")})
+
+
 async def _cenario() -> dict:
+    horarios_dose = _horarios_de_dose()
     agora = datetime.now(timezone.utc)
     async with SessionLocal() as db:
         chaves = await _permissoes_institucionais(db)
@@ -151,9 +173,10 @@ async def _cenario() -> dict:
         pre = _ok(await c.post("/api/prescricoes/", headers=h, json={
             "residente_id": maria.id, "medicamento_id": med["id"], "prescritor_nome": "Dra Sintética",
             "prescritor_categoria": "medico", "dose": "1", "unidade": "comprimido", "via": "oral",
-            "inicio": agora.date().isoformat()}), 201)
+            # Data local da vigencia: a data UTC ja vira o dia as 21:00 de Sao Paulo.
+            "inicio": (agora - timedelta(hours=1)).astimezone(FUSO).date().isoformat()}), 201)
         _ok(await c.post(f"/api/prescricoes/{pre['id']}/ativar", headers=h, json={
-            "horarios": ["08:00", "20:00"], "timezone": "America/Sao_Paulo",
+            "horarios": horarios_dose, "timezone": "America/Sao_Paulo",
             "vigencia_inicio": (agora - timedelta(hours=1)).isoformat()}))
 
         area = _ok(await c.post("/api/escala/areas", headers=h, json={"nome": AREA, "tipo": "ala"}), 201)
