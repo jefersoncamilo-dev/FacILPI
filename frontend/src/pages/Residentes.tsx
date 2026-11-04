@@ -97,7 +97,7 @@ export function Residentes() {
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Residentes</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Residentes</h1>
           <p className="text-sm text-muted-foreground">Quem vive na instituição, com a história de cada pessoa no prontuário.</p>
         </div>
         {pode('residentes:criar') && (

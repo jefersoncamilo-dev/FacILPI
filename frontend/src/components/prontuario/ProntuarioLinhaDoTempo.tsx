@@ -78,7 +78,7 @@ export function ProntuarioLinhaDoTempo({ eventos }: { eventos: ProntuarioEvento[
     <div className="space-y-4">
       {grupos.map(grupo => (
         <div key={grupo.chave}>
-          <h2 className="text-sm font-semibold text-textMuted mb-2">{rotuloDia(grupo.chave)}</h2>
+          <h2 className="mb-2 text-rotulo text-muted-foreground">{rotuloDia(grupo.chave)}</h2>
           <div className="card p-0 divide-y divide-border">
             {grupo.eventos.map(evento => (
               <div key={`${evento.origem}-${evento.registro_id}-${evento.tipo}`} className="p-4 flex gap-3">

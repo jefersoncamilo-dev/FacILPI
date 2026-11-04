@@ -157,7 +157,7 @@ export function Documentos() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Documentos</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Documentos</h1>
           <p className="text-sm text-muted-foreground">Documentação do residente, com arquivo anexado e validade</p>
         </div>
         {!semPermissaoCriar && (

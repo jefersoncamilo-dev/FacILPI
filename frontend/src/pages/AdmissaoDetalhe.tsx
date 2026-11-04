@@ -110,7 +110,7 @@ export function AdmissaoDetalhe() {
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{nomeResidente}</h1>
+            <h1 className="font-display text-titulo-tela text-brand-ink">{nomeResidente}</h1>
             <p className="text-sm text-muted-foreground">Admissão iniciada em {formatDate(a.iniciada_em)}</p>
           </div>
           <Badge variant={a.situacao === 'concluida' ? 'success' : andamento ? 'brand' : 'neutral'} className="text-sm">
@@ -132,8 +132,8 @@ export function AdmissaoDetalhe() {
       {a.situacao === 'concluida' && <Conclusao admissao={a} nome={nomeResidente} />}
 
       {(a.situacao === 'cancelada' || a.situacao === 'desistencia') && (
-        <section className="rounded-card border border-border bg-card p-5 shadow-card" aria-label="Processo encerrado">
-          <h2 className="font-display text-base font-semibold text-foreground">
+        <section className="glass rounded-card p-5" aria-label="Processo encerrado">
+          <h2 className="font-display text-titulo-secao text-brand-ink">
             {a.situacao === 'cancelada' ? 'Admissão cancelada' : 'Desistência registrada'} em {formatDate(a.cancelada_em || a.desistencia_em)}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">Motivo: {a.motivo_cancelamento || a.motivo_desistencia}</p>
@@ -147,10 +147,10 @@ export function AdmissaoDetalhe() {
 
       {andamento && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <section className="space-y-4 rounded-card border border-border bg-card p-5 shadow-card lg:col-span-2" aria-label="Etapa atual">
+          <section className="glass space-y-4 rounded-card p-5 lg:col-span-2" aria-label="Etapa atual">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Etapa atual</p>
-              <h2 className="font-display text-lg font-semibold text-foreground">{ROTULO_SITUACAO[a.situacao]}</h2>
+              <h2 className="font-display text-titulo-secao text-brand-ink">{ROTULO_SITUACAO[a.situacao]}</h2>
             </div>
 
             {a.situacao === 'contrato' && (
@@ -207,8 +207,8 @@ export function AdmissaoDetalhe() {
           </section>
 
           <aside className="space-y-6">
-            <section className="rounded-card border border-border bg-card p-5 shadow-card" aria-label="Situação geral">
-              <h2 className="font-display text-base font-semibold text-foreground">Para concluir</h2>
+            <section className="glass rounded-card p-5" aria-label="Situação geral">
+              <h2 className="font-display text-titulo-secao text-brand-ink">Para concluir</h2>
               {verificacao.requisitos_cumpridos ? (
                 <p className="mt-2 flex items-center gap-2 text-sm text-primary"><Check className="size-4" aria-hidden="true" /> Todos os requisitos cumpridos.</p>
               ) : (
@@ -217,8 +217,8 @@ export function AdmissaoDetalhe() {
               <p className="mt-3 text-xs text-muted-foreground">Verificado em {formatDate(verificacao.data_verificacao)}.</p>
             </section>
             {pode('admissoes:cancelar') && (
-              <section className="rounded-card border border-border bg-card p-5 shadow-card" aria-label="Encerrar processo">
-                <h2 className="font-display text-base font-semibold text-foreground">Encerrar processo</h2>
+              <section className="glass rounded-card p-5" aria-label="Encerrar processo">
+                <h2 className="font-display text-titulo-secao text-brand-ink">Encerrar processo</h2>
                 <p className="mt-1 text-xs text-muted-foreground">O histórico é sempre preservado.</p>
                 <div className="mt-3 grid gap-2">
                   <Button variant="outline" onClick={() => setDialogo('desistir')}>Registrar desistência</Button>
@@ -352,7 +352,7 @@ function Conclusao({ admissao: a, nome }: { admissao: Admissao; nome: string }) 
       <div className="flex items-start gap-3">
         <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden="true" />
         <div>
-          <h2 className="font-display text-lg font-semibold text-foreground">Admissão concluída</h2>
+          <h2 className="font-display text-titulo-secao text-brand-ink">Admissão concluída</h2>
           <p className="text-sm text-muted-foreground">
             {nome} foi admitido(a) em {formatDate(a.concluida_em)} e agora aparece como residente ativo.
           </p>
@@ -381,7 +381,7 @@ function Historico({ id, versao }: { id: string; versao: number }) {
   }, [aberto, id, versao])
 
   return (
-    <section className="rounded-card border border-border bg-card shadow-card" aria-label="Histórico">
+    <section className="glass rounded-card" aria-label="Histórico">
       <button
         type="button"
         onClick={() => setAberto(v => !v)}

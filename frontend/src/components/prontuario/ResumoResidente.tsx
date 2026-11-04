@@ -54,7 +54,7 @@ function Card({ titulo, acao, children }: { titulo: string; acao?: ReactNode; ch
   return (
     <section className="card space-y-2 p-4" aria-label={titulo}>
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">{titulo}</h2>
+        <h2 className="text-titulo-cartao text-brand-ink">{titulo}</h2>
         {acao}
       </div>
       {children}
