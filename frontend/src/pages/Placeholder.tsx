@@ -11,7 +11,7 @@ import { EmptyState } from '../components/ui/states'
 export function Placeholder({ title, emConstrucao = false }: { title: string; emConstrucao?: boolean }) {
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold tracking-tight text-foreground">{title}</h1>
+      <h1 className="font-display text-titulo-tela text-brand-ink">{title}</h1>
       <EmptyState
         icon={Construction}
         title={emConstrucao ? 'Tela em construção' : 'Módulo ainda não disponível'}
