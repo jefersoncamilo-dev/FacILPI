@@ -173,3 +173,15 @@ Exceção ao FEATURE_FREEZE dada pelo responsável em 27/10/2026, só para os it
 - **Follow-ups novos:** fuso horário da grade de doses (M9).
 - **Homologação:** 029, 030 e 031 aplicadas em ordem no Neon só por decisão humana.
 - **Ondas 3–8:** somente PLAN até nova autorização. Pendentes D2, D3, D5, D6 e a identidade visual.
+
+## 20. Mapa do FacILPI — Ondas 3, 4 e 5 integradas (29/10–03/11/2026)
+
+Exceção ao FEATURE_FREEZE dada pelo responsável, só para os itens destas ondas e das decisões abaixo, com fluxo em lote e merge com o CI verde. Todos os PRs entraram na `fase-3b`.
+
+- **Onda 3:** N5 domínio fechado de `DocumentoUpdate.situacao` (PR #201), G5 aba Feitos/Expirados do Meu Plantão (PR #202), UX do Início, origem antes de Assumir, janela da fila e rotas Placeholder (PR #203), G7 cuidado em outro horário, até 24 h (PR #205).
+- **Onda 4 (segurança):** N6+N7 ausências/escala clínicas e CSP `img-src` restrita (PR #209), N3 auditoria de acesso (PR #210), guard de boot do rate limit em memória com 1 worker (#211, PR #212), JWT em cookie HttpOnly + CSRF com Bearer na transição (#207, PR #216; na homologação depende do rewrite de `/api/*` no Render).
+- **Onda 5 (UX e frontend):** tokens de tema, vidro + aurora e plano B (#213, PR #215), cores fixas viradas tokens (#217, PRs #221, #224 e #229), React Router 7 (#214, PR #218), E2E Playwright do fluxo crítico e cross-tenant 404 (#222, PR #223). O grupo A (#230, PR #231) ainda não foi integrado.
+- **Decisões aplicadas:** D6 percentual de refeição opcional 0/25/50/75/100 (G4, PR #220, migration 032); D2 estorno de dose pela tela só por Enfermagem e RT, com motivo (#11, PR #226, migration 033); D3 opção B — escritas clínicas fora do `ilpi_admin`, com relatório por ILPI, transição de 30 dias e bloqueio só da escrita clínica de quem não tem perfil clínico (#15, PR #228, migration 034).
+- **D5 (ordem dos complementares):** Configurações, Auditoria, Relatórios, Agenda, Multidisciplinar, PIA, Farmácia e estoque, Portal da família e Financeiro.
+- **Homologação:** migrations 029 a 034 aplicadas em ordem no Neon só por decisão humana; no Render, rewrite de `/api/*` e `VITE_API_BASE_URL`.
+- **Follow-ups abertos:** #163, #164, #165, #166, #173, tela de estorno da saída, fuso horário da grade de doses (M9), UUID em `Documentos.tsx`, validação visual do M1 e do M5.
