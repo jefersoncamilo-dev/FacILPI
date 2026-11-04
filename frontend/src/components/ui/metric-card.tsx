@@ -43,7 +43,7 @@ export function MetricCard({
 }) {
   const cores = TONS[tom]
   return (
-    <div data-tom={tom} className="flex flex-col rounded-card border border-border bg-card p-4 shadow-card transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5">
+    <div data-tom={tom} className="flex flex-col glass rounded-card p-4 transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-muted-foreground">{titulo}</p>
         <span className={cn('inline-flex size-9 shrink-0 items-center justify-center rounded-lg', cores.icone)}>

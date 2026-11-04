@@ -235,14 +235,14 @@ function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, atalhos }:
   }
 
   return (
-    <section aria-label="Resumo do momento" className="relative overflow-hidden rounded-card border border-brand-soft bg-gradient-to-br from-accent via-white to-accent p-5 shadow-card sm:p-7">
+    <section aria-label="Resumo do momento" className="glass relative overflow-hidden rounded-card p-5 sm:p-7">
       <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-20 size-64 rounded-full bg-brand-soft/40 blur-3xl" />
       <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 right-40 size-56 rounded-full bg-brand-light/30 blur-3xl" />
       <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div className="min-w-0 space-y-2">
           <h1 className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Início</h1>
-          <p className="font-display text-2xl font-bold tracking-tight text-foreground sm:text-3xl">{saudacao()}!</p>
-          <p className="text-sm text-muted-foreground">{[ilpi, perfil, dataPorExtenso()].filter(Boolean).join(' · ')}</p>
+          <p className="font-display text-titulo-tela text-brand-ink">{saudacao()}!</p>
+          <p className="text-apoio text-muted-foreground">{[ilpi, perfil, dataPorExtenso()].filter(Boolean).join(' · ')}</p>
           {fatos.length > 0 && (
             <ul aria-label="Agora" className="flex flex-wrap gap-1.5 pt-1">
               {fatos.map(f => {
@@ -408,14 +408,14 @@ function AcoesRapidas({ acoes }: { acoes: AcaoRapida[] }) {
             <Link
               to={a.to}
               className={cn(
-                'group flex h-full min-h-[92px] flex-col justify-between gap-3 rounded-xl p-3 text-sm font-semibold leading-tight transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0',
+                'group flex h-full min-h-[92px] flex-col justify-between gap-3 rounded-icon p-3 text-apoio font-semibold leading-tight transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0',
                 a.destaque === 'primario' && 'bg-primary text-primary-foreground hover:bg-brand-ink',
                 a.destaque === 'alerta' && 'bg-alerta-forte text-primary-foreground hover:bg-alerta-forte/90',
-                !a.destaque && 'border border-border bg-card text-foreground hover:border-brand/40 hover:bg-brand-soft/60',
+                !a.destaque && 'glass text-foreground hover:shadow-cardHover',
               )}
             >
-              <span aria-hidden="true" className={cn('inline-flex size-9 items-center justify-center rounded-full',
-                a.destaque ? 'bg-card/20' : 'bg-brand-soft text-primary')}>
+              <span aria-hidden="true" className={cn('inline-flex size-10 items-center justify-center rounded-xl',
+                a.destaque ? 'bg-white/20' : 'bg-brand-soft text-primary shadow-icon')}>
                 <a.icone className="size-[18px]" />
               </span>
               {a.rotulo}
@@ -553,9 +553,9 @@ function PrecisaDeAtencao({ carga }: { carga: Carga<CentralAlertas> }) {
 
 function Painel({ titulo, acao, icone: Icone, children }: { titulo: string; acao?: ReactNode; icone?: LucideIcon; children: ReactNode }) {
   return (
-    <section className="rounded-card border border-border bg-card shadow-card" aria-label={titulo}>
+    <section className="glass rounded-card" aria-label={titulo}>
       <header className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
-        <h2 className="flex items-center gap-2 font-display text-base font-semibold text-foreground">
+        <h2 className="flex items-center gap-2 font-display text-titulo-secao text-brand-ink">
           {Icone && (
             <span aria-hidden="true" className="inline-flex size-7 items-center justify-center rounded-lg bg-brand-soft text-primary">
               <Icone className="size-4" />

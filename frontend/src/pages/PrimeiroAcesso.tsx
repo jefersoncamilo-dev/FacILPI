@@ -99,7 +99,7 @@ export function PrimeiroAcesso() {
     <AuthLayout>
       <div className="space-y-7">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Defina sua nova senha</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Defina sua nova senha</h1>
           <p className="text-sm text-muted-foreground">
             Por segurança, você precisa definir uma nova senha antes de continuar.
           </p>

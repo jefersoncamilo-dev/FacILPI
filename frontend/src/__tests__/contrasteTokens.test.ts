@@ -40,7 +40,7 @@ function contraste(a: string, b: string): number {
 }
 
 const claro = bloco(':root {')
-const escuro = { ...claro, ...bloco(':root[data-theme="dark"] {') }
+const escuro = { ...claro, ...bloco(':root[data-theme="dark"], .superficie-escura {') }
 const automaticoEscuro = { ...claro, ...bloco(':root:not([data-theme="light"]) {') }
 
 // [texto, fundo, mínimo]

@@ -11,7 +11,7 @@ export function ModuleHubCard({ item }: { item: ItemAtivo }) {
   return (
     <Link
       to={item.to}
-      className="group flex min-h-[88px] items-center gap-4 rounded-card border border-border bg-card p-5 text-card-foreground shadow-card transition-shadow hover:border-brand/40 hover:shadow-cardHover"
+      className="group flex min-h-[88px] items-center gap-4 glass rounded-card p-5 text-card-foreground transition-shadow hover:border-brand/40 hover:shadow-cardHover"
     >
       <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-primary" aria-hidden="true">
         <Icone className="size-5" />
