@@ -88,7 +88,7 @@ export function Cuidados() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Cuidados programados</h1>
+        <h1 className="font-display text-titulo-tela text-brand-ink">Cuidados programados</h1>
         <p className="text-sm text-muted-foreground">
           Horários definidos a partir do <Link to="/plano" className="font-medium text-primary hover:underline">plano de cuidados (PAIS)</Link>.
           Os cuidados previstos aparecem no Meu Plantão; o registro do que foi feito é feito lá.
@@ -109,8 +109,8 @@ export function Cuidados() {
             </select>
           </div>
           {grupos.map(([residenteId, progs]) => (
-            <section key={residenteId} aria-label={residentes.get(residenteId) || 'Residente'} className="space-y-3 rounded-card border border-border bg-card p-5 shadow-card">
-              <h2 className="font-display text-base font-semibold text-foreground">
+            <section key={residenteId} aria-label={residentes.get(residenteId) || 'Residente'} className="glass space-y-3 rounded-card p-5">
+              <h2 className="font-display text-titulo-secao text-brand-ink">
                 <Link to={`/residentes/${residenteId}`} className="hover:underline">{residentes.get(residenteId) || 'Residente'}</Link>
               </h2>
               <ul className="space-y-3">
