@@ -344,7 +344,7 @@ export function MeuPlantao() {
     <div className="space-y-4 sm:space-y-6">
       <div className="space-y-1">
         {/* O nome de quem está no plantão; sem vínculo de funcionário, o título da tela. */}
-        <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{resumo?.funcionario_nome || 'Meu Plantão'}</h1>
+        <h1 className="truncate font-display text-titulo-tela text-brand-ink">{resumo?.funcionario_nome || 'Meu Plantão'}</h1>
         <p className="text-xs text-muted-foreground sm:text-sm">
           {desde
             ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">voltar à fila padrão</Link></>
@@ -517,7 +517,7 @@ export function MeuPlantao() {
 
       {selecionando && (
         // Fica acima da navegação inferior no mobile; no desktop, rente ao fim da tela.
-        <div className="sticky bottom-24 z-20 flex items-center gap-3 rounded-card border border-primary/40 bg-card p-3 shadow-lg xl:bottom-4" role="region" aria-label="Seleção">
+        <div className="glass sticky bottom-24 z-20 flex items-center gap-3 rounded-card border border-primary/40 p-3 xl:bottom-4" role="region" aria-label="Seleção">
           <span className="min-w-0 flex-1 text-sm font-semibold" aria-live="polite">
             {selecionadosNaFila.length === 0
               ? 'Nenhum cuidado marcado'
