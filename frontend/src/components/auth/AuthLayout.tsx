@@ -31,7 +31,7 @@ const PILARES = [
 function BannerFundo() {
   return (
     <>
-      <div className="absolute inset-0 bg-gradient-to-br from-brand-ink via-primary to-brand-strong" />
+      <div className="absolute inset-0 bg-side" />
       {/* Textura sutil e luzes difusas: acolhimento sem ruído visual. */}
       <div
         className="absolute inset-0 opacity-[0.07]"
@@ -45,7 +45,7 @@ function BannerFundo() {
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-card lg:grid lg:grid-cols-[55fr_45fr]">
+    <div className="bg-aurora min-h-screen lg:grid lg:grid-cols-[55fr_45fr]">
       {/* Desktop: painel visual */}
       <aside className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
         <BannerFundo />

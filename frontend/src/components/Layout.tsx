@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router'
-import { Bell, ChevronRight, ClipboardList, KeyRound, Ellipsis, LayoutDashboard, Loader2, LogOut, Menu, Settings, Users } from 'lucide-react'
+import { Bell, ChevronRight, ClipboardList, KeyRound, Ellipsis, LayoutDashboard, Loader2, LogOut, Menu, Palette, Settings, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'
 import { mensagemDeErro } from '../services/api'
@@ -11,6 +11,7 @@ import { moduloDaRota } from './shell/navegacao'
 import { SecoesNavegacao } from './shell/SidebarNav'
 import { SinoAlertas, totalDoSino, useSinoAlertas, type EstadoSino } from './shell/SinoAlertas'
 import { Emergencia } from './shell/Emergencia'
+import { AparenciaDialog } from './shell/AparenciaDialog'
 import { PasswordInput } from './auth/PasswordInput'
 import { Button } from './ui/button'
 import { Label } from './ui/input'
@@ -41,6 +42,7 @@ export function Layout({ children }: { children: ReactNode }) {
 function Shell({ children }: { children: ReactNode }) {
   const [menuAberto, setMenuAberto] = useState(false)
   const [senhaAberta, setSenhaAberta] = useState(false)
+  const [aparenciaAberta, setAparenciaAberta] = useState(false)
   const { activeContext } = useAuth()
   const { pathname } = useLocation()
   const sino = useSinoAlertas()
@@ -53,15 +55,21 @@ function Shell({ children }: { children: ReactNode }) {
     setSenhaAberta(true)
   }
 
+  function abrirAparencia() {
+    setMenuAberto(false)
+    setAparenciaAberta(true)
+  }
+
   return (
-    <div className="min-h-screen bg-background xl:grid xl:grid-cols-[264px_minmax(0,1fr)]">
-      <aside className="sticky top-0 hidden h-screen border-r border-border bg-card xl:block">
-        <PainelNavegacao onAlterarSenha={abrirSenha} />
+    <div className="bg-aurora min-h-screen xl:grid xl:grid-cols-[288px_minmax(0,1fr)]">
+      {/* Onda 5: menu lateral é uma "ilha escura" (degradê petróleo) nos dois temas. */}
+      <aside className="superficie-escura sticky top-3 m-3 hidden h-[calc(100vh-1.5rem)] overflow-hidden rounded-card bg-side shadow-glass xl:block">
+        <PainelNavegacao onAlterarSenha={abrirSenha} onAparencia={abrirAparencia} />
       </aside>
 
       <div className="flex min-h-screen min-w-0 flex-col">
         {/* Mobile/tablet */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b border-border bg-card/95 px-3 backdrop-blur sm:px-5 xl:hidden">
+        <header className="superficie-escura sticky top-0 z-30 flex h-16 items-center gap-2 bg-side px-3 text-foreground sm:px-5 xl:hidden">
           <Button variant="ghost" size="icon" aria-label="Abrir menu" onClick={() => setMenuAberto(true)}>
             <Menu className="!size-5" aria-hidden="true" />
           </Button>
@@ -76,7 +84,7 @@ function Shell({ children }: { children: ReactNode }) {
         </header>
 
         {/* Desktop */}
-        <header className="sticky top-0 z-30 hidden h-16 items-center gap-4 border-b border-border bg-background/90 px-8 backdrop-blur xl:flex">
+        <header className="glass sticky top-3 z-30 mx-5 mt-3 hidden h-16 items-center gap-4 rounded-card px-6 xl:flex">
           <Trilha pathname={pathname} />
           <div className="ml-auto flex items-center gap-2">
             <Emergencia />
@@ -85,7 +93,7 @@ function Shell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-[1400px] flex-1 px-4 pb-28 pt-6 sm:px-6 lg:px-8 xl:pb-10 xl:pt-8">
+        <main className="mx-auto w-full max-w-[1400px] flex-1 px-5 pb-28 pt-6 sm:px-6 lg:px-8 xl:pb-10 xl:pt-6">
           <ErrorBoundary resetKey={pathname}>{children}</ErrorBoundary>
         </main>
 
@@ -94,16 +102,17 @@ function Shell({ children }: { children: ReactNode }) {
 
       <Sheet open={menuAberto} onOpenChange={setMenuAberto}>
         <SheetContent title="Menu de navegação">
-          <PainelNavegacao mobile onAlterarSenha={abrirSenha} />
+          <PainelNavegacao mobile onAlterarSenha={abrirSenha} onAparencia={abrirAparencia} />
         </SheetContent>
       </Sheet>
 
+      <AparenciaDialog open={aparenciaAberta} onOpenChange={setAparenciaAberta} />
       <AlterarSenhaDialog open={senhaAberta} onOpenChange={setSenhaAberta} />
     </div>
   )
 }
 
-function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean; onAlterarSenha: () => void }) {
+function PainelNavegacao({ mobile = false, onAlterarSenha, onAparencia }: { mobile?: boolean; onAlterarSenha: () => void; onAparencia: () => void }) {
   const { user, logout } = useAuth()
   const { status, pode } = usePermissoes()
   const inicial = user?.nome?.[0]?.toUpperCase() || 'U'
@@ -158,6 +167,9 @@ function PainelNavegacao({ mobile = false, onAlterarSenha }: { mobile?: boolean;
           <DropdownMenuContent side="top" align="end">
             <DropdownMenuLabel>{user?.nome || 'Sua conta'}</DropdownMenuLabel>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={onAparencia}>
+              <Palette aria-hidden="true" /> Aparência
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={onAlterarSenha}>
               <KeyRound aria-hidden="true" /> Alterar senha
             </DropdownMenuItem>
@@ -220,7 +232,7 @@ function NavegacaoInferior({ onMenu, menuAberto, sino }: { onMenu: () => void; m
   return (
     <nav
       aria-label="Navegação rápida"
-      className="fixed inset-x-0 bottom-0 z-30 flex gap-1 border-t border-border bg-card/95 px-2 pt-1.5 backdrop-blur xl:hidden"
+      className="glass fixed inset-x-0 bottom-0 z-30 flex gap-1 rounded-t-card border-x-0 border-b-0 px-2 pt-1.5 xl:hidden"
       style={{ paddingBottom: 'max(0.375rem, env(safe-area-inset-bottom))' }}
     >
       {destinos.map(d => (

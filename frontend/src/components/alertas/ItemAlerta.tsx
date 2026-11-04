@@ -65,7 +65,7 @@ export function ItemAlerta({ alerta: a, compacto = false, agora, fuso, podeAssum
         : podeLiberarOutros ? [{ acao: 'liberar' as const, rotulo: 'Liberar' }] : []
 
   return (
-    <div className="relative flex items-stretch overflow-hidden rounded-card border border-border bg-card shadow-card">
+    <div className="relative flex items-stretch overflow-hidden glass rounded-card">
       <span aria-hidden="true" className={cn('w-1.5 shrink-0', ESTILO_GRAVIDADE[a.gravidade].faixa)} />
       <div className="flex min-w-0 flex-1 flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
         <div className="min-w-0 flex-1 space-y-0.5">

@@ -66,7 +66,7 @@ export function Alertas() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Alertas e Pendências</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Alertas e Pendências</h1>
           <p className="text-sm text-muted-foreground">Situações que precisam da sua atenção, ação ou acompanhamento.</p>
         </div>
         {dados && (
@@ -156,7 +156,7 @@ export function Alertas() {
             </div>
           )}
 
-          <details className="rounded-card border border-border bg-card px-4 py-3 text-sm shadow-card sm:px-5">
+          <details className="glass rounded-card px-4 py-3 text-sm sm:px-5">
             <summary className="flex min-h-[32px] cursor-pointer items-center gap-2 font-medium text-foreground">
               <Info className="size-4 text-muted-foreground" aria-hidden="true" /> Como os alertas são calculados
             </summary>

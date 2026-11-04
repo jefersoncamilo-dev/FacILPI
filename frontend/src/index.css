@@ -110,7 +110,8 @@
       color-scheme: dark;
     }
   }
-  :root[data-theme="dark"] {
+  /* .superficie-escura: ilha escura (menu lateral, barra do celular) nos dois temas. */
+  :root[data-theme="dark"], .superficie-escura {
     --background: 174 46% 8%;
     --background-desktop: 172 50% 6%;
     --foreground: 168 37% 92%;
@@ -198,7 +199,7 @@
 /* Classes das telas existentes, na nova identidade. Componentes novos usam
    as primitivas de components/ui. */
 @layer components {
-  .card { @apply bg-card text-card-foreground rounded-card shadow-card p-5 border border-border; }
+  .card { @apply glass text-card-foreground rounded-card p-5; }
   .btn-primary { @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60; }
   .btn-secondary { @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted active:bg-secondary active:scale-[.98] transition min-h-[44px]; }
   /* Acao que pede atencao (ex.: registrar intercorrencia): preenchida, AA. */
