@@ -50,7 +50,7 @@ export function Escala() {
   return (
     <div className="space-y-6">
       <div className="space-y-1">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Escala</h1>
+        <h1 className="font-display text-titulo-tela text-brand-ink">Escala</h1>
         <p className="text-sm text-muted-foreground">Quem responde por cada área agora, a escala do dia (previsto × efetivo), as áreas e os turnos.</p>
       </div>
       <div role="tablist" aria-label="Escala" className="flex gap-1 rounded-lg bg-muted p-1">
@@ -109,10 +109,10 @@ function Agora({ gerenciar }: { gerenciar: boolean }) {
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
           {areas.map(({ area, responsaveis, residentes }) => (
-            <li key={area.id} className="rounded-card border border-border bg-card p-4 shadow-card">
+            <li key={area.id} className="glass rounded-card p-4">
               <section aria-label={`Área ${area.nome}`} className="space-y-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="font-display text-base font-semibold text-foreground">{area.nome}</h2>
+                  <h2 className="font-display text-titulo-secao text-brand-ink">{area.nome}</h2>
                   <span className="text-xs text-muted-foreground">
                     {ROTULO_TIPO_AREA[area.tipo]} · {area.leitos.length} {area.leitos.length === 1 ? 'leito' : 'leitos'}
                     {residentes !== null && ` · ${residentes} ${residentes === 1 ? 'residente' : 'residentes'}`}
@@ -145,7 +145,7 @@ function Agora({ gerenciar }: { gerenciar: boolean }) {
       )}
       {plantoes_sem_area.length > 0 && (
         <section aria-label="Em plantão sem área" className="space-y-2">
-          <h2 className="font-display text-base font-semibold text-foreground">Em plantão sem área</h2>
+          <h2 className="font-display text-titulo-secao text-brand-ink">Em plantão sem área</h2>
           <ul className="space-y-1 text-sm text-foreground">
             {plantoes_sem_area.map(p => (
               <li key={p.id}>{p.funcionario_nome}{p.turno_nome ? ` · ${p.turno_nome}` : ''} · desde {formatDateTime(p.inicio_em)}</li>
@@ -229,7 +229,7 @@ function Areas({ gerenciar, podeLeitos }: { gerenciar: boolean; podeLeitos: bool
     <div className="space-y-4">
       {erro && <Alert variant="error">{erro}</Alert>}
       {gerenciar && (
-        <form onSubmit={criar} aria-label="Nova área" className="flex flex-col gap-2 rounded-card border border-border bg-card p-4 shadow-card sm:flex-row sm:items-end">
+        <form onSubmit={criar} aria-label="Nova área" className="glass flex flex-col gap-2 rounded-card p-4 sm:flex-row sm:items-end">
           <label className="flex-1 space-y-1 text-sm">
             <span className="font-medium text-foreground">Nome da área</span>
             <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Ex.: Ala B" className={CAMPO} />
@@ -248,10 +248,10 @@ function Areas({ gerenciar, podeLeitos }: { gerenciar: boolean; podeLeitos: bool
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
           {carga.dados.map(a => (
-            <li key={a.id} className="rounded-card border border-border bg-card p-4 shadow-card">
+            <li key={a.id} className="glass rounded-card p-4">
               <section aria-label={`Área ${a.nome}`} className="space-y-2">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="font-display text-base font-semibold text-foreground">{a.nome}</h2>
+                  <h2 className="font-display text-titulo-secao text-brand-ink">{a.nome}</h2>
                   <span className="text-xs text-muted-foreground">{ROTULO_TIPO_AREA[a.tipo]}{a.situacao === 'inativa' ? ' · inativa' : ''}</span>
                 </div>
                 {a.leitos.length === 0 ? (
@@ -344,7 +344,7 @@ function Turnos({ gerenciar }: { gerenciar: boolean }) {
     <div className="space-y-4">
       {erro && <Alert variant="error">{erro}</Alert>}
       {gerenciar && (
-        <form onSubmit={criar} aria-label="Novo turno" className="grid gap-2 rounded-card border border-border bg-card p-4 shadow-card sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
+        <form onSubmit={criar} aria-label="Novo turno" className="glass grid gap-2 rounded-card p-4 sm:grid-cols-[1fr_auto_auto_auto] sm:items-end">
           <label className="space-y-1 text-sm">
             <span className="font-medium text-foreground">Nome do turno</span>
             <input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex.: Diurno" className={CAMPO} />
@@ -365,7 +365,7 @@ function Turnos({ gerenciar }: { gerenciar: boolean }) {
       ) : (
         <ul className="space-y-2">
           {carga.dados.map(t => (
-            <li key={t.id} className="flex items-center justify-between gap-2 rounded-card border border-border bg-card px-4 py-3 text-sm shadow-card">
+            <li key={t.id} className="glass flex items-center justify-between gap-2 rounded-card px-4 py-3 text-sm">
               <span>
                 <span className="font-medium text-foreground">{t.nome}</span>{' '}
                 <span className="text-muted-foreground">{t.hora_inicio}–{t.hora_fim}{t.situacao === 'inativo' ? ' · inativo' : ''}</span>
@@ -485,7 +485,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
       {erro && <Alert variant="error">{erro}</Alert>}
 
       {gerenciar && (
-        <form onSubmit={criar} aria-label="Nova escala" className="grid gap-2 rounded-card border border-border bg-card p-4 shadow-card sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
+        <form onSubmit={criar} aria-label="Nova escala" className="glass grid gap-2 rounded-card p-4 sm:grid-cols-2 lg:grid-cols-5 lg:items-end">
           <label className="space-y-1 text-sm">
             <span className="font-medium text-foreground">Profissional</span>
             <select value={nova.funcionario_id} onChange={e => setNova({ ...nova, funcionario_id: e.target.value })} className={CAMPO}>
@@ -532,7 +532,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
                 const editavel = gerenciar && e.plantao_id === null && (e.estado === 'prevista' || e.estado === 'nao_iniciada')
                 const substituivel = gerenciar && e.plantao_id === null && (editavel || e.estado === 'ausente')
                 return (
-                  <li key={e.id} className="rounded-card border border-border bg-card p-4 shadow-card">
+                  <li key={e.id} className="glass rounded-card p-4">
                     <section aria-label={'Escala de ' + e.funcionario_nome} className="space-y-2">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <p className="font-medium text-foreground">
@@ -593,7 +593,7 @@ function Dia({ gerenciar, podeEquipe }: { gerenciar: boolean; podeEquipe: boolea
             </ul>
             {carga.dados.coberturas_sem_escala.length > 0 && (
               <section aria-label="Cobertura sem escala" className="space-y-2">
-                <h2 className="font-display text-base font-semibold text-foreground">Cobertura sem escala</h2>
+                <h2 className="font-display text-titulo-secao text-brand-ink">Cobertura sem escala</h2>
                 <ul className="space-y-1 text-sm text-foreground">
                   {carga.dados.coberturas_sem_escala.map(p => (
                     <li key={p.id}>
