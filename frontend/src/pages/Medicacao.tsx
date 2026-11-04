@@ -146,7 +146,7 @@ export function Medicacao() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Medicação</h1>
+        <h1 className="font-display text-titulo-tela text-brand-ink">Medicação</h1>
         <p className="text-textMuted text-sm">
           {nomeResidente ? `Prescrições de ${nomeResidente}` : 'Prescrições e doses do dia por residente'}
         </p>
@@ -189,7 +189,7 @@ export function Medicacao() {
             if (!lista.length) return null
             return (
               <section key={value} aria-label={label} className="space-y-3">
-                <h2 className="text-lg font-semibold">{label} ({lista.length})</h2>
+                <h2 className="font-display text-titulo-secao text-brand-ink">{label} ({lista.length})</h2>
                 {lista.map(p => (
                   <PrescricaoCartao key={p.id} prescricao={p} nome={nomeDoMedicamento(p, medicamentos)}
                                     podeAtualizar={podeAtualizar} executar={executar} />
@@ -203,12 +203,12 @@ export function Medicacao() {
 
           {podeVerDoses && (
             <section aria-label="Doses de hoje" className="space-y-2">
-              <h2 className="text-lg font-semibold">Doses de hoje</h2>
+              <h2 className="font-display text-titulo-secao text-brand-ink">Doses de hoje</h2>
               <p className="text-sm text-textMuted">Somente leitura. A administração é registrada no Meu Plantão.</p>
               {!doses.length ? (
                 <p className="text-sm">Nenhuma dose prevista para hoje.</p>
               ) : (
-                <ul className="divide-y rounded-lg border">
+                <ul className="glass divide-y divide-border rounded-card">
                   {[...doses].sort((a, b) => a.previsto_em.localeCompare(b.previsto_em)).map(d => {
                     const p = porPrescricao[d.prescricao_id]
                     return (
@@ -275,8 +275,8 @@ function NovaPrescricao({ residenteId, medicamentos, podeCadastrarMedicamento, a
   if (!aberto) return <Button onClick={() => setAberto(true)}>Nova prescrição</Button>
 
   return (
-    <form onSubmit={enviar} aria-label="Nova prescrição" className="space-y-4 rounded-lg border p-4">
-      <h2 className="text-lg font-semibold">Nova prescrição (rascunho)</h2>
+    <form onSubmit={enviar} aria-label="Nova prescrição" className="glass-strong space-y-4 rounded-card p-4">
+      <h2 className="font-display text-titulo-secao text-brand-ink">Nova prescrição (rascunho)</h2>
       <p className="text-sm text-textMuted">Transcreva a receita do prescritor. A prescrição só gera doses depois de ativada.</p>
       <div className="space-y-1">
         <Label htmlFor="np-medicamento">Medicamento</Label>
@@ -359,7 +359,7 @@ function PrescricaoCartao({ prescricao: p, nome, podeAtualizar, executar }: {
   const precisaHorarios = acao === 'ativar' || acao === 'substituir'
 
   return (
-    <article aria-label={nome} className="space-y-2 rounded-lg border p-4">
+    <article aria-label={nome} className="glass space-y-2 rounded-card p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <p className="font-semibold">{nome} — {p.dose} {p.unidade} · {p.via}</p>
