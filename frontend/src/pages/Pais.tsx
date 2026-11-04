@@ -83,7 +83,7 @@ export function Pais() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Plano de cuidados (PAIS)</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Plano de cuidados (PAIS)</h1>
           <p className="text-sm text-muted-foreground">
             {residenteFiltro ? <>Planos de {nomes.get(residenteFiltro) || 'um residente'} · <Link to="/plano" className="font-medium text-primary hover:underline">ver todos</Link></> : 'O plano vigente de cada residente e o que está em construção.'}
           </p>
@@ -115,7 +115,7 @@ export function Pais() {
             <ul className="space-y-2">
               {visiveis.map(({ residenteId, atual, versoes }) => (
                 <li key={residenteId}>
-                  <Link to={`/plano/${atual.id}`} className="flex min-h-[72px] items-center gap-4 rounded-card border border-border bg-card px-4 py-3 shadow-card transition-colors hover:border-brand/50 sm:px-5">
+                  <Link to={`/plano/${atual.id}`} className="glass flex min-h-[72px] items-center gap-4 rounded-card px-4 py-3 transition-colors hover:border-brand/50 sm:px-5">
                     <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-primary">
                       {(nomes.get(residenteId) || 'R')[0]}
                     </span>
