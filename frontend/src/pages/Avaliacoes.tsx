@@ -82,7 +82,7 @@ export function Avaliacoes() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Avaliações</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Avaliações</h1>
           <p className="text-sm text-muted-foreground">Instrumentos aplicados aos residentes, como foram registrados.</p>
         </div>
         {pode('avaliacoes:criar') && avaliacoes !== null && (
@@ -125,7 +125,7 @@ export function Avaliacoes() {
                 return (
                   <li key={a.id}>
                     <button type="button" onClick={() => { setAviso(''); setAberta(a) }}
-                      className="flex min-h-[72px] w-full items-start gap-4 rounded-card border border-border bg-card px-4 py-3 text-left shadow-card transition-colors hover:border-brand/50 sm:px-5">
+                      className="glass flex min-h-[72px] w-full items-start gap-4 rounded-card px-4 py-3 text-left transition-colors hover:border-brand/50 sm:px-5">
                       <span aria-hidden="true" className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-primary">
                         <ClipboardCheck className="size-5" />
                       </span>
@@ -296,7 +296,7 @@ function DetalheAvaliacao({ avaliacao: a, nome, aoFechar }: { avaliacao: Avaliac
           </dl>
           {respostas && (
             <section aria-label="Respostas" className="space-y-1.5">
-              <h3 className="text-sm font-semibold text-foreground">Respostas</h3>
+              <h3 className="text-titulo-cartao text-brand-ink">Respostas</h3>
               {'pares' in respostas ? (
                 <dl className="divide-y divide-border rounded-lg border border-border text-sm">
                   {respostas.pares.map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-3 py-1.5"><dt className="text-muted-foreground">{k}</dt><dd className="text-right font-medium">{v}</dd></div>)}
@@ -308,7 +308,7 @@ function DetalheAvaliacao({ avaliacao: a, nome, aoFechar }: { avaliacao: Avaliac
 
           {graus !== 'sem_acesso' && (
             <section aria-label="Grau de dependência" className="space-y-2 rounded-lg border border-border p-3">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><ShieldCheck className="size-4 text-primary" aria-hidden="true" /> Grau de dependência oficial</h3>
+              <h3 className="flex items-center gap-2 text-titulo-cartao text-brand-ink"><ShieldCheck className="size-4 text-primary" aria-hidden="true" /> Grau de dependência oficial</h3>
               {graus === null ? <Skeleton className="h-5 w-40" /> : (
                 <p className="text-sm text-foreground">
                   {ativo ? <>{ativo.classificacao}{desta ? ', confirmado a partir desta avaliação' : ''}{ativo.confirmado_em ? ` · desde ${formatDate(ativo.confirmado_em)}` : ''}</> : 'Não definido'}

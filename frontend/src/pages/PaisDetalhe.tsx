@@ -116,7 +116,7 @@ export function PaisDetalhe() {
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{nome || 'Residente'}</h1>
+            <h1 className="font-display text-titulo-tela text-brand-ink">{nome || 'Residente'}</h1>
             <p className="text-sm text-muted-foreground">
               PAIS versão {p.versao} · desde {formatDate(p.data_inicial)}{p.data_final ? ` até ${formatDate(p.data_final)}` : ''}
               {' · '}<Link to={`/residentes/${p.residente_id}`} className="font-medium text-primary hover:underline">prontuário</Link>
@@ -157,8 +157,8 @@ export function PaisDetalhe() {
       )}
 
       {proxima && pode(proxima.permissao) && (
-        <section aria-label="Próxima etapa" className="space-y-3 rounded-card border border-border bg-card p-5 shadow-card">
-          <h2 className="font-display text-base font-semibold text-foreground">Próxima etapa: {proxima.rotulo}</h2>
+        <section aria-label="Próxima etapa" className="glass space-y-3 rounded-card p-5">
+          <h2 className="font-display text-titulo-secao text-brand-ink">Próxima etapa: {proxima.rotulo}</h2>
           {proxima.acao === 'aprovar' && (
             <ul className="space-y-1 text-sm">
               {SECOES.map(s => {
@@ -205,9 +205,9 @@ export function PaisDetalhe() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {SECOES.map(s => (
-          <section key={s.tipo} aria-label={s.titulo} className="space-y-3 rounded-card border border-border bg-card p-5 shadow-card">
+          <section key={s.tipo} aria-label={s.titulo} className="glass space-y-3 rounded-card p-5">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="font-display text-base font-semibold text-foreground">{s.titulo} <span className="text-sm font-normal text-muted-foreground">({ativos[s.tipo].length})</span></h2>
+              <h2 className="font-display text-titulo-secao text-brand-ink">{s.titulo} <span className="text-sm font-normal text-muted-foreground">({ativos[s.tipo].length})</span></h2>
               {editavel && (
                 <Button variant="outline" size="sm" className="h-9" onClick={() => setDialogo(s.tipo)}>
                   <Plus aria-hidden="true" /> Adicionar
