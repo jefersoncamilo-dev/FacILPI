@@ -45,8 +45,8 @@ export function ItemPlantao({
   return (
     <div
       className={cn(
-        'flex items-center gap-2 rounded-card border bg-card px-2.5 py-2.5 shadow-sm',
-        selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado ? 'border-alerta/40' : 'border-border',
+        'glass flex items-center gap-2 rounded-card px-2.5 py-2.5',
+        selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado && 'border-l-4 border-l-alerta',
       )}
     >
       {selecao && (

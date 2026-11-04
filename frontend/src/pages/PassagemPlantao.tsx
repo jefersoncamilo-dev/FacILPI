@@ -135,7 +135,7 @@ export function PassagemPlantao() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Passagem de plantão</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Passagem de plantão</h1>
           <p className="text-sm text-muted-foreground">O que ficou do período e o que vem a seguir, direto dos registros. Nada aqui cria registro novo.</p>
         </div>
         <Button variant="outline" onClick={() => setInstante(Date.now())}><RefreshCw aria-hidden="true" /> Atualizar</Button>
@@ -145,7 +145,7 @@ export function PassagemPlantao() {
       {status === 'ok' && pode('passagem_plantao:ler') && <PassagensAReceber podeReceber={pode('passagem_plantao:registrar')} versao={entregas} />}
       {status === 'ok' && pode('passagem_plantao:registrar') && <PassarPlantao onEntregue={() => setEntregas(n => n + 1)} />}
       {status === 'ok' && (pode('passagem_plantao:ler') || pode('passagem_plantao:registrar')) && (
-        <h2 className="font-display text-lg font-semibold text-foreground">Visão ao vivo do período</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Visão ao vivo do período</h2>
       )}
 
       <div className="space-y-2">
@@ -189,7 +189,7 @@ export function PassagemPlantao() {
               description="Sem itens previstos pendentes, intercorrências ou ausências nas fontes consultadas." />
           ) : (
             <section aria-label="Residentes com pontos de atenção" className="space-y-3">
-              <h2 className="font-display text-base font-semibold text-foreground">Por residente ({visao.atencao.length})</h2>
+              <h2 className="font-display text-titulo-secao text-brand-ink">Por residente ({visao.atencao.length})</h2>
               <ul className="space-y-3">
                 {visao.atencao.map(r => <CartaoResidente key={r.residenteId} r={r} nome={nomes[r.residenteId] || 'Residente'} janela={janela} />)}
               </ul>
@@ -203,7 +203,7 @@ export function PassagemPlantao() {
 
 function Numero({ rotulo, valor, destaque }: { rotulo: string; valor: number | null; destaque?: boolean }) {
   return (
-    <div className={cn('rounded-card border bg-card p-4 shadow-card', destaque ? 'border-alerta/40' : 'border-border')}>
+    <div className={cn('glass rounded-card p-4', destaque ? 'border-alerta/40' : 'border-border')}>
       <dt className="text-xs text-muted-foreground">{rotulo}</dt>
       <dd className={cn('mt-1 font-display text-2xl font-bold', destaque ? 'text-alerta-forte' : 'text-foreground')}>{valor ?? '—'}</dd>
     </div>
@@ -224,7 +224,7 @@ function Avisos({ intercorrencias, ausencias, plantaoTruncado, intercorrenciasTr
 
 function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; janela: number }) {
   return (
-    <li className="space-y-3 rounded-card border border-border bg-card p-4 shadow-card sm:p-5">
+    <li className="glass space-y-3 rounded-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Link to={`/residentes/${r.residenteId}`} className="font-medium text-foreground hover:text-primary hover:underline">{nome}</Link>
         <div className="flex flex-wrap gap-1.5">

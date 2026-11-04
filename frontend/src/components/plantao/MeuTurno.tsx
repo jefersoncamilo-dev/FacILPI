@@ -115,7 +115,7 @@ export function MeuTurno({ onMudou, atrasados }: {
   const semEscolhas = !plantao && (atual.escalas_pendentes ?? []).length === 0 && areas.length === 0 && turnos.length === 0
 
   return (
-    <section aria-label="Meu turno" className={cn('rounded-card border border-border bg-card shadow-card', semEscolhas ? 'px-4 py-3' : 'p-4 sm:p-5')}>
+    <section aria-label="Meu turno" className={cn('glass rounded-card', semEscolhas ? 'px-4 py-3' : 'p-4 sm:p-5')}>
       {plantao ? (
         // M1 (#176): a ação principal é passar o plantão (é ela que leva a informação adiante);
         // encerrar fica secundário e sempre confirma. Compacto no celular.

@@ -23,9 +23,9 @@ export function MinhaArea({ resumo, podeAssumir, onMudou }: { resumo: MeuPlantao
   const proximas = resumo.atividades?.proximas ?? []
 
   return (
-    <section aria-label="Minha área agora" className="space-y-4 rounded-card border border-primary/40 bg-card p-4 shadow-card sm:p-5">
+    <section aria-label="Minha área agora" className="glass space-y-4 rounded-card border border-primary/40 p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-display text-lg font-semibold text-foreground">Minha área agora</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Minha área agora</h2>
         <p className="text-sm text-muted-foreground">{partes.join(' · ')}</p>
       </div>
 
