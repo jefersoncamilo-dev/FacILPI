@@ -51,7 +51,7 @@ export function PlatformInstituicoes() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Instituições</h1>
+        <h1 className="font-display text-titulo-tela text-brand-ink">Instituições</h1>
         <Link to="/platform/instituicoes/nova" className="btn-primary ml-auto min-h-[44px] px-4 py-2 text-sm">
           Nova ILPI
         </Link>

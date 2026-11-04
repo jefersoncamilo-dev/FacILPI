@@ -24,7 +24,7 @@ export function PlatformInstituicaoNova() {
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Nova ILPI</h1>
+        <h1 className="font-display text-titulo-tela text-brand-ink">Nova ILPI</h1>
         <Link to="/platform/instituicoes" className="ml-auto text-sm text-primary hover:underline">
           Voltar
         </Link>
