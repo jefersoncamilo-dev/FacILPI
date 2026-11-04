@@ -19,9 +19,9 @@ import json
 import os
 import pathlib
 import sys
+import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -47,6 +47,7 @@ from src.application.auth import hash_password  # noqa: E402
 from src.infrastructure import models as m  # noqa: E402
 from src.infrastructure.database import SessionLocal  # noqa: E402
 from tests.sessao_teste import abrir_sessao, token_de  # noqa: E402
+from tests.e2e_datas import FUSO, datas_do_cenario, horarios_de_dose  # noqa: E402
 
 RESIDENTE_A = "Maria Sintética E2E"
 RESIDENTE_B = "Joana Outra ILPI E2E"
@@ -103,29 +104,21 @@ def _h(user, ilpi) -> dict[str, str]:
     return {"Authorization": f"Bearer {token_de(user)}", "X-Scope": "ilpi", "X-ILPI-ID": ilpi.id}
 
 
-FUSO = ZoneInfo("America/Sao_Paulo")
-
-
 def _horarios_de_dose() -> list[str]:
-    """Dois horarios por dia, o primeiro daqui a 2 min no fuso da ILPI/navegador.
-
-    A geracao de doses parte de max(agora, vigencia): com horarios fixos
-    (08:00/20:00) nao sobrava dose "de hoje" entre 20:00 e 24:00 de Sao Paulo e o
-    E2E falhava conforme a hora. Se +2 min virar o dia, espera a virada.
-    """
-    agora = datetime.now(FUSO)
-    primeiro = agora + timedelta(minutes=2)
-    if primeiro.date() != agora.date():
-        import time
-        time.sleep((primeiro.replace(hour=0, minute=0, second=1, microsecond=0) - agora).total_seconds())
-        primeiro = datetime.now(FUSO) + timedelta(minutes=2)
-    segundo = primeiro + timedelta(hours=12)
-    return sorted({primeiro.strftime("%H:%M"), segundo.strftime("%H:%M")})
+    horarios = horarios_de_dose(datetime.now(FUSO))
+    if horarios is None:
+        # +2 min viraria o dia: espera a virada (no maximo 2 min) e recalcula.
+        agora = datetime.now(FUSO)
+        amanha = (agora + timedelta(days=1)).replace(hour=0, minute=0, second=1, microsecond=0)
+        time.sleep(max(0.0, (amanha - agora).total_seconds()))
+        horarios = horarios_de_dose(datetime.now(FUSO))
+    return horarios
 
 
 async def _cenario() -> dict:
     horarios_dose = _horarios_de_dose()
     agora = datetime.now(timezone.utc)
+    datas = datas_do_cenario(agora)
     async with SessionLocal() as db:
         chaves = await _permissoes_institucionais(db)
         assert "residentes:ler" in chaves and "passagem_plantao:ler" in chaves, "templates institucionais ausentes"
@@ -155,7 +148,7 @@ async def _cenario() -> dict:
         admissao = _ok(await c.post("/api/admissoes/", headers=h, json={"residente_id": ana.id}), 201)
 
         pid = _ok(await c.post("/api/planos-cuidados/", headers=h, json={
-            "residente_id": maria.id, "data_inicial": agora.date().isoformat(), "objetivos": "Plano E2E"}), 201)["id"]
+            "residente_id": maria.id, "data_inicial": datas["pais_data_inicial"].isoformat(), "objetivos": "Plano E2E"}), 201)["id"]
         _ok(await c.patch(f"/api/planos-cuidados/{pid}", headers=h, json={"situacao": "em_elaboracao"}))
         _ok(await c.post(f"/api/planos-cuidados/{pid}/necessidades", headers=h,
                          json={"descricao": "Higiene", "origem": "manual"}), 201)
@@ -167,17 +160,16 @@ async def _cenario() -> dict:
         _ok(await c.post(f"/api/planos-cuidados/{pid}/ativar", headers=h))
         _ok(await c.post("/api/programacoes-cuidado/", headers=h, json={
             "plano_id": pid, "intervencao_id": iid, "horarios": ["08:00", "20:00"], "timezone": "America/Sao_Paulo",
-            "vigencia_inicio": (agora - timedelta(hours=1)).isoformat(), "prioridade": "alta"}), 201)
+            "vigencia_inicio": datas["vigencia_inicio"].isoformat(), "prioridade": "alta"}), 201)
 
         med = _ok(await c.post("/api/medicamentos/", headers=h, json={"nome": MEDICAMENTO, "unidade": "comprimido"}), 201)
         pre = _ok(await c.post("/api/prescricoes/", headers=h, json={
             "residente_id": maria.id, "medicamento_id": med["id"], "prescritor_nome": "Dra Sintética",
             "prescritor_categoria": "medico", "dose": "1", "unidade": "comprimido", "via": "oral",
-            # Data local da vigencia: a data UTC ja vira o dia as 21:00 de Sao Paulo.
-            "inicio": (agora - timedelta(hours=1)).astimezone(FUSO).date().isoformat()}), 201)
+            "inicio": datas["prescricao_inicio"].isoformat()}), 201)
         _ok(await c.post(f"/api/prescricoes/{pre['id']}/ativar", headers=h, json={
             "horarios": horarios_dose, "timezone": "America/Sao_Paulo",
-            "vigencia_inicio": (agora - timedelta(hours=1)).isoformat()}))
+            "vigencia_inicio": datas["vigencia_inicio"].isoformat()}))
 
         area = _ok(await c.post("/api/escala/areas", headers=h, json={"nome": AREA, "tipo": "ala"}), 201)
         leito = _ok(await c.post("/api/quartos_leitos/", headers=h, json={"unidade": AREA, "quarto": "1", "leito": "A"}), 201)
