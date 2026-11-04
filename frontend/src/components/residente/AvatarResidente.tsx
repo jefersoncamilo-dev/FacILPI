@@ -23,7 +23,7 @@ export function AvatarResidente({ nome, foto, className }: { nome: string; foto?
   ) : (
     <span
       aria-hidden="true"
-      className={cn('flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-primary', className)}
+      className={cn('flex size-10 shrink-0 items-center justify-center rounded-full bg-avatar text-sm font-semibold text-avatar-foreground', className)}
     >
       {iniciais(nome)}
     </span>

@@ -143,7 +143,7 @@ export function FamiliaresResidente({ residenteId }: { residenteId: string }) {
   return (
     <section className="card space-y-2 p-4 md:col-span-2" aria-label="Familiares e responsáveis">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-foreground">Familiares e responsáveis</h2>
+        <h2 className="text-titulo-cartao text-brand-ink">Familiares e responsáveis</h2>
         {podeCriar && (
           <button
             type="button"

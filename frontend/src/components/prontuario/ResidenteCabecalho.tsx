@@ -53,7 +53,7 @@ export function ResidenteCabecalho({
           {/* Trunca só a partir de lg, onde a coluna lateral é fixa em 280px; abaixo disso o
               cabeçalho ocupa a largura toda e o nome pode quebrar em quantas linhas forem
               necessárias. O title cobre o caso truncado, já que em desktop existe hover. */}
-          <h1 className="text-lg font-bold text-foreground lg:truncate lg:text-xl" title={residente.nome}>{residente.nome}</h1>
+          <h1 className="font-display text-titulo-secao text-brand-ink lg:truncate lg:text-titulo-tela" title={residente.nome}>{residente.nome}</h1>
           {residente.nome_social && <p className="text-sm text-muted-foreground">Nome social: {residente.nome_social}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant={residente.situacao === 'Ativo' ? 'success' : 'brand'}>{residente.situacao ? rotuloSituacaoResidente(residente.situacao) : 'Sem situação'}</Badge>
