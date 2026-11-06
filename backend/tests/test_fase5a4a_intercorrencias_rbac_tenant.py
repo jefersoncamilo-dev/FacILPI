@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.engine import make_url
 
+from .banco_modelo import migrar_de_modelo
 from .test_fase5a3b_sinais_vitais_rbac_tenant import (
     BACKEND, _auth_headers, _create_ilpi_user, _create_platform_user,
     _create_residente, _database_url, _detail_code, _grant_permissions,
@@ -46,7 +47,7 @@ def c4_db(request, tmp_path):
         assert url.host in {"127.0.0.1", "localhost"}
         assert url.port == 55484 and url.database == "facilpi_c4_test"
         asyncio.run(_reset_postgres(ref))
-    _migrate(ref)
+    migrar_de_modelo(_database_url(ref))
     return ref
 
 

@@ -90,10 +90,10 @@ export function UsuariosSection({
         {[1, 2, 3].map(i => (
           <div key={i} className="card animate-pulse">
             <div className="flex gap-3">
-              <div className="w-11 h-11 rounded-full bg-slate-200" />
+              <div className="w-11 h-11 rounded-full bg-secondary" />
               <div className="flex-1 space-y-2">
-                <div className="h-4 bg-slate-200 rounded w-1/3" />
-                <div className="h-3 bg-slate-100 rounded w-1/2" />
+                <div className="h-4 bg-secondary rounded w-1/3" />
+                <div className="h-3 bg-muted rounded w-1/2" />
               </div>
             </div>
           </div>
@@ -125,7 +125,7 @@ export function UsuariosSection({
                 <span className="badge-warning">Primeiro acesso pendente</span>
               )}
               {getFuncionarioNome(u.id) && (
-                <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-slate-50 text-textMuted border border-slate-200">
+                <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-muted text-textMuted border border-border">
                   Vínculo: {getFuncionarioNome(u.id)}
                 </span>
               )}
@@ -135,7 +135,7 @@ export function UsuariosSection({
               {pode('usuarios:atualizar') && (
                 <button
                   onClick={() => openEdit(u)}
-                  className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
+                  className="text-xs px-3 py-2 rounded-lg border border-border hover:bg-muted text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
                 >
                   <Pencil className="size-3.5" aria-hidden="true" /> Editar
                 </button>
@@ -143,7 +143,7 @@ export function UsuariosSection({
               {pode('usuarios:redefinir_senha') && (
                 <button
                   onClick={() => openReset(u)}
-                  className="text-xs px-3 py-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
+                  className="text-xs px-3 py-2 rounded-lg border border-border hover:bg-muted text-textMuted min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
                 >
                   <KeyRound className="size-3.5" aria-hidden="true" /> Resetar senha
                 </button>
@@ -151,7 +151,7 @@ export function UsuariosSection({
               {u.ativo && pode('usuarios:inativar') && (
                 <button
                   onClick={() => onRevogarAcesso(u)}
-                  className="text-xs px-3 py-2 rounded-lg border border-red-200 hover:bg-red-50 text-danger min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
+                  className="text-xs px-3 py-2 rounded-lg border border-critico/30 hover:bg-critico-soft text-danger min-h-[44px] min-w-[44px] flex items-center justify-center gap-1.5"
                 >
                   <Ban className="size-3.5" aria-hidden="true" /> Revogar acesso
                 </button>
@@ -181,7 +181,7 @@ export function UsuariosSection({
             <input className="input mt-1" value={selectedUser?.email || ''} disabled />
             <p className="text-xs text-textMuted mt-1">E-mail não pode ser alterado</p>
           </div>
-          {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+          {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
           <div className="flex gap-3">
             <button type="button" onClick={() => setEditModalOpen(false)} className="btn-secondary flex-1">Cancelar</button>
             <button onClick={handleEditSave} className="btn-primary flex-1" disabled={saving || !editName.trim()}>
@@ -196,15 +196,15 @@ export function UsuariosSection({
         {senhaTemp ? (
           <div className="space-y-4">
             <div className="text-center">
-              <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-                <CheckCircle2 className="size-7 text-emerald-700" aria-hidden="true" />
+              <div className="w-14 h-14 rounded-full bg-accent flex items-center justify-center mx-auto mb-3">
+                <CheckCircle2 className="size-7 text-primary" aria-hidden="true" />
               </div>
               <h4 className="font-semibold text-textMain">Senha redefinida</h4>
               <p className="text-sm text-textMuted mt-1">Nova senha temporária para {selectedUser?.nome}:</p>
             </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <div className="bg-muted border border-border rounded-xl p-4">
               <label className="text-xs text-textMuted font-medium">Senha temporária</label>
-              <div className="mt-1 p-3 bg-white rounded-lg border border-slate-200 font-mono text-sm break-all select-all">
+              <div className="mt-1 p-3 bg-card rounded-lg border border-border font-mono text-sm break-all select-all">
                 {senhaTemp}
               </div>
             </div>
@@ -215,13 +215,13 @@ export function UsuariosSection({
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="p-3 rounded-xl bg-orange-50 border border-orange-200">
+            <div className="p-3 rounded-xl bg-alerta-soft border border-alerta/30">
               <p className="text-sm text-textMuted">
                 Uma nova senha temporária será gerada para <strong>{selectedUser?.nome}</strong>.
                 As sessões atuais do usuário serão encerradas.
               </p>
             </div>
-            {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+            {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
             <div className="flex gap-3">
               <button type="button" onClick={() => setResetModalOpen(false)} className="btn-secondary flex-1">Cancelar</button>
               <button onClick={handleReset} className="btn-primary flex-1" disabled={saving}>

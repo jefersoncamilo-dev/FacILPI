@@ -10,7 +10,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import func, select, text
 
-from .test_d3_admissao_migration import _migrate, _ref
+from .test_d3_admissao_migration import _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from .test_d3_admissao import _client
 from .test_d2_rotina import _headers, _new_id
 from .test_operacao_escala import GESTOR, _ilpi_com_area, _ok, _template, _usuario
@@ -22,7 +23,7 @@ HEAD = "025_escala_planejada"
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def planejada_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    migrar_de_modelo(_url(ref), HEAD)
     return ref
 
 

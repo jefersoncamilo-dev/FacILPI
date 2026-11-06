@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
 import { CheckCircle2, Paperclip, TriangleAlert } from 'lucide-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { formatDate, formatDateTime, mensagemDeErro } from '../services/api'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 // `GET /residentes/` já tem um consumidor tipado; duplicar a função criaria uma
@@ -56,6 +56,13 @@ export function Documentos() {
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
   const residenteId = searchParams.get(PARAM_RESIDENTE) ?? TODOS
+  // M5 (#177): `?id=` destaca o documento (destino dos alertas); trocar o filtro o descarta.
+  const destacado = searchParams.get('id')
+  useEffect(() => {
+    if (destacado && documentos.some(d => d.id === destacado)) {
+      document.getElementById(`documento-${destacado}`)?.scrollIntoView?.({ block: 'center' })
+    }
+  }, [destacado, documentos])
 
   const [cadastrando, setCadastrando] = useAberturaPorParametro('novo')
   const [documentoParaAnexo, setDocumentoParaAnexo] = useState<Documento | null>(null)
@@ -150,7 +157,7 @@ export function Documentos() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Documentos</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Documentos</h1>
           <p className="text-sm text-muted-foreground">Documentação do residente, com arquivo anexado e validade</p>
         </div>
         {!semPermissaoCriar && (
@@ -232,7 +239,7 @@ export function Documentos() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-2 size-9 text-orange-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-2 size-9 text-alerta-forte" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
@@ -248,10 +255,15 @@ export function Documentos() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {documentos.map(documento => (
-            <article key={documento.id} className="card min-w-0">
+            <article
+              key={documento.id}
+              id={`documento-${documento.id}`}
+              aria-current={documento.id === destacado ? 'true' : undefined}
+              className={`card min-w-0${documento.id === destacado ? ' ring-2 ring-primary' : ''}`}
+            >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-semibold break-words">{documento.tipo}</div>
+                  <div className="font-semibold wrap-break-word">{documento.tipo}</div>
                   <div className="text-xs text-textMuted truncate">
                     {nomes[documento.residente_id ?? ''] || documento.residente_id || '—'}
                   </div>
@@ -266,7 +278,7 @@ export function Documentos() {
                 {documento.numero && (
                   <div className="flex gap-2">
                     <dt className="text-textMuted">Número:</dt>
-                    <dd className="font-medium break-words">{documento.numero}</dd>
+                    <dd className="font-medium wrap-break-word">{documento.numero}</dd>
                   </div>
                 )}
                 {documento.validade && (
@@ -280,7 +292,7 @@ export function Documentos() {
                 {documento.responsavel_envio && (
                   <div className="flex gap-2">
                     <dt className="text-textMuted">Envio:</dt>
-                    <dd className="font-medium break-words">{documento.responsavel_envio}</dd>
+                    <dd className="font-medium wrap-break-word">{documento.responsavel_envio}</dd>
                   </div>
                 )}
               </dl>
@@ -300,7 +312,7 @@ export function Documentos() {
 
               {documento.arquivo_presente ? (
                 <div className="mt-3 space-y-2">
-                  <p className="text-sm text-textMuted break-words">
+                  <p className="text-sm text-textMuted wrap-break-word">
                     <Paperclip className="mr-1 inline size-4 align-[-2px]" aria-hidden="true" />{documento.arquivo_nome_original || 'Arquivo anexado'}
                     {documento.arquivo_tamanho != null && <> — {formatarTamanho(documento.arquivo_tamanho)}</>}
                   </p>

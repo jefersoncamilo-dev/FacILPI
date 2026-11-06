@@ -22,7 +22,7 @@
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		# SEC-02: CSP medida contra o build real (ver o comentario no fim do arquivo).
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
 		Permissions-Policy "camera=(), geolocation=(), microphone=(self)"
 		# O servidor nao precisa anunciar o que e.
 		-Server
@@ -48,8 +48,8 @@
 #   tempo de execucao ao abrir dialogos. Estilo inline nao executa codigo; o
 #   que protege o token e script-src sem 'unsafe-inline'.
 # - Google Fonts: CSS em fonts.googleapis.com, arquivos em fonts.gstatic.com.
-# - img-src data: https:: a foto do residente e texto livre aceito so como
-#   data:image ou https (AvatarResidente); outras origens nao sao chamadas.
+# - img-src 'self' data:: a foto do residente (AvatarResidente) e aceita so
+#   como data:image; nenhuma tela carrega imagem de origem externa (N7, #206).
 # - connect-src 'self': a API e same-origin (/api) e o ditado nao usa rede.
 # - Download de anexo usa link blob:, que a CSP nao restringe.
 # - microphone=(self): o ditado (UX-01D) precisa do microfone na propria origem.

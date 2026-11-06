@@ -15,6 +15,8 @@ from . import schemas as s
 from .audit import add_audit
 from .auth import (
     REFRESH_COOKIE_NAME,
+    clear_access_cookies,
+    set_access_cookies,
     access_session_identity,
     access_session_identity_for_logout,
     check_rate_limit,
@@ -328,6 +330,7 @@ async def issue_session_response(
     scope: str | None = None,
     ilpi_id: str | None = None,
     perfil_id: str | None = None,
+    audit_acao: str | None = None,
 ) -> dict:
     context = await resolve_token_context(
         db,
@@ -348,6 +351,24 @@ async def issue_session_response(
     )
     access = create_access_token(user, sid=session_family, **context)
     set_refresh_cookie(response, refresh)
+    set_access_cookies(response, access)
+    if audit_acao:
+        # N3: o contexto auditado e o resolvido no servidor, nunca o pedido.
+        # Senha e tokens nao entram; a familia identifica a sessao sem segredo.
+        add_audit(
+            db,
+            acao=audit_acao,
+            entidade="users",
+            registro_id=user.id,
+            usuario_id=user.id,
+            ilpi_id=context["ilpi_id"],
+            valores_posteriores={
+                "scope": context["scope"],
+                "perfil_id": context["perfil_id"],
+                "sessao": session_family,
+            },
+            request=request,
+        )
     return {
         "access_token": access,
         "token_type": "bearer",
@@ -466,6 +487,7 @@ async def refresh_session(
     )
     await db.commit()
     set_refresh_cookie(response, refresh)
+    set_access_cookies(response, access)
     return {
         "access_token": access,
         "token_type": "bearer",
@@ -508,6 +530,7 @@ async def logout_session(
             )
             await db.commit()
         clear_refresh_cookie(response)
+        clear_access_cookies(response)
         return {"mensagem": "Sessão encerrada"}
 
     target_identity = access_identity or cookie_identity
@@ -527,6 +550,7 @@ async def logout_session(
             await db.commit()
 
     clear_refresh_cookie(response)
+    clear_access_cookies(response)
     return {"mensagem": "Sessão encerrada"}
 
 
@@ -609,6 +633,7 @@ async def selecionar_contexto(
         scope=payload.scope,
         ilpi_id=payload.ilpi_id,
         perfil_id=payload.perfil_id,
+        audit_acao="auth.contexto_selecionado",
     )
     await db.commit()
     return session_payload
@@ -1322,7 +1347,8 @@ async def vincular_usuario_funcionario(
         )
     ).scalar_one()
     if same_tenant == 0:
-        raise _http_error(status.HTTP_403_FORBIDDEN, "USER_TENANT_MISMATCH", "Usuário não pertence à ILPI")
+        # N4: mesmo 404 do id inexistente, para nao revelar usuario de outra ILPI.
+        raise _http_error(status.HTTP_404_NOT_FOUND, "USER_NOT_FOUND", "Usuário não encontrado")
     before = {"usuario_id": employee.usuario_id}
     employee.usuario_id = user.id
     add_audit(

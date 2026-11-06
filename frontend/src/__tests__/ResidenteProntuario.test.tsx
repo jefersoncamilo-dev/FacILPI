@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router'
 import { Residentes } from '../pages/Residentes'
 import { ResidenteProntuario } from '../pages/ResidenteProntuario'
 import { api } from '../services/api'
@@ -28,7 +28,8 @@ function evento(overrides: Partial<ProntuarioResponse['items'][number]> = {}) {
     residente_id: 'r1',
     ocorrido_em: new Date().toISOString(),
     registrado_em: new Date().toISOString(),
-    autor_id: 'Enf. Ana Lima',
+    autor_id: null,
+    autor_nome: 'Enf. Ana Lima',
     resumo: 'Avaliação funcional',
     situacao: null,
     estornado: false,
@@ -44,7 +45,7 @@ function evento(overrides: Partial<ProntuarioResponse['items'][number]> = {}) {
 
 function renderTela(idInicial = 'r1') {
   return render(
-    <MemoryRouter initialEntries={[`/residentes/${idInicial}`]}>
+    <MemoryRouter initialEntries={[`/residentes/${idInicial}?aba=linha-do-tempo`]}>
       <Routes>
         <Route path="/residentes" element={<Residentes />} />
         <Route path="/residentes/:id" element={<ResidenteProntuario />} />
@@ -184,34 +185,44 @@ describe('ResidenteProntuario', () => {
     expect(await screen.findByText('Substituído')).toBeTruthy()
   })
 
-  it('13. autor em texto livre é exibido como recebido', async () => {
+  it('13. autor exibido pelo nome resolvido no servidor', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({
-      data: { items: [evento({ autor_id: 'Enf. Ana Lima' })], next_cursor: null, has_more: false },
+      data: { items: [evento({ autor_id: null, autor_nome: 'Enf. Ana Lima' })], next_cursor: null, has_more: false },
     } as any)
     renderTela()
     expect(await screen.findByText('Enf. Ana Lima')).toBeTruthy()
   })
 
-  it('14. autor em UUID válido é exibido abreviado, com valor completo em title', async () => {
+  it('14. UUID do autor nunca aparece na tela, nem truncado', async () => {
     const uuid = 'f3a9c1d2-1234-4abc-9def-0123456789ab'
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({
-      data: { items: [evento({ autor_id: uuid })], next_cursor: null, has_more: false },
+      data: { items: [evento({ autor_id: uuid, autor_nome: 'Maria Souza' })], next_cursor: null, has_more: false },
     } as any)
-    renderTela()
-    const abreviado = await screen.findByTitle(uuid)
-    expect(abreviado.textContent).toBe('f3a9c1d2…')
+    const { container } = renderTela()
+    expect(await screen.findByText('Maria Souza')).toBeTruthy()
+    expect(container.textContent).not.toContain('f3a9c1d2')
+    expect(screen.queryByTitle(uuid)).toBeNull()
   })
 
-  it('15. link de evento sem tela de destino não é clicável', async () => {
+  it('15. link de tela é clicável; evento sem link não mostra aviso', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({
-      data: { items: [evento({ link: '/api/avaliacoes/ev1' })], next_cursor: null, has_more: false },
+      data: {
+        items: [
+          evento({ registro_id: 'p1', origem: 'pais', link: '/plano/p1' }),
+          evento({ registro_id: 'ev2', link: null }),
+        ],
+        next_cursor: null,
+        has_more: false,
+      },
     } as any)
     renderTela()
-    expect(await screen.findByText('Detalhe ainda não disponível')).toBeTruthy()
-    expect(screen.queryByRole('link', { name: /avaliacoes/i })).toBeNull()
+    const link = await screen.findByRole('link', { name: 'Ver detalhe' })
+    expect(link.getAttribute('href')).toBe('/plano/p1')
+    expect(screen.getAllByRole('link', { name: 'Ver detalhe' })).toHaveLength(1)
+    expect(screen.queryByText('Detalhe ainda não disponível')).toBeNull()
   })
 
   it('16. navegação Residentes → Prontuário ao clicar no card', async () => {
@@ -237,7 +248,7 @@ describe('ResidenteProntuario', () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
     render(
-      <MemoryRouter initialEntries={['/residentes/r1']}>
+      <MemoryRouter initialEntries={['/residentes/r1?aba=linha-do-tempo']}>
         <Routes>
           <Route path="/residentes" element={<div>TELA-RESIDENTES</div>} />
           <Route path="/residentes/:id" element={<ResidenteProntuario />} />
@@ -461,7 +472,7 @@ describe('ResidenteProntuario', () => {
     expect(voltar.className).toContain('items-center')
   })
 
-  it('28. inicial decorativa do cabecalho e marcada como aria-hidden', async () => {
+  it('28. avatar decorativo do cabecalho (AvatarResidente, M4) e marcado como aria-hidden', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
     const { container } = renderTela()
@@ -469,7 +480,7 @@ describe('ResidenteProntuario', () => {
     // O h1 continua acessivel: o avatar e irmao dele, nao ancestral.
     expect(await screen.findByRole('heading', { name: 'Maria da Silva' })).toBeTruthy()
     const avatar = container.querySelector('[aria-hidden="true"]')
-    expect(avatar?.textContent).toBe('M')
+    expect(avatar?.textContent).toBe('MS')
   })
 
   it('29. nome acessivel do card nao comeca com a inicial duplicada', async () => {

@@ -8,11 +8,11 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
-        neutral: 'border-border bg-muted text-slate-600',
-        brand: 'border-emerald-200 bg-brand-soft text-accent-foreground',
-        success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-        warning: 'border-orange-200 bg-orange-50 text-orange-800',
-        danger: 'border-red-200 bg-red-50 text-red-700',
+        neutral: 'border-border bg-muted text-muted-foreground',
+        brand: 'border-brand/30 bg-brand-soft text-accent-foreground',
+        success: 'border-brand/30 bg-accent text-primary',
+        warning: 'border-alerta/30 bg-alerta-soft text-alerta-forte',
+        danger: 'border-critico/30 bg-critico-soft text-critico-texto',
       },
     },
     defaultVariants: { variant: 'neutral' },
@@ -28,10 +28,10 @@ export function Badge({
 }
 
 const alertStyles = {
-  info: { box: 'border-sky-200 bg-sky-50 text-sky-900', icon: Info },
-  success: { box: 'border-emerald-200 bg-emerald-50 text-emerald-900', icon: CheckCircle2 },
-  warning: { box: 'border-orange-200 bg-orange-50 text-orange-900', icon: TriangleAlert },
-  error: { box: 'border-red-200 bg-red-50 text-red-800', icon: AlertCircle },
+  info: { box: 'border-info/30 bg-info-soft text-info', icon: Info },
+  success: { box: 'border-brand/30 bg-accent text-brand-ink', icon: CheckCircle2 },
+  warning: { box: 'border-alerta/30 bg-alerta-soft text-alerta-forte', icon: TriangleAlert },
+  error: { box: 'border-critico/30 bg-critico-soft text-critico-texto', icon: AlertCircle },
 } satisfies Record<string, { box: string; icon: LucideIcon }>
 
 /**
@@ -65,5 +65,5 @@ export function Alert({
 }
 
 export function Skeleton({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div aria-hidden="true" className={cn('animate-pulse rounded-md bg-slate-200/70', className)} {...props} />
+  return <div aria-hidden="true" className={cn('animate-pulse rounded-md bg-secondary/70', className)} {...props} />
 }

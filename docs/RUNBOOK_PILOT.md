@@ -88,6 +88,12 @@ docker compose up -d
 docker compose ps             # os quatro serviços saudáveis
 ```
 
+> **Um worker só (#211).** O rate limit de login fica na memória do processo do
+> backend. Por isso o backend recusa subir se `WEB_CONCURRENCY` ou `--workers`
+> pedir mais de 1 worker. Se o backend reiniciar em loop com
+> `RuntimeError: ... workers pedidos`, remova essa configuração. Escalar para
+> vários workers exige antes um armazenamento compartilhado para o limite.
+
 ## 5. BOOTSTRAP
 
 Uma única vez por banco. Cria o operador da plataforma (`platform_superuser`).

@@ -23,7 +23,7 @@ export function ContextSwitcher({ compact = false }: { compact?: boolean }) {
   // Troca pendente: seletor bloqueado até a definição da nova senha.
   if (requiresPasswordChange) {
     return (
-      <div className="flex items-center gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs text-orange-800">
+      <div className="flex items-center gap-2 rounded-lg border border-alerta/30 bg-alerta-soft px-3 py-2.5 text-xs text-alerta-forte">
         <Lock className="size-4 shrink-0" aria-hidden="true" /> Defina sua nova senha para escolher o contexto.
       </div>
     )

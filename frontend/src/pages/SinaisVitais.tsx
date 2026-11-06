@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { TriangleAlert } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'
@@ -86,7 +86,7 @@ export function SinaisVitais() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Sinais Vitais</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Sinais Vitais</h1>
           <p className="text-textMuted text-sm">Temperatura, pressão, frequências, saturação, glicemia e peso</p>
         </div>
         {/* UX-05: só para quem pode registrar; o 403 segue como defesa. */}
@@ -153,7 +153,7 @@ export function SinaisVitais() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
@@ -178,13 +178,13 @@ export function SinaisVitais() {
               </div>
               <ul className="mt-3 flex flex-wrap gap-2">
                 {sinaisMedidos(registro).map(medido => (
-                  <li key={medido.label} className="px-2.5 py-1 bg-slate-100 rounded-full text-xs">
+                  <li key={medido.label} className="px-2.5 py-1 bg-muted rounded-full text-xs">
                     <span className="text-textMuted">{medido.label}:</span> <span className="font-semibold">{medido.texto}</span>
                   </li>
                 ))}
               </ul>
               {registro.observacao && (
-                <p className="mt-3 text-sm text-textMuted break-words">{registro.observacao}</p>
+                <p className="mt-3 text-sm text-textMuted wrap-break-word">{registro.observacao}</p>
               )}
               <p className="mt-3 text-xs text-textMuted">Registrado por {registro.profissional || '—'}</p>
             </article>

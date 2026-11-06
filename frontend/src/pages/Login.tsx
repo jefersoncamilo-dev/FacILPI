@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { mensagemDeErro } from '../services/api'
@@ -101,7 +101,7 @@ export function Login() {
       <AuthLayout>
         <div className="space-y-6">
           <div className="space-y-1.5">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Escolha o contexto</h1>
+            <h1 className="font-display text-titulo-tela text-brand-ink">Escolha o contexto</h1>
             <p className="text-sm text-muted-foreground">
               Sua conta possui mais de um contexto. Selecione onde deseja operar agora.
             </p>
@@ -122,7 +122,7 @@ export function Login() {
     <AuthLayout>
       <div className="space-y-7">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[1.75rem]">Boas-vindas</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Boas-vindas</h1>
           <p className="text-sm text-muted-foreground">Entre com o seu e-mail e senha para continuar.</p>
         </div>
 

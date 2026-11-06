@@ -15,7 +15,8 @@ from .test_alertas_gestor import _agora
 from .test_alertas_operacionais import _institucional
 from .test_d2_rotina import _create_funcionario, _create_ilpi_user, _headers, _new_id, _prog_payload, _setup_pais_vigente
 from .test_d3_admissao import _client
-from .test_d3_admissao_migration import _migrate, _ref
+from .test_d3_admissao_migration import _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from .test_operacao_escala import GESTOR, _ilpi_com_area, _ok
 from src.infrastructure import models as m
 
@@ -26,7 +27,7 @@ URL = "/api/passagens"
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def passagem_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
+    migrar_de_modelo(_url(ref), ESQUEMA_DOS_MODELOS)
     return ref
 
 

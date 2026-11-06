@@ -28,6 +28,7 @@ OFFICIAL_DB = ROOT / "storage" / "app.db"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from tests.banco_modelo import migrar_de_modelo
 from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application import fase3a  # noqa: E402
@@ -78,14 +79,7 @@ def _run_migration(ref) -> None:
     else:
         _assert_disposable_postgres(ref)
     url = _database_url(ref)
-    env = os.environ.copy()
-    env["DATABASE_URL"] = url
-    env.pop("APP_DATABASE_URL", None)
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "-x", f"database_url={url}", "upgrade", "head"],
-        cwd=BACKEND, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+    migrar_de_modelo(url)
 
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("S1_TEST_POSTGRES_URL") else []))
@@ -228,7 +222,8 @@ def test_01_templates_e_baseline(s1_db):
         # 85 (S.1) -> 92 (D.3) -> 93 (documentos:validar/017) -> 94 (documentos:anexar/018)
         # -> 95 (alertas:ler/022, #107) -> 98 (escala:ler/gerenciar, plantao:registrar/024, #120)
         # -> 99 (alertas:assumir/026, #123) -> 101 (passagem_plantao:ler/registrar/027, #125)
-        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 101
+        # -> 103 (residentes:registrar_saida/estornar_saida/030, #171)
+        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 103
         templates = (await db.execute(select(m.Perfil).where(
             m.Perfil.ilpi_id.is_(None), m.Perfil.chave.in_(
                 ["cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"])))).scalars().all()
@@ -436,10 +431,12 @@ def test_07_enfermagem_medica_medico(s1_db):
             "inicio": "2026-09-01"}, headers=hm)
         assert r.status_code == 201, r.text
         presc_id = r.json()["id"]
+        # D1 (M10, migration 031): enfermagem transcreve receita externa (prescricoes:criar);
+        # antes da 031 o esperado era 403.
         assert (await client.post("/api/prescricoes/", json={
-            "residente_id": res.id, "medicamento_id": med_id, "prescritor_nome": "Enf",
-            "prescritor_categoria": "Enfermeiro", "dose": "1", "unidade": "cp", "via": "oral",
-            "inicio": "2026-09-01"}, headers=he)).status_code == 403
+            "residente_id": res.id, "medicamento_id": med_id, "prescritor_nome": "Dr Externo",
+            "prescritor_categoria": "Medico", "dose": "1", "unidade": "cp", "via": "oral",
+            "inicio": "2026-09-01"}, headers=he)).status_code == 201
         inicio = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
         r = await client.post(f"/api/prescricoes/{presc_id}/ativar", json={
             "horarios": ["08:00"], "timezone": "America/Sao_Paulo", "vigencia_inicio": inicio}, headers=ha)

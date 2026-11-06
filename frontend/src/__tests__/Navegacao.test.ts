@@ -38,7 +38,7 @@ describe('UX-00A — modelo de navegação', () => {
       m.tipo === 'link' ? [m.to] : m.itens.flatMap(i => (i.status === 'ativo' ? [i.to] : [])),
     )
     expect(destinos.sort()).toEqual([
-      '/', '/admissoes', '/alertas', '/avaliacoes', '/documentos', '/equipe', '/escala',
+      '/', '/admissoes', '/alertas', '/avaliacoes', '/cuidados', '/documentos', '/equipe', '/escala',
       '/intercorrencias', '/passagem', '/plano', '/plantao', '/quartos', '/residentes', '/sinais',
     ])
   })
@@ -50,7 +50,6 @@ describe('UX-00A — modelo de navegação', () => {
       for (const item of itensVisiveis(modulo, tudo)) expect(item.status).toBe('ativo')
     }
     expect(itensVisiveis(grupo('residentes'), tudo).map(i => i.id)).not.toContain('estoque')
-    expect(itensVisiveis(grupo('assistencial'), tudo).map(i => i.id)).not.toContain('cuidados')
     expect(itensVisiveis(grupo('farmacia'), tudo)).toEqual([])
   })
 

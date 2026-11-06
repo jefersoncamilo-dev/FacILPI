@@ -10,7 +10,8 @@ import os
 import pytest
 from sqlalchemy import select, text
 
-from .test_d3_admissao_migration import _migrate, _ref
+from .test_d3_admissao_migration import _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from .test_d3_admissao import ALL, DOMAIN, _client
 from .test_d2_rotina import (
     _create_ilpi_user, _create_residente, _headers, _new_id, _new_institution, _code,
@@ -35,7 +36,7 @@ def d1_db(request, tmp_path):
     # ponta movel faria este teste quebrar na proxima migration, como a 020
     # acabou de fazer com a suite da B1.
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    migrar_de_modelo(_url(ref), HEAD)
     return ref
 
 
@@ -167,7 +168,8 @@ def test_sem_documentos_ler_segue_403_antes_de_validar_residente(d1_db):
 
 
 def test_demais_roteadores_da_factory_seguem_sem_o_parametro(d1_db):
-    """A factory e compartilhada: so documentos expoe residente_id.
+    """A factory e compartilhada: so documentos e familiares (M13, #194) expoem
+    residente_id.
 
     Nos demais o parametro continua sendo IGNORADO, como antes da D1 — nao pode
     virar erro, que seria quebra silenciosa de contrato fora do escopo.
@@ -175,11 +177,12 @@ def test_demais_roteadores_da_factory_seguem_sem_o_parametro(d1_db):
     async def cenario(client, db):
         _, _, residente, headers = await _tenant(db)
 
-        parametros = {p["name"] for p in
-                      main.app.openapi()["paths"][DOCUMENTOS_URL]["get"].get("parameters", [])}
-        assert "residente_id" in parametros
+        for rota in (DOCUMENTOS_URL, "/api/familiares/"):
+            parametros = {p["name"] for p in
+                          main.app.openapi()["paths"][rota]["get"].get("parameters", [])}
+            assert "residente_id" in parametros, f"{rota} deveria expor residente_id"
 
-        for rota in ("/api/residentes/", "/api/familiares/", "/api/tarefas/", "/api/alertas/"):
+        for rota in ("/api/residentes/", "/api/tarefas/", "/api/alertas/"):
             nomes = {p["name"] for p in
                      main.app.openapi()["paths"][rota]["get"].get("parameters", [])}
             assert "residente_id" not in nomes, f"{rota} nao deveria expor residente_id"
@@ -255,8 +258,9 @@ def test_clone_local_preexistente_recebe_anexar(d1_db):
         chaves = {row[0] for row in (await db.execute(text(
             "SELECT p.chave FROM permissoes p JOIN perfil_permissoes pp ON pp.permissao_id = p.id "
             "WHERE pp.perfil_id = :p"), {"p": perfil_id})).all()}
-        # Em head a 023 (#117) e a 026 (#123) tambem alcancam o clone preexistente.
-        assert chaves == {"documentos:anexar", "alertas:ler", "alertas:assumir"}
+        # Em head a 023 (#117), a 026 (#123) e a 030 (#171, saida do residente para o
+        # Administrativo) tambem alcancam o clone preexistente.
+        assert chaves == {"documentos:anexar", "alertas:ler", "alertas:assumir", "residentes:registrar_saida"}
     asyncio.run(_client(d1_db, conferir))
 
 

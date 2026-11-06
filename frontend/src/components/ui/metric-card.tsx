@@ -12,8 +12,8 @@ export type TomIndicador = 'normal' | 'alerta' | 'critico' | 'neutro'
 
 const TONS: Record<TomIndicador, { icone: string; valor: string }> = {
   normal: { icone: 'bg-brand-soft text-brand-strong', valor: 'text-primary' },
-  alerta: { icone: 'bg-orange-50 text-alerta', valor: 'text-alerta-forte' },
-  critico: { icone: 'bg-red-50 text-critico', valor: 'text-red-700' },
+  alerta: { icone: 'bg-alerta-soft text-alerta', valor: 'text-alerta-forte' },
+  critico: { icone: 'bg-critico-soft text-critico', valor: 'text-critico-texto' },
   neutro: { icone: 'bg-muted text-muted-foreground', valor: 'text-foreground' },
 }
 
@@ -43,7 +43,7 @@ export function MetricCard({
 }) {
   const cores = TONS[tom]
   return (
-    <div data-tom={tom} className="flex flex-col rounded-card border border-border bg-card p-4 shadow-card transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5">
+    <div data-tom={tom} className="flex flex-col glass rounded-card p-4 transition duration-150 hover:-translate-y-0.5 hover:shadow-cardHover motion-reduce:transition-none motion-reduce:hover:translate-y-0 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <p className="text-sm font-medium text-muted-foreground">{titulo}</p>
         <span className={cn('inline-flex size-9 shrink-0 items-center justify-center rounded-lg', cores.icone)}>

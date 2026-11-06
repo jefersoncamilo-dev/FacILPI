@@ -1,47 +1,417 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@plugin 'tailwindcss-animate';
+
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-brand: hsl(var(--brand));
+  --color-brand-strong: hsl(var(--brand-strong));
+  --color-brand-soft: hsl(var(--brand-soft));
+  --color-brand-ink: hsl(var(--brand-ink));
+
+  --color-alerta: hsl(var(--alerta));
+  --color-alerta-forte: hsl(var(--alerta-forte));
+
+  --color-critico: hsl(var(--critico));
+  --color-critico-texto: hsl(var(--critico-texto));
+  --color-primaryDeep: hsl(var(--foreground));
+  --color-primaryLight: hsl(var(--brand-soft));
+  --color-bg: hsl(var(--background));
+  --color-surface: hsl(var(--card));
+  --color-textMain: hsl(var(--foreground));
+  --color-textMuted: hsl(var(--muted-foreground));
+  --color-success: hsl(var(--primary));
+  --color-warning: hsl(var(--alerta-forte));
+  --color-danger: hsl(var(--critico-texto));
+
+  --color-avatar: hsl(var(--avatar));
+  --color-avatar-foreground: hsl(var(--avatar-foreground));
+
+  --color-alerta-soft: hsl(var(--alerta-soft));
+  --color-critico-soft: hsl(var(--critico-soft));
+
+  --color-info: hsl(var(--info));
+  --color-info-soft: hsl(var(--info-soft));
+
+  --color-brand-light: hsl(var(--brand-light));
+  --color-background-desktop: hsl(var(--background-desktop));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-card: var(--radius-card);
+  --radius-icon: var(--radius-icon);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-cardHover: 0 14px 32px rgba(11, 49, 45, 0.12);
+  --shadow-icon: var(--shadow-icon);
+  --shadow-search: var(--shadow-search);
+  --shadow-glass: var(--shadow-glass);
+
+  --background-image-side: var(--gradient-side);
+  --background-image-highlight: var(--gradient-highlight);
+
+  --font-sans: Inter, system-ui, -apple-system, sans-serif;
+  --font-display: Poppins, Inter, sans-serif;
+
+  --text-titulo-tela: 28px;
+  --text-titulo-tela--line-height: 34px;
+  --text-titulo-tela--letter-spacing: -0.02em;
+  --text-titulo-tela--font-weight: 600;
+  --text-titulo-secao: 18px;
+  --text-titulo-secao--line-height: 24px;
+  --text-titulo-secao--letter-spacing: -0.01em;
+  --text-titulo-secao--font-weight: 600;
+  --text-titulo-cartao: 17px;
+  --text-titulo-cartao--line-height: 24px;
+  --text-titulo-cartao--letter-spacing: -0.01em;
+  --text-titulo-cartao--font-weight: 600;
+  --text-numero-destaque: 32px;
+  --text-numero-destaque--line-height: 36px;
+  --text-numero-destaque--letter-spacing: -0.02em;
+  --text-numero-destaque--font-weight: 600;
+  --text-corpo: 17px;
+  --text-corpo--line-height: 26px;
+  --text-corpo-forte: 17px;
+  --text-corpo-forte--line-height: 24px;
+  --text-corpo-forte--letter-spacing: -0.005em;
+  --text-corpo-forte--font-weight: 600;
+  --text-apoio: 15px;
+  --text-apoio--line-height: 22px;
+  --text-rotulo: 13px;
+  --text-rotulo--line-height: 18px;
+  --text-rotulo--letter-spacing: 0.01em;
+  --text-rotulo--font-weight: 600;
+  --text-botao: 17px;
+  --text-botao--line-height: 22px;
+  --text-botao--font-weight: 600;
+  --text-navegacao: 12px;
+  --text-navegacao--line-height: 16px;
+  --text-navegacao--letter-spacing: 0.01em;
+  --text-navegacao--font-weight: 500;
+}
 
 /*
- * UX-01 (#83) — identidade FacILPI "Haze Esmeralda".
- * Canvas #F8FAFC, neutros amplos, esmeralda para identidade, acao e selecao.
- * `--primary` e o esmeralda -700 (#047857): texto branco sobre ele passa AA;
- * #10B981 e #059669 ficam para marca, foco e superficies grandes.
- *
- * UX-11 (#101) — Design System coeso: texto principal #1E293B; atencao em
- * laranja (#EA580C para icones/numeros, #C2410C para preenchido com texto
- * branco, AA) e critico em vermelho (#DC2626). Amarelo/ambar nao sinaliza
- * alerta de prioridade.
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+}
+
+/* Vidro: componentes de superfície. Celular simples, economia de energia ou pedido de menos transparência:
+   cai para superfície sólida (mesmo layout, sem desfoque). */
+
+@layer components {
+.glass,
+.card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    background: hsl(var(--card));
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  /* Ligado pelo app quando o aparelho é fraco (ex.: navigator.hardwareConcurrency <= 4 ou deviceMemory <= 2)
+     ou quando o usuário escolhe "Visual simples" nas preferências. */
+  :root[data-visual='simples'] & {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+}
+
+@layer components {
+.glass-strong {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    background: hsl(var(--card));
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  :root[data-visual='simples'] & {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+}
+
+@layer components {
+.bg-aurora {
+  background-color: hsl(var(--background));
+  background-image: var(--aurora);
+  background-attachment: fixed;
+  @media (prefers-reduced-transparency: reduce) {
+    background-image: none;
+  }
+  :root[data-visual='simples'] & {
+    background-image: none;
+  }
+}
+}
+
+/* Classes das telas existentes, na nova identidade. Componentes novos usam
+   as primitivas de components/ui. */
+
+@layer components {
+.card {
+  @apply text-card-foreground rounded-card p-5;
+}
+}
+
+@layer components {
+.btn-primary {
+  @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60;
+}
+}
+
+@layer components {
+.btn-secondary {
+  @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted active:bg-secondary active:scale-[.98] transition min-h-[44px];
+}
+}
+
+@layer components {
+.btn-alerta {
+  /* Acao que pede atencao (ex.: registrar intercorrencia): preenchida, AA. */
+  @apply bg-alerta-forte text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-alerta-forte/90 active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60;
+}
+}
+
+@layer components {
+.input {
+  @apply w-full rounded-lg border border-input bg-card px-4 py-3 text-[16px] placeholder:text-muted-foreground focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-brand-strong;
+}
+}
+
+@layer components {
+.badge-success {
+  @apply bg-accent text-primary border border-brand/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1;
+}
+}
+
+@layer components {
+.badge-warning {
+  @apply bg-alerta-soft text-alerta-forte border border-alerta/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1;
+}
+}
+
+@layer components {
+.badge-danger {
+  @apply bg-critico-soft text-critico-texto border border-critico/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1;
+}
+}
+
+/*
+ * Onda 5 (#213) — identidade "futurista": petróleo/verde-água, vidro fosco
+ * sobre fundo aurora, tema claro/escuro/automático. Valores de
+ * design/tokens-onda5/index.tokens.css (29/10/2026). Contraste AA conferido
+ * por src/__tests__/contrasteTokens.test.ts.
+ * Laranja (--alerta) só em faixas e ícones; texto de atenção usa --alerta-forte.
  */
 @layer base {
   :root {
-    --background: 210 40% 98%;
-    --foreground: 217 33% 17%;
-    --card: 0 0% 100%;
-    --card-foreground: 217 33% 17%;
-    --primary: 163 94% 24%;
+    --background: 165 29% 86%; /* fundo do app no celular */
+    --background-desktop: 168 17% 94%; /* fundo do painel no computador (NOVO) */
+    --foreground: 174 63% 12%; /* texto principal */
+    --card: 165 33% 98%; /* cartões */
+    --card-foreground: 174 63% 12%;
+    --primary: 173 67% 18%; /* botões, links, ícone ativo */
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 217 33% 17%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 152 81% 96%;
-    --accent-foreground: 163 88% 20%;
-    --destructive: 0 72% 51%;
+    --secondary: 165 26% 91%; /* controle segmentado, busca no computador */
+    --secondary-foreground: 174 63% 12%;
+    --muted: 168 23% 91%; /* chips neutros */
+    --muted-foreground: 169 15% 36%; /* texto secundário */
+    --accent: 164 37% 90%; /* fundo suave, blocos de ícone dentro de cartões */
+    --accent-foreground: 174 63% 12%;
+    --destructive: 0 71% 45%; /* crítico */
     --destructive-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 213 27% 84%;
-    --ring: 160 84% 39%;
-    --brand: 160 84% 39%;
-    --brand-strong: 161 94% 30%;
-    --brand-soft: 152 81% 96%;
-    --brand-ink: 164 86% 16%;
-    --alerta: 21 90% 48%;
-    --alerta-forte: 17 88% 40%;
-    --critico: 0 72% 51%;
-    --radius: 0.75rem;
+    --border: 166 26% 83%; /* bordas (uso mínimo: cartões não têm borda) */
+    --input: 169 12% 55%; /* borda de campos */
+    --ring: 170 78% 36%; /* foco */
+    --brand: 170 78% 36%; /* destaque verde-água */
+    --brand-strong: 172 55% 27%; /* cartão de destaque, início do degradê */
+    --brand-soft: 164 37% 90%;
+    --brand-ink: 174 63% 12%; /* títulos de tela e seção */
+    --brand-light: 170 42% 51%; /* fim de degradês (NOVO) */
+    --alerta: 32 95% 44%; /* atenção: SÓ faixas e ícones */
+    --alerta-forte: 26 90% 37%; /* atenção em TEXTO */
+    --alerta-soft: 48 96% 89%; /* fundo de chip de atenção (NOVO) */
+    --critico: 0 71% 45%; /* crítico */
+    --critico-texto: 0 71% 45%; /* crítico em texto (NOVO) */
+    --critico-soft: 0 81% 96%; /* fundo de alerta crítico (NOVO) */
+    --info: 224 76% 48%; /* informativo (NOVO) */
+    --info-soft: 218 92% 95%; /* (NOVO) */
+    --avatar: 170 16% 36%; /* fundo das iniciais (NOVO) */
+    --avatar-foreground: 0 0% 100%; /* (NOVO) */
+    --radius: 0.75rem;          /* 12 px: botões e campos (mantém o padrão shadcn do projeto) */
+    --radius-card: 1.25rem;     /* 20 px: cartões (Figma radius/lg) (NOVO) */
+    --radius-icon: 1.125rem;    /* 18 px: blocos das ações rápidas (NOVO) */
+    --shadow-card: 0 10px 25px rgba(11, 49, 45, 0.08);
+    --shadow-icon: 0 6px 16px rgba(11, 49, 45, 0.12);
+    --shadow-search: 0 4px 12px rgba(11, 49, 45, 0.04);
+    --gradient-side: linear-gradient(160deg, #165E52 0%, #0D453D 55%, #0B3630 100%);
+    --gradient-highlight: linear-gradient(135deg, rgba(15, 76, 69, 0.88) 0%, rgba(20, 163, 139, 0.78) 100%);
+    /* Direção futurista (vidro fosco + aurora), decidida em 29/10/2026 */
+    --glass-bg: rgba(255, 255, 255, 0.42);
+    --glass-bg-strong: rgba(255, 255, 255, 0.82);   /* folhas de formulário */
+    --glass-edge: rgba(255, 255, 255, 0.85);        /* borda de luz, 1px por dentro */
+    --glass-blur: 24px;
+    --shadow-glass: 0 12px 32px rgba(11, 49, 45, 0.10);
+    --aurora: radial-gradient(60% 50% at 95% 0%, rgba(20, 163, 139, 0.54) 0%, transparent 70%),
+              radial-gradient(65% 55% at 0% 45%, rgba(167, 199, 231, 0.9) 0%, transparent 70%),
+              radial-gradient(60% 50% at 70% 100%, rgba(110, 231, 200, 0.65) 0%, transparent 70%);
   }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --background: 174 46% 8%;
+      --background-desktop: 172 50% 6%;
+      --foreground: 168 37% 92%;
+      --card: 172 45% 13%;
+      --card-foreground: 168 37% 92%;
+      --primary: 169 57% 60%;
+      --primary-foreground: 173 74% 9%;
+      --secondary: 170 40% 15%;
+      --secondary-foreground: 168 37% 92%;
+      --muted: 170 37% 16%;
+      --muted-foreground: 168 17% 67%;
+      --accent: 171 49% 17%;
+      --accent-foreground: 168 61% 82%;
+      --destructive: 0 100% 74%;
+      --destructive-foreground: 173 74% 9%;
+      --border: 169 33% 20%;
+      --input: 169 20% 38%;
+      --ring: 170 63% 46%;
+      --brand: 170 63% 46%;
+      --brand-strong: 172 55% 27%;
+      --brand-soft: 171 49% 17%;
+      --brand-ink: 168 61% 82%;
+      --brand-light: 169 61% 69%;
+      --alerta: 40 90% 60%;
+      --alerta-forte: 46 97% 65%;
+      --alerta-soft: 43 57% 15%;
+      --critico: 0 100% 74%;
+      --critico-texto: 0 100% 77%;
+      --critico-soft: 358 44% 17%;
+      --info: 222 100% 81%;
+      --info-soft: 219 54% 20%;
+      --avatar: 171 22% 29%;
+      --avatar-foreground: 0 0% 100%;
+      --shadow-card: 0 10px 25px rgba(0, 0, 0, 0.35);
+      --gradient-side: linear-gradient(160deg, #10453D 0%, #061C19 100%);
+      --gradient-highlight: linear-gradient(135deg, #154F48 0%, #1F6B61 100%);
+      --glass-bg: rgba(18, 48, 44, 0.42);
+      --glass-bg-strong: rgba(18, 48, 44, 0.86);
+      --glass-edge: rgba(255, 255, 255, 0.16);
+      --shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.35);
+      --aurora: radial-gradient(60% 50% at 95% 0%, rgba(20, 163, 139, 0.65) 0%, transparent 70%),
+                radial-gradient(65% 55% at 0% 45%, rgba(43, 92, 138, 0.77) 0%, transparent 70%),
+                radial-gradient(60% 50% at 70% 100%, rgba(31, 107, 97, 0.9) 0%, transparent 70%);
+      color-scheme: dark;
+    }
+  }
+  /* .superficie-escura: ilha escura (menu lateral, barra do celular) nos dois temas. */
+  :root[data-theme="dark"], .superficie-escura {
+    --background: 174 46% 8%;
+    --background-desktop: 172 50% 6%;
+    --foreground: 168 37% 92%;
+    --card: 172 45% 13%;
+    --card-foreground: 168 37% 92%;
+    --primary: 169 57% 60%;
+    --primary-foreground: 173 74% 9%;
+    --secondary: 170 40% 15%;
+    --secondary-foreground: 168 37% 92%;
+    --muted: 170 37% 16%;
+    --muted-foreground: 168 17% 67%;
+    --accent: 171 49% 17%;
+    --accent-foreground: 168 61% 82%;
+    --destructive: 0 100% 74%;
+    --destructive-foreground: 173 74% 9%;
+    --border: 169 33% 20%;
+    --input: 169 20% 38%;
+    --ring: 170 63% 46%;
+    --brand: 170 63% 46%;
+    --brand-strong: 172 55% 27%;
+    --brand-soft: 171 49% 17%;
+    --brand-ink: 168 61% 82%;
+    --brand-light: 169 61% 69%;
+    --alerta: 40 90% 60%;
+    --alerta-forte: 46 97% 65%;
+    --alerta-soft: 43 57% 15%;
+    --critico: 0 100% 74%;
+    --critico-texto: 0 100% 77%;
+    --critico-soft: 358 44% 17%;
+    --info: 222 100% 81%;
+    --info-soft: 219 54% 20%;
+    --avatar: 171 22% 29%;
+    --avatar-foreground: 0 0% 100%;
+    --shadow-card: 0 10px 25px rgba(0, 0, 0, 0.35);
+    --gradient-side: linear-gradient(160deg, #10453D 0%, #061C19 100%);
+    --gradient-highlight: linear-gradient(135deg, #154F48 0%, #1F6B61 100%);
+    --glass-bg: rgba(18, 48, 44, 0.42);
+    --glass-bg-strong: rgba(18, 48, 44, 0.86);
+    --glass-edge: rgba(255, 255, 255, 0.16);
+    --shadow-glass: 0 12px 32px rgba(0, 0, 0, 0.35);
+    --aurora: radial-gradient(60% 50% at 95% 0%, rgba(20, 163, 139, 0.65) 0%, transparent 70%),
+            radial-gradient(65% 55% at 0% 45%, rgba(43, 92, 138, 0.77) 0%, transparent 70%),
+            radial-gradient(60% 50% at 70% 100%, rgba(31, 107, 97, 0.9) 0%, transparent 70%);
+    color-scheme: dark;
+  }
+}
 
+@layer base {
   body {
     @apply bg-background text-foreground antialiased;
   }
@@ -55,18 +425,4 @@
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
-}
-
-/* Classes das telas existentes, na nova identidade. Componentes novos usam
-   as primitivas de components/ui. */
-@layer components {
-  .card { @apply bg-card text-card-foreground rounded-card shadow-card p-5 border border-border; }
-  .btn-primary { @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60; }
-  .btn-secondary { @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted active:bg-slate-200 active:scale-[.98] transition min-h-[44px]; }
-  /* Acao que pede atencao (ex.: registrar intercorrencia): preenchida, AA. */
-  .btn-alerta { @apply bg-alerta-forte text-white rounded-lg px-5 py-3 font-semibold hover:bg-orange-800 active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60; }
-  .input { @apply w-full rounded-lg border border-input bg-card px-4 py-3 text-[16px] placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-brand-strong; }
-  .badge-success { @apply bg-emerald-50 text-emerald-800 border border-emerald-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
-  .badge-warning { @apply bg-amber-50 text-amber-800 border border-amber-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
-  .badge-danger { @apply bg-red-50 text-red-700 border border-red-200 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
 }

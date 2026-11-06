@@ -31,21 +31,21 @@ const PILARES = [
 function BannerFundo() {
   return (
     <>
-      <div className="absolute inset-0 bg-gradient-to-br from-brand-ink via-primary to-brand-strong" />
+      <div className="absolute inset-0 bg-side" />
       {/* Textura sutil e luzes difusas: acolhimento sem ruído visual. */}
       <div
         className="absolute inset-0 opacity-[0.07]"
         style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '22px 22px' }}
       />
-      <div className="absolute -right-24 -top-24 size-80 rounded-full bg-emerald-300/20 blur-3xl" />
-      <div className="absolute -bottom-32 -left-16 size-96 rounded-full bg-teal-200/10 blur-3xl" />
+      <div className="absolute -right-24 -top-24 size-80 rounded-full bg-brand-light/20 blur-3xl" />
+      <div className="absolute -bottom-32 -left-16 size-96 rounded-full bg-brand-light/10 blur-3xl" />
     </>
   )
 }
 
 export function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-card lg:grid lg:grid-cols-[55fr_45fr]">
+    <div className="bg-aurora min-h-screen lg:grid lg:grid-cols-[55fr_45fr]">
       {/* Desktop: painel visual */}
       <aside className="relative hidden overflow-hidden lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
         <BannerFundo />

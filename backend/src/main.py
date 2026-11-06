@@ -17,6 +17,7 @@ from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
 from .application.auth import (
+    assert_rate_limit_single_process,
     access_session_identity,
     check_rate_limit,
     clear_login_failures,
@@ -58,7 +59,9 @@ from .application.fase3a import (
     issue_session_response,
 )
 from .application.platform import platform_router
+from .application.transicao_clinica import platform_transicao_router, transicao_router
 from .application.prontuario import prontuario_router
+from .application.saida_residente import router as saida_residente_router
 from .application.dashboard import dashboard_router
 from .application.alertas import central_alertas_router
 from .application.operacao import escala_router, plantoes_router
@@ -152,6 +155,21 @@ async def register(request: Request):
         },
     )
 
+async def _audit_login_recusado(db: AsyncSession, request: Request, user, motivo: str) -> None:
+    # N3: login inexistente nao vira registro com o e-mail digitado (pode ser
+    # a senha colada no campo errado); so a conta real fica referenciada.
+    add_audit(
+        db,
+        acao="auth.login_recusado",
+        entidade="users" if user else None,
+        registro_id=user.id if user else None,
+        usuario_id=user.id if user else None,
+        valores_posteriores={"motivo": motivo},
+        request=request,
+    )
+    await db.commit()
+
+
 @auth_router.post("/token", response_model=s.TokenResponse)
 async def token(payload: s.UserLogin, request: Request, response: Response, db: AsyncSession = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
@@ -168,10 +186,12 @@ async def token(payload: s.UserLogin, request: Request, response: Response, db: 
         if not user or not verify_password(payload.password, user.password_hash):
             register_login_failure(login, reservation)
             reservation = ""
+            await _audit_login_recusado(db, request, user, "credenciais_invalidas")
             raise HTTPException(status_code=401, detail="Credenciais inválidas")
         if not user.ativo:
             release_login_reservation(login, reservation)
             reservation = ""
+            await _audit_login_recusado(db, request, user, "usuario_inativo")
             raise HTTPException(status_code=401, detail="Usuário inativo")
 
         # Credencial correta encerra a janela de falhas da conta. Erros posteriores
@@ -186,6 +206,7 @@ async def token(payload: s.UserLogin, request: Request, response: Response, db: 
             scope=payload.scope,
             ilpi_id=payload.ilpi_id,
             perfil_id=payload.perfil_id,
+            audit_acao="auth.login",
         )
         await db.commit()
         return session_payload
@@ -239,7 +260,7 @@ async def update_password(payload: s.PasswordUpdate, request: Request, db: Async
         entidade="users",
         registro_id=current_user.id,
         usuario_id=current_user.id,
-        valores_posteriores={"exige_troca_senha": False},
+        valores_posteriores={"exige_troca_senha": False, "primeiro_acesso": mandatory_change},
         request=request,
     )
     await db.commit()
@@ -550,6 +571,9 @@ familiares_router = make_crud_router(
         "id_field": "residente_id",
         "tenant_column": "instituicao_id",
     },
+    # M13 (#194): ?residente_id= para a secao do Resumo nao trazer familiares de
+    # outros residentes. Sem o parametro a resposta e identica a anterior.
+    parent_filter_param="residente_id",
 )
 # F5A-2C: Documentos do Residente protegido por RBAC + tenant (coluna
 # instituicao_id) + vínculo seguro com Residente (validado no POST;
@@ -577,7 +601,7 @@ documentos_router = make_crud_router(
         "id_field": "residente_id",
         "tenant_column": "instituicao_id",
     },
-    # D1: unico roteador da factory que expoe ?residente_id=. Sem o parametro a
+    # D1: expoe ?residente_id= (tambem em familiares, M13). Sem o parametro a
     # resposta e identica a anterior.
     parent_filter_param="residente_id",
 )
@@ -1496,6 +1520,8 @@ app.include_router(instituicoes_router, prefix="/api")
 app.include_router(onboarding_router, prefix="/api")
 # PLATFORM-1A: porta de provisionamento repetivel, separada do bootstrap acima.
 app.include_router(platform_router, prefix="/api")
+app.include_router(platform_transicao_router, prefix="/api")
+app.include_router(transicao_router, prefix="/api")
 app.include_router(usuarios_router, prefix="/api")
 app.include_router(funcionarios_router, prefix="/api")
 app.include_router(perfis_router, prefix="/api")
@@ -1524,6 +1550,7 @@ app.include_router(quartos_leitos_router, prefix="/api")
 app.include_router(ausencias_router, prefix="/api")
 app.include_router(ocupacao_historico_router, prefix="/api")
 app.include_router(prontuario_router, prefix="/api")
+app.include_router(saida_residente_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 # #107: alertas derivados (projecao). /api/alertas/ legado segue fail_closed.
 app.include_router(central_alertas_router, prefix="/api")
@@ -1544,6 +1571,8 @@ ALLOW_CREATE_ALL = os.getenv("ALLOW_CREATE_ALL", "false").lower() == "true"
 
 @app.on_event("startup")
 async def on_startup():
+    # #211: falha cedo se houver mais de 1 worker com rate limit em memoria.
+    assert_rate_limit_single_process()
     if not ALLOW_CREATE_ALL:
         return
     # Permitido apenas em testes descartáveis explicitamente configurados

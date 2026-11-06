@@ -1,18 +1,43 @@
 import { useState } from 'react'
-import { Ban, CircleCheck, CircleX, MessageSquarePlus } from 'lucide-react'
+import { Ban, CircleCheck, CircleX, Clock, MessageSquarePlus, Utensils } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../../services/api'
 import { Dialog, DialogContent } from '../ui/dialog'
 import { cn } from '../../lib/utils'
 import { BotaoDitar } from './Ditado'
 import {
+  PERCENTUAIS_CONSUMO,
   ROTULO_RESULTADO_CUIDADO,
   registrarCuidado,
+  type PercentualConsumido,
   rotuloDoItem,
   type PlantaoItem,
   type ResultadoCuidado,
 } from '../../services/plantao'
 
 const FALHA = 'Não foi possível salvar. Tentar novamente.'
+
+// G7: até 24 h para trás; futuro nunca (o backend também recusa).
+const JANELA_OUTRO_HORARIO_MS = 24 * 60 * 60 * 1000
+
+// `datetime-local` trabalha no fuso do aparelho, sem segundos.
+function paraCampoLocal(ms: number): string {
+  const d = new Date(ms)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** ISO do horário escolhido, ou mensagem de erro se fora da janela. */
+export function validarOutroHorario(valor: string, agora = Date.now()): { iso: string } | { erro: string } {
+  const t = Date.parse(valor)
+  if (!valor || !Number.isFinite(t)) return { erro: 'Informe o horário do cuidado.' }
+  // Mesmo minuto de agora conta como agora (o campo não tem segundos).
+  if (t > agora) return { erro: 'O horário não pode ser no futuro.' }
+  if (t < agora - JANELA_OUTRO_HORARIO_MS) return { erro: 'Só é possível registrar até 24 horas para trás.' }
+  return { iso: new Date(t).toISOString() }
+}
+
+// G4: a refeição é um cuidado do PAIS; pela descrição, o bloco já vem aberto.
+const PARECE_REFEICAO = /refei|alimenta|almo[cç]|jantar|caf[eé] da manh|lanche|ceia|dieta/i
 
 // Atalhos de texto para o motivo; o campo continua livre e editável.
 const SUGESTOES: Record<Exclude<ResultadoCuidado, 'executada'>, string[]> = {
@@ -21,9 +46,9 @@ const SUGESTOES: Record<Exclude<ResultadoCuidado, 'executada'>, string[]> = {
 }
 
 const OPCOES: { valor: ResultadoCuidado; Icone: typeof CircleCheck; classe: string }[] = [
-  { valor: 'executada', Icone: CircleCheck, classe: 'border-emerald-600 bg-emerald-600 text-white hover:bg-emerald-700' },
-  { valor: 'recusada', Icone: CircleX, classe: 'border-orange-300 bg-card text-orange-900 hover:bg-orange-50' },
-  { valor: 'omitida', Icone: Ban, classe: 'border-slate-300 bg-card text-slate-800 hover:bg-muted' },
+  { valor: 'executada', Icone: CircleCheck, classe: 'border-brand-strong bg-brand-strong text-white hover:bg-brand-strong/90' },
+  { valor: 'recusada', Icone: CircleX, classe: 'border-alerta/40 bg-card text-alerta-forte hover:bg-alerta-soft' },
+  { valor: 'omitida', Icone: Ban, classe: 'border-input bg-card text-foreground hover:bg-muted' },
 ]
 
 /**
@@ -77,6 +102,9 @@ function Formulario({
   const [motivo, setMotivo] = useState('')
   const [observacao, setObservacao] = useState('')
   const [comObservacao, setComObservacao] = useState(false)
+  const [outroHorario, setOutroHorario] = useState<string | null>(null)
+  const [comPercentual, setComPercentual] = useState(() => PARECE_REFEICAO.test(rotuloDoItem(item)))
+  const [percentual, setPercentual] = useState<PercentualConsumido | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
 
@@ -85,10 +113,19 @@ function Formulario({
       setErro('Informe o motivo.')
       return
     }
+    let ocorrido_em: string | undefined
+    if (outroHorario !== null) {
+      const v = validarOutroHorario(outroHorario)
+      if ('erro' in v) {
+        setErro(v.erro)
+        return
+      }
+      ocorrido_em = v.iso
+    }
     setSalvando(true)
     setErro('')
     try {
-      await registrarCuidado(item, { resultado: valor, justificativa: motivo, observacao })
+      await registrarCuidado(item, { resultado: valor, justificativa: motivo, observacao, ocorrido_em, percentual_consumido: percentual })
       onSalvo(item)
     } catch (e) {
       // Sem resposta (rede/servidor fora) vale a mensagem operacional; com resposta,
@@ -121,6 +158,71 @@ function Formulario({
           {item.previsto_em ? ` • ${formatDateTime(item.previsto_em)}` : ''}
         </div>
       </div>
+
+      {/* G7: escolhido antes do resultado, porque "Realizado" salva com um toque. */}
+      {outroHorario !== null ? (
+        <div className="space-y-1">
+          <label htmlFor="outro-horario-cuidado" className="block text-sm font-medium">
+            Horário do cuidado <span className="text-muted-foreground">(até 24 h atrás)</span>
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              id="outro-horario-cuidado"
+              type="datetime-local"
+              className="input"
+              min={paraCampoLocal(Date.now() - JANELA_OUTRO_HORARIO_MS)}
+              max={paraCampoLocal(Date.now())}
+              value={outroHorario}
+              onChange={e => { setOutroHorario(e.target.value); setErro('') }}
+            />
+            <button type="button" onClick={() => { setOutroHorario(null); setErro('') }}
+              className="min-h-[44px] shrink-0 px-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+              Usar agora
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setOutroHorario(paraCampoLocal(Date.now()))}
+          className="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-primary hover:underline"
+        >
+          <Clock className="size-4" aria-hidden="true" /> Registrar em outro horário
+        </button>
+      )}
+
+      {/* G4: escolhido antes do resultado, porque "Realizado" salva com um toque. Opcional. */}
+      {comPercentual ? (
+        <div className="space-y-1">
+          <div id="percentual-cuidado" className="text-sm font-medium">
+            Quanto comeu? <span className="text-muted-foreground">(opcional)</span>
+          </div>
+          <div className="grid grid-cols-5 gap-2" role="group" aria-labelledby="percentual-cuidado">
+            {PERCENTUAIS_CONSUMO.map(valor => (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={percentual === valor}
+                onClick={() => { setPercentual(p => (p === valor ? null : valor)); setErro('') }}
+                className={cn(
+                  'min-h-[56px] rounded-xl border-2 text-base font-semibold transition-colors',
+                  percentual === valor ? 'border-primary bg-brand-soft text-primary' : 'border-border text-foreground hover:bg-muted',
+                )}
+              >
+                {valor}%
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setComPercentual(true)}
+          className="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-primary hover:underline"
+        >
+          <Utensils className="size-4" aria-hidden="true" /> Informar quanto comeu
+        </button>
+      )}
 
       <div className="grid gap-2" role="group" aria-label="Resultado">
         {OPCOES.map(({ valor, Icone, classe }) => (

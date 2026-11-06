@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { Check, Circle, Loader2 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { mensagemDeErro } from '../services/api'
@@ -99,7 +99,7 @@ export function PrimeiroAcesso() {
     <AuthLayout>
       <div className="space-y-7">
         <div className="space-y-1.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Defina sua nova senha</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Defina sua nova senha</h1>
           <p className="text-sm text-muted-foreground">
             Por segurança, você precisa definir uma nova senha antes de continuar.
           </p>
@@ -148,7 +148,7 @@ export function PrimeiroAcesso() {
             {RULES.map(r => {
               const ok = r.ok(nova)
               return (
-                <li key={r.label} className={ok ? 'flex items-center gap-2 text-emerald-800' : 'flex items-center gap-2 text-muted-foreground'}>
+                <li key={r.label} className={ok ? 'flex items-center gap-2 text-primary' : 'flex items-center gap-2 text-muted-foreground'}>
                   {ok ? <Check className="size-3.5" aria-hidden="true" /> : <Circle className="size-3.5" aria-hidden="true" />}
                   <span>
                     {r.label}

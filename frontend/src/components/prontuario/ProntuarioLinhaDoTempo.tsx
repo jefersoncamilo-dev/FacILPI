@@ -1,3 +1,4 @@
+import { Link } from 'react-router'
 import { formatDateTime } from '../../services/api'
 import { rotuloSituacaoEvento } from '../../lib/rotulos'
 import { ProntuarioCategoria, ProntuarioEvento } from '../../services/prontuario'
@@ -17,9 +18,6 @@ const CATEGORIA_SIGLA: Record<ProntuarioCategoria, string> = {
   medicacao: 'MD',
   administrativo: 'AD',
 }
-
-// UUID exato — sem heurística por espaço/proporção hexadecimal.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 function chaveDia(iso: string): string {
   return new Intl.DateTimeFormat('pt-BR', {
@@ -54,16 +52,10 @@ function agruparPorDia(eventos: ProntuarioEvento[]): { chave: string; eventos: P
   return grupos
 }
 
-function AutorEvento({ autorId }: { autorId?: string | null }) {
-  if (!autorId) return null
-  if (UUID_RE.test(autorId)) {
-    return (
-      <span className="font-mono text-xs text-textMuted" title={autorId}>
-        {autorId.slice(0, 8)}…
-      </span>
-    )
-  }
-  return <span className="text-xs text-textMuted">{autorId}</span>
+// N1: o nome vem resolvido pelo servidor; o id nunca é exibido.
+function AutorEvento({ autorNome }: { autorNome?: string | null }) {
+  if (!autorNome) return null
+  return <span className="text-xs text-textMuted">{autorNome}</span>
 }
 
 // Estornado/substituído nunca dependem só de cor: sempre têm texto explícito.
@@ -72,7 +64,7 @@ function SituacaoEvento({ evento }: { evento: ProntuarioEvento }) {
   if (evento.substituido) return <span className="badge-warning">Substituído</span>
   if (evento.situacao) {
     return (
-      <span className="px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 bg-slate-50 text-textMuted border border-slate-200">
+      <span className="px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 bg-muted text-textMuted border border-border">
         {rotuloSituacaoEvento(evento.situacao)}
       </span>
     )
@@ -86,13 +78,13 @@ export function ProntuarioLinhaDoTempo({ eventos }: { eventos: ProntuarioEvento[
     <div className="space-y-4">
       {grupos.map(grupo => (
         <div key={grupo.chave}>
-          <h2 className="text-sm font-semibold text-textMuted mb-2">{rotuloDia(grupo.chave)}</h2>
-          <div className="card p-0 divide-y divide-slate-100">
+          <h2 className="mb-2 text-rotulo text-muted-foreground">{rotuloDia(grupo.chave)}</h2>
+          <div className="card p-0 divide-y divide-border">
             {grupo.eventos.map(evento => (
               <div key={`${evento.origem}-${evento.registro_id}-${evento.tipo}`} className="p-4 flex gap-3">
                 <span
                   aria-hidden="true"
-                  className="w-7 h-7 shrink-0 rounded-lg bg-slate-100 text-slate-600 text-[11px] font-semibold flex items-center justify-center"
+                  className="w-7 h-7 shrink-0 rounded-lg bg-muted text-muted-foreground text-[11px] font-semibold flex items-center justify-center"
                 >
                   {CATEGORIA_SIGLA[evento.categoria]}
                 </span>
@@ -107,10 +99,12 @@ export function ProntuarioLinhaDoTempo({ eventos }: { eventos: ProntuarioEvento[
                   )}
                   <div className="flex flex-wrap items-center gap-2 mt-1">
                     <span className="text-xs text-textMuted">{formatDateTime(evento.ocorrido_em)}</span>
-                    <AutorEvento autorId={evento.autor_id} />
+                    <AutorEvento autorNome={evento.autor_nome} />
                   </div>
                   {evento.link && (
-                    <p className="text-xs text-textMuted mt-1">Detalhe ainda não disponível</p>
+                    <Link to={evento.link} className="text-xs text-primary underline mt-1 inline-block">
+                      Ver detalhe
+                    </Link>
                   )}
                 </div>
               </div>

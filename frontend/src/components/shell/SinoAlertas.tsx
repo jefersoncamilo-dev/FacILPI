@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router'
 import { ArrowRight, Bell } from 'lucide-react'
 import { usePermissoes } from '../../context/PermissoesContext'
 import { recarregarCentralAlertas, useCentralAlertas, type EstadoCentral } from '../../hooks/useCentralAlertas'
@@ -57,11 +57,11 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label={rotulo} className="relative shrink-0 text-muted-foreground">
-          <Bell className="!size-5" aria-hidden="true" />
+          <Bell className="size-5!" aria-hidden="true" />
           {total ? (
             <span
               aria-hidden="true"
-              className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-critico px-1 text-center text-[11px] font-semibold leading-[18px] text-white"
+              className="absolute right-0.5 top-0.5 min-w-[18px] rounded-full bg-critico px-1 text-center text-[11px] font-semibold leading-[18px] text-destructive-foreground"
             >
               {total > 99 ? '99+' : total}
             </span>
@@ -92,7 +92,7 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-medium text-foreground">{a.titulo}</span>
                           {meta && <span className="block truncate text-xs font-normal text-muted-foreground">{meta}</span>}
-                          {a.estado && <span className="block truncate text-xs font-semibold text-emerald-800">{rotuloEstado(a.estado)}</span>}
+                          {a.estado && <span className="block truncate text-xs font-semibold text-primary">{rotuloEstado(a.estado)}</span>}
                           <span className="block text-xs font-semibold text-primary">{destino.acao}</span>
                         </span>
                       </Link>

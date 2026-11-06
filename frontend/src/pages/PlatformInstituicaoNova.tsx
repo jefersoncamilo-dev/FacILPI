@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { InstituicaoForm } from '../components/platform/InstituicaoForm'
 import { criarInstituicao } from '../services/platform'
 import { mensagemDeErro } from '../services/api'
@@ -24,7 +24,7 @@ export function PlatformInstituicaoNova() {
   return (
     <div className="space-y-4 max-w-3xl">
       <div className="flex items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Nova ILPI</h1>
+        <h1 className="font-display text-titulo-tela text-brand-ink">Nova ILPI</h1>
         <Link to="/platform/instituicoes" className="ml-auto text-sm text-primary hover:underline">
           Voltar
         </Link>
@@ -36,7 +36,7 @@ export function PlatformInstituicaoNova() {
       </p>
 
       {erro && (
-        <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
+        <div role="alert" className="text-sm p-3 rounded-xl bg-alerta-soft text-alerta-forte border border-alerta/30">
           {erro}
         </div>
       )}

@@ -8,11 +8,11 @@ export function iniciais(nome: string): string {
   return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase()
 }
 
-// Só imagem embutida ou HTTPS: o campo `foto` é texto livre e não deve virar
-// requisição para qualquer endereço.
+// Só imagem embutida: o campo `foto` é texto livre e não deve virar requisição
+// para qualquer endereço. A CSP (img-src 'self' data:) bloquearia HTTPS (N7).
 function fotoSegura(foto?: string | null): string | null {
   if (!foto) return null
-  return /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(foto) || /^https:\/\//i.test(foto) ? foto : null
+  return /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(foto) ? foto : null
 }
 
 /** Foto do residente ou, sem foto, as iniciais. Decorativo: o nome está ao lado. */
@@ -23,7 +23,7 @@ export function AvatarResidente({ nome, foto, className }: { nome: string; foto?
   ) : (
     <span
       aria-hidden="true"
-      className={cn('flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-primary', className)}
+      className={cn('flex size-10 shrink-0 items-center justify-center rounded-full bg-avatar text-sm font-semibold text-avatar-foreground', className)}
     >
       {iniciais(nome)}
     </span>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { ListChecks, TriangleAlert } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
@@ -12,6 +12,8 @@ import { RegistrarLote } from '../components/plantao/RegistrarLote'
 import { ItemPlantao } from '../components/plantao/ItemPlantao'
 import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
 import { CorrigirRegistros } from '../components/plantao/CorrigirRegistros'
+import { CorrigirDoses } from '../components/plantao/CorrigirDoses'
+import { FeitosExpirados } from '../components/plantao/FeitosExpirados'
 import {
   FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar, marcavelEmGrupo,
   type Filtros, type Situacao, type Visao,
@@ -94,7 +96,7 @@ const FORM_VAZIO: FormAcao = {
  * `?desde=` (ISO) amplia o início da projeção para trás — vem da Passagem de
  * Plantão, para que cuidados e doses previstos antes da abertura da tela e
  * ainda sem registro apareçam em "Atrasadas" com as ações de sempre. Sem o
- * parâmetro, a projeção é a padrão do backend (agora → +24 h).
+ * parâmetro, a fila começa 24 h atrás (JANELA_ATRASO_MS) e vai até +24 h.
  */
 export function lerDesde(valor: string | null, agora = Date.now()): string | null {
   if (!valor) return null
@@ -342,8 +344,8 @@ export function MeuPlantao() {
     <div className="space-y-4 sm:space-y-6">
       <div className="space-y-1">
         {/* O nome de quem está no plantão; sem vínculo de funcionário, o título da tela. */}
-        <h1 className="truncate text-2xl font-bold tracking-tight text-foreground">{resumo?.funcionario_nome || 'Meu Plantão'}</h1>
-        <p className="text-sm text-muted-foreground max-sm:sr-only">
+        <h1 className="truncate font-display text-titulo-tela text-brand-ink">{resumo?.funcionario_nome || 'Meu Plantão'}</h1>
+        <p className="text-xs text-muted-foreground sm:text-sm">
           {desde
             ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">voltar à fila padrão</Link></>
             : 'Atrasos das últimas 24 h e pendências das próximas 24 h'}
@@ -351,7 +353,11 @@ export function MeuPlantao() {
       </div>
 
       {/* #120: início/fim do próprio plantão e por quais áreas responde (só com plantao:registrar). */}
-      <MeuTurno onMudou={carregarResumo} />
+      {/* M1 (#176): atrasados da fila inteira (sem os filtros da tela); sem fila carregada, nada é afirmado. */}
+      <MeuTurno
+        onMudou={carregarResumo}
+        atrasados={carregando || erro ? undefined : itens.filter(i => atendeSituacao(i, 'atrasados', agora)).length}
+      />
       {resumo && <MinhaArea resumo={resumo} podeAssumir={pode('alertas:assumir')} onMudou={aoMudarAlerta} />}
 
       <div className="space-y-2">
@@ -364,7 +370,7 @@ export function MeuPlantao() {
               onClick={() => setVisao(opcao.valor)}
               className={cn(
                 'min-h-[44px] rounded-md px-2 text-sm font-medium transition-colors',
-                visao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+                visao === opcao.valor ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <span className="sm:hidden">{opcao.curto}</span>
@@ -380,13 +386,13 @@ export function MeuPlantao() {
                 onClick={() => setFiltros({ ...filtros, situacao: opcao.valor })}
                 className={cn(
                   'inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-sm font-medium transition-colors',
-                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {opcao.rotulo}{' '}
                 <span className={cn(
                   'rounded-full px-1.5 text-xs tabular-nums',
-                  opcao.valor === 'atrasados' && contagens.atrasados > 0 ? 'bg-orange-100 font-semibold text-orange-900' : 'bg-slate-200/70 text-slate-700',
+                  opcao.valor === 'atrasados' && contagens.atrasados > 0 ? 'bg-alerta-soft font-semibold text-alerta-forte' : 'bg-secondary/70 text-foreground',
                 )}>
                   {contagens[opcao.valor]}
                 </span>
@@ -412,20 +418,32 @@ export function MeuPlantao() {
           <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
         </div>
         {/* UX-01F (decisão A): só quem corrige (Enfermagem, RT, administrador) vê. */}
-        {pode('execucoes:corrigir') && pode('execucoes:ler') && (
-          <div className="flex justify-end">
-            <CorrigirRegistros
-              nomes={nomes}
-              onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
-            />
+        {((pode('execucoes:corrigir') && pode('execucoes:ler')) || (pode('administracoes:corrigir') && pode('administracoes:ler'))) && (
+          <div className="flex flex-wrap justify-end gap-x-4">
+            {pode('execucoes:corrigir') && pode('execucoes:ler') && (
+              <CorrigirRegistros
+                nomes={nomes}
+                onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
+              />
+            )}
+            {/* #11 (D2 = sim): estorno de dose só por Enfermagem e RT. */}
+            {pode('administracoes:corrigir') && pode('administracoes:ler') && (
+              <CorrigirDoses
+                nomes={nomes}
+                onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
+              />
+            )}
           </div>
         )}
       </div>
 
+      {/* G5 (#198): feitos e expirados do turno, só leitura. */}
+      {pode('execucoes:ler') && <FeitosExpirados nomes={nomes} />}
+
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
 
       {itens.length >= PLANTAO_LIMIT_PADRAO && !erro && (
-        <div className="rounded-lg border border-orange-200 bg-orange-50 px-4 py-3">
+        <div className="rounded-lg border border-alerta/30 bg-alerta-soft px-4 py-3">
           <span className="text-sm text-muted-foreground">Exibindo as primeiras {PLANTAO_LIMIT_PADRAO} pendências. Pode haver mais no período.</span>
         </div>
       )}
@@ -434,8 +452,8 @@ export function MeuPlantao() {
         <div className="card py-16 text-center text-muted-foreground">Carregando plantão…</div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
-          <p className="text-sm font-medium text-red-700">{erro}</p>
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
+          <p className="text-sm font-medium text-critico-texto">{erro}</p>
           <button onClick={() => carregar()} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
       ) : lista.length === 0 ? (
@@ -499,7 +517,7 @@ export function MeuPlantao() {
 
       {selecionando && (
         // Fica acima da navegação inferior no mobile; no desktop, rente ao fim da tela.
-        <div className="sticky bottom-24 z-20 flex items-center gap-3 rounded-card border border-primary/40 bg-card p-3 shadow-lg xl:bottom-4" role="region" aria-label="Seleção">
+        <div className="glass sticky bottom-24 z-20 flex items-center gap-3 rounded-card border border-primary/40 p-3 xl:bottom-4" role="region" aria-label="Seleção">
           <span className="min-w-0 flex-1 text-sm font-semibold" aria-live="polite">
             {selecionadosNaFila.length === 0
               ? 'Nenhum cuidado marcado'

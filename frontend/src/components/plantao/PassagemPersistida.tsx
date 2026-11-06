@@ -31,7 +31,7 @@ function Item({ item }: { item: ItemPassagem }) {
       </div>
       {item.situacao_atual && (
         <span className={cn('shrink-0 self-start rounded-full border px-2.5 py-0.5 text-xs font-semibold sm:self-auto',
-          item.situacao_atual === 'aberto' ? 'border-orange-200 bg-orange-50 text-orange-800' : 'border-emerald-200 bg-emerald-50 text-emerald-800')}>
+          item.situacao_atual === 'aberto' ? 'border-alerta/30 bg-alerta-soft text-alerta-forte' : 'border-brand/30 bg-accent text-primary')}>
           {item.situacao_atual === 'aberto' ? 'Ainda aberto' : 'Resolvido desde então'}
         </span>
       )}
@@ -83,7 +83,7 @@ export function PassagensAReceber({ podeReceber, versao = 0 }: { podeReceber: bo
 
   return (
     <section aria-label="Passagens a receber" className="space-y-3">
-      <h2 className="font-display text-lg font-semibold text-foreground">Passagens a receber</h2>
+      <h2 className="font-display text-titulo-secao text-brand-ink">Passagens a receber</h2>
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
       {erro && <Alert variant="error">{erro}</Alert>}
       {passagens === null && !erro && <Skeleton className="h-20 w-full" />}
@@ -92,7 +92,7 @@ export function PassagensAReceber({ podeReceber, versao = 0 }: { podeReceber: bo
       )}
       <ul className="space-y-3">
         {passagens?.map(p => (
-          <li key={p.id} className={cn('rounded-card border bg-card p-4 shadow-card', p.da_minha_area ? 'border-primary' : 'border-border')}>
+          <li key={p.id} className={cn('glass rounded-card p-4', p.da_minha_area ? 'border-primary' : 'border-border')}>
             <article aria-label={`Passagem de ${p.entregue_por_nome}`} className="space-y-2">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <p className="font-medium text-foreground">
@@ -187,7 +187,7 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
   return (
     <section aria-label="Passar plantão" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-display text-lg font-semibold text-foreground">Passar plantão</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Passar plantão</h2>
         {!aberto && <Button onClick={abrir} className="min-h-[44px]"><Send aria-hidden="true" /> Preparar passagem</Button>}
       </div>
       {entregues && entregues.length > 0 && (
@@ -206,7 +206,7 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
         </div>
       )}
       {aberto && previa && (
-        <div className="space-y-4 rounded-card border border-border bg-card p-4 shadow-card">
+        <div className="glass space-y-4 rounded-card p-4">
           <p className="text-sm text-muted-foreground">
             {previa.area_nome ? `Área: ${previa.area_nome}` : 'Toda a ILPI'} · de {formatDateTime(previa.janela_inicio)} até agora.
             O resumo abaixo sai das fontes; nada aqui cria registro clínico.
@@ -259,7 +259,7 @@ export function PassarPlantao({ onEntregue }: { onEntregue?: () => void } = {}) 
               {observacoes.map((o, n) => (
                 <li key={n} className="flex items-center justify-between gap-2 text-sm">
                   <span>{ROTULO_CATEGORIA[o.categoria]}: {o.texto}</span>
-                  <button type="button" aria-label={`Remover observação ${n + 1}`} className="min-h-[44px] px-2 text-red-700"
+                  <button type="button" aria-label={`Remover observação ${n + 1}`} className="min-h-[44px] px-2 text-critico-texto"
                     onClick={() => setObservacoes(lista => lista.filter((_, i) => i !== n))}>
                     <Trash2 className="size-4" aria-hidden="true" />
                   </button>

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import { Alertas } from '../pages/Alertas'
 import { api } from '../services/api'
 import { limparCentralAlertas } from '../hooks/useCentralAlertas'
@@ -59,6 +59,9 @@ describe('Estado do alerta na Central (#123)', () => {
     expect(within(queda).getByText('Em atendimento por Ana Paula')).toBeTruthy()
     expect(within(queda).queryByRole('button')).toBeNull()
     expect(within(engasgo).getByRole('button', { name: 'Assumir: Intercorrência grave aberta: Engasgo' })).toBeTruthy()
+    // Onda 3: o link de origem vem antes de "Assumir" (leitura e foco).
+    const [origem, assumir] = [within(engasgo).getByRole('link'), within(engasgo).getByRole('button', { name: /^Assumir/ })]
+    expect(origem.compareDocumentPosition(assumir) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     // Não existe "resolver" manual: a resolução vem da fonte.
     expect(screen.queryByRole('button', { name: /Resolver/ })).toBeNull()
   })

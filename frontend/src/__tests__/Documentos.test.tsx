@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router'
 import { Documentos } from '../pages/Documentos'
 import { ResidenteProntuario } from '../pages/ResidenteProntuario'
 import { PermissoesProvider } from '../context/PermissoesContext'
@@ -190,6 +190,17 @@ describe('Documentos — estados de tela', () => {
     const cartoes = await screen.findAllByRole('article')
     expect(within(cartoes[0]).getByText('Pendente')).toBeTruthy()
     expect(within(cartoes[1]).getByText('Validado')).toBeTruthy()
+  })
+})
+
+describe('Documentos — destino dos alertas (M5)', () => {
+  it('?residente= filtra e ?id= destaca o documento', async () => {
+    respondeCom({ documentos: [COM_ARQUIVO, SEM_ARQUIVO] })
+    renderPagina('/documentos?residente=res-1&id=doc-2')
+    const sus = await screen.findByText('Cartão do SUS')
+    expect(chamadasDaLista()[0][1]).toEqual({ params: { residente_id: 'res-1' } })
+    expect(sus.closest('article')?.getAttribute('aria-current')).toBe('true')
+    expect(screen.getByText('RG').closest('article')?.getAttribute('aria-current')).toBeNull()
   })
 })
 

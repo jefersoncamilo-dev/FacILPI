@@ -39,6 +39,16 @@ O autor é o usuário da sessão, gravado em `autor_id` (FK para `users`). O nom
 
 Obrigatoriedade documental é uma regra institucional/processual. Validade temporal não deve alterar automaticamente o status do documento sem regra explicitamente aprovada. Em Admissão, documento obrigatório só é considerado atendido conforme o contrato atual do módulo; não invente uma lista universal de documentos obrigatórios.
 
+## Saída do residente (N2, 030)
+
+Óbito (data e hora; na ILPI ou em hospital), transferência (outra instituição ou hospital, com destino), desligamento (fim de contrato, a pedido da família, do residente ou da ILPI) e retorno à família ficam em `residente_saidas`, append-only, com o autor da sessão e auditoria própria. Só residente "Ativo" sai; a situação passa a "Falecido", "Transferido", "Desligado" ou "Retornou a familia" na mesma transação, e há no máximo uma saída vigente por residente.
+
+- Registra: `residentes:registrar_saida` (Administrador da ILPI, RT, Enfermagem e Administrativo, templates e clones). Cuidador, Médico e Platform Superuser não registram; profissão não concede.
+- Leito: liberado só se quem registra marcar a opção e tiver `quartos_leitos:atualizar`; nada é liberado sozinho.
+- PAIS, prescrições e programações: não são encerrados pela saída. A tela lista as pendências (cada origem pela sua leitura) e cada uma segue a ação humana do próprio módulo.
+- Estorno: `residentes:estornar_saida` (Administrador da ILPI e RT), com motivo; o registro original continua visível e o residente volta a "Ativo"; o leito não volta sozinho.
+- Repercussão: residente que saiu deixa de gerar alertas em todas as regras e sai do turno (Meu Plantão, fila do plantão, passagem). A saída aparece no prontuário com `residentes:ler`. "Em admissão" segue pelas regras da Admissão.
+
 ## Quarto/leito e ausência
 
 Leito representa ocupação estrutural. Ausência/hospitalização representa presença física temporariamente alterada. Não libere leito automaticamente apenas porque existe ausência.
@@ -75,7 +85,17 @@ Pendências/atrasos derivados não devem ser materializados ou classificados aut
 - **Janela da fila:** por padrão começa 24 h atrás, para que o atrasado apareça. É recorte de apresentação, não tolerância de atraso.
 - **Registro rápido:** "Realizado" salva no ato; "Recusado" e "Não realizado" exigem motivo. O horário realizado é o instante do registro; o backend recusa horário futuro.
 - **Lote:** conveniência de tela. Cada cuidado marcado vira **uma** execução própria (executor da sessão, auditoria individual); falha num item não desfaz os demais. Só cuidados entram no lote — medicação e intercorrência, nunca. O atalho de grupo só marca o que já venceu ou vence em até 1 h; cuidados mais distantes só entram marcados um a um.
-- **Correção (decisão A, UX-01F):** o cuidador registra, mas não corrige. Enfermagem, RT e administrador corrigem por estorno (`execucoes:corrigir`), com motivo obrigatório: trocar o resultado (substituto no mesmo horário do fato) ou anular (estorno sem substituto; o cuidado volta para a fila). Nada é apagado e o registro original fica visível como corrigido. A tela lista os registros das últimas 24 h com o cuidado e quem registrou. Só cuidados, sem medicação.
+- **Correção (decisão A, UX-01F):** o cuidador registra, mas não corrige. Enfermagem e RT corrigem por estorno (`execucoes:corrigir`); o administrador da ILPI só durante a transição da #15, com motivo obrigatório: trocar o resultado (substituto no mesmo horário do fato) ou anular (estorno sem substituto; o cuidado volta para a fila). Nada é apagado e o registro original fica visível como corrigido. A tela lista os registros das últimas 24 h com o cuidado e quem registrou.
+- **Correção de dose (#11, decisão D2 = sim, migration 033):** a regra deixa de ser só de cuidados. O estorno de administração de dose segue o mesmo modelo — motivo obrigatório, substituto opcional (mesmo horário do fato), nada apagado, original visível como corrigido, janela de 24 h na tela ("Corrigir doses" no Meu Plantão, com o medicamento e quem registrou) —, com permissão própria `administracoes:corrigir`, só para Enfermagem e Responsável Técnico (templates e clones por chave). Cuidador, Médico, `ilpi_admin` e Platform Superuser não estornam dose. "Anular" (estorno sem substituto) devolve a dose a pendente. O Prontuário mostra a administração estornada com o motivo.
+- **Percentual de refeição (G4, decisão D6, migration 032):** a refeição é registrada como execução de cuidado do PAIS, sem tabela própria. Ao registrar "Realizado", a pessoa pode informar quanto foi consumido — 0, 25, 50, 75 ou 100 % (`percentual_consumido`, opcional, CHECK no banco e validação no schema; recusado com recusa/omissão). Na tela são cinco botões grandes, abertos quando a descrição do cuidado indica refeição e recolhidos nos demais. Nada é obrigatório.
+
+## Escrita clínica do administrador da ILPI (#15, decisão D3 = opção B, migration 034)
+
+- O template `ilpi_admin` e seus clones (por chave) deixam de ter as 17 escritas clínicas de `security.ESCRITAS_CLINICAS_ADMIN` (lista congelada na 034): avaliações (criar/atualizar), grau de dependência, sinais vitais, intercorrências (criar/atualizar), PAIS (criar/atualizar/revisar/aprovar/encerrar), programações (criar/atualizar/inativar), cancelamento de ocorrência e execução/correção de cuidados. Leituras, Dashboard, Alertas (inclusive assumir) e a gestão institucional (usuários, perfis, equipe, residentes, documentos, quartos, escala, passagem) continuam. Nenhum histórico clínico é apagado; saem só vínculos perfil–permissão.
+- **Prazo, contado por ILPI:** a 034 grava em `transicao_admin_clinico` uma linha por ILPI existente com `prazo = instante do upgrade + 30 dias`. Até o prazo, a sessão do `ilpi_admin` daquela ILPI mantém as 17 escritas por carência (contexto, `require_permission` e permissões da sessão); depois, perde só elas. ILPI criada depois da 034 não tem linha e já nasce sem as escritas no administrador. Para ajustar o prazo de uma ILPI, o responsável altera a linha dela nessa tabela, com decisão registrada.
+- **Aviso:** no Início, o administrador vê o prazo e, se ninguém na ILPI tem perfil clínico atribuído (vínculo ativo e vigente a perfil ativo, que não é o `ilpi_admin`, com ao menos uma das 17 escritas), o pedido para atribuir Enfermagem, Responsável Técnico ou Cuidador, com atalho para a Equipe. `GET /api/transicao-clinica/` (ILPI da sessão).
+- **Relatório por ILPI (Platform, só leitura):** `GET /api/platform/transicao-clinica` (escopo global, `ilpis:ler`) lista cada ILPI com prazo, se está em carência, se já tem perfil clínico atribuído e o que o administrador perde. Rodar no ambiente alvo com a sessão do Platform Superuser, por exemplo `curl -H "Authorization: Bearer $TOKEN" -H "X-Scope: global" https://<host>/api/platform/transicao-clinica`. Não há script contra o banco: o relatório usa a API e não escreve nada.
+- Platform Superuser continua sem acesso clínico; atribuir perfil institucional segue com o `ilpi_admin` (exceção nomeada da matriz).
 
 ## Admissão
 

@@ -3,15 +3,27 @@ import axios from 'axios'
 const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
 // Garante que baseURL termina com /api e serviços não dupliquem
+// #207: a sessão vai no cookie HttpOnly (mesma origem: Caddy na VPS, rewrite
+// de /api/* no Render). O Bearer saiu do cliente; o servidor ainda o aceita na
+// transição para abas com o bundle antigo.
 export const api = axios.create({
   baseURL,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 })
 
+const METODOS_SEGUROS = new Set(['get', 'head', 'options'])
+
+/** Double-submit: o cookie `csrf_token` (não-HttpOnly) volta no cabeçalho. */
+export function lerCsrf(): string | null {
+  const par = document.cookie.split('; ').find(c => c.startsWith('csrf_token='))
+  return par ? decodeURIComponent(par.slice('csrf_token='.length)) : null
+}
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('facilpi_token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  if (!METODOS_SEGUROS.has((config.method || 'get').toLowerCase())) {
+    const csrf = lerCsrf()
+    if (csrf) config.headers['X-CSRF-Token'] = csrf
   }
   return config
 })

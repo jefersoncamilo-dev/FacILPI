@@ -45,6 +45,8 @@ ORIGEM_PERMISSION = {
     "execucao_cuidado": "execucoes:ler",
     "ocupacao": "quartos_leitos:ler",
     "ausencia": "ausencias:ler",
+    # N2 (030): saida do residente (obito, transferencia, desligamento, retorno).
+    "saida": "residentes:ler",
 }
 
 ORIGEM_CATEGORIA = {
@@ -58,6 +60,7 @@ ORIGEM_CATEGORIA = {
     "execucao_cuidado": "assistencia",
     "ocupacao": "administrativo",
     "ausencia": "administrativo",
+    "saida": "administrativo",
 }
 
 EFFECTIVE_PAIS_STATES = {"aprovado", "vigente", "encerrado", "substituido"}
@@ -148,6 +151,7 @@ class ProntuarioEvento(BaseModel):
     ocorrido_em: datetime
     registrado_em: Optional[datetime] = None
     autor_id: Optional[str] = None
+    autor_nome: Optional[str] = None
     resumo: str
     situacao: Optional[str] = None
     estornado: bool = False
@@ -177,6 +181,7 @@ def _event(
     resumo,
     situacao,
     link=None,
+    autor_texto=None,
     estornado=False,
     substituido=False,
     substituido_por=None,
@@ -193,6 +198,7 @@ def _event(
         "ocorrido_em": _utc(ocorrido_em),
         "registrado_em": _utc(registrado_em) if registrado_em is not None else _utc(ocorrido_em),
         "autor_id": autor_id,
+        "autor_texto": autor_texto,
         "resumo": resumo,
         "situacao": situacao,
         "estornado": estornado,
@@ -300,10 +306,10 @@ async def get_prontuario(
                 categoria=ORIGEM_CATEGORIA["avaliacao"],
                 registro_id=r.id,
                 residente_id=residente_id,
-                autor_id=r.profissional,
+                autor_id=r.autor_id,
+                autor_texto=r.profissional,
                 resumo=f"Avaliacao {r.tipo}" + (f" - {r.classificacao}" if r.classificacao else ""),
                 situacao=r.classificacao or r.tipo,
-                link=f"/api/avaliacoes/{r.id}",
             ))
 
     # Grau dependencia
@@ -364,10 +370,10 @@ async def get_prontuario(
                 categoria=ORIGEM_CATEGORIA["sinal_vital"],
                 registro_id=r.id,
                 residente_id=residente_id,
-                autor_id=r.profissional,
+                autor_id=r.autor_id,
+                autor_texto=r.profissional,
                 resumo=resumo,
                 situacao=None,
-                link=f"/api/sinais-vitais/{r.id}",
             ))
 
     # Intercorrencias
@@ -393,10 +399,10 @@ async def get_prontuario(
                 categoria=ORIGEM_CATEGORIA["intercorrencia"],
                 registro_id=r.id,
                 residente_id=residente_id,
-                autor_id=r.responsavel,
+                autor_id=r.autor_id,
+                autor_texto=r.responsavel,
                 resumo=f"Intercorrencia {r.tipo} ({r.situacao})",
                 situacao=r.situacao,
-                link=f"/api/intercorrencias/{r.id}",
             ))
 
     # Prescricoes: um evento por transicao realmente persistida (nao por linha).
@@ -430,7 +436,6 @@ async def get_prontuario(
                     autor_id=r.autor_id,
                     resumo=f"Prescricao {situ} - {r.medicamento_id}",
                     situacao=situ,
-                    link=f"/api/prescricoes/{r.id}",
                     substituido=situ == "substituida",
                 ))
 
@@ -468,7 +473,6 @@ async def get_prontuario(
                 autor_id=r.executor_id,
                 resumo=f"Administracao {r.resultado}",
                 situacao=r.resultado,
-                link=f"/api/administracoes/{r.id}",
                 estornado=r.estornado_em is not None,
                 motivo_estorno=r.motivo_estorno,
                 substituto=r.substitui_id is not None,
@@ -518,7 +522,7 @@ async def get_prontuario(
                 autor_id=r.autor_id,
                 resumo=f"PAIS {r.situacao} v{r.versao}",
                 situacao=r.situacao,
-                link=f"/api/planos-cuidados/{r.id}",
+                link=f"/plano/{r.id}",
                 substituido=r.situacao == "substituido",
                 substituido_por=r.superseded_by,
             ))
@@ -557,7 +561,6 @@ async def get_prontuario(
                 autor_id=r.executor_id,
                 resumo=f"Execucao {r.resultado}",
                 situacao=r.resultado,
-                link=f"/api/execucoes-cuidado/{r.id}",
                 estornado=r.estornado_em is not None,
                 motivo_estorno=r.motivo_estorno,
                 substituto=r.substitui_id is not None,
@@ -589,7 +592,6 @@ async def get_prontuario(
                 autor_id=r.usuario_id,
                 resumo=f"Ocupacao {r.tipo_movimentacao}",
                 situacao=r.tipo_movimentacao,
-                link=f"/api/ocupacao_historico/{r.id}",
             ))
 
     # Ausencias
@@ -622,7 +624,33 @@ async def get_prontuario(
                 autor_id=r.usuario_id,
                 resumo=f"Ausencia {r.tipo}",
                 situacao=r.tipo,
-                link=f"/api/ausencias/{r.id}",
+            ))
+
+    # Saida do residente (N2): estorno fica visivel no proprio evento.
+    if "saida" in allowed:
+        q = select(m.ResidenteSaida).where(m.ResidenteSaida.ilpi_id == tenant, m.ResidenteSaida.residente_id == residente_id)
+        if desde is not None:
+            q = q.where(m.ResidenteSaida.ocorrido_em >= _utc(desde))
+        if ate is not None:
+            q = q.where(m.ResidenteSaida.ocorrido_em <= _utc(ate))
+        if situacao is not None:
+            q = q.where(m.ResidenteSaida.tipo == situacao)
+        q = _apply_keyset(q, m.ResidenteSaida.ocorrido_em, m.ResidenteSaida.registrado_em, m.ResidenteSaida.id, "saida", "saida", cursor_tuple, limit)
+        rows = (await db.execute(q)).scalars().all()
+        for r in rows:
+            events.append(_event(
+                ocorrido_em=_utc(r.ocorrido_em),
+                registrado_em=_utc(r.registrado_em),
+                origem="saida",
+                tipo="saida",
+                categoria=ORIGEM_CATEGORIA["saida"],
+                registro_id=r.id,
+                residente_id=residente_id,
+                autor_id=r.registrado_por,
+                resumo=f"Saida do residente: {r.tipo}",
+                situacao=r.tipo,
+                estornado=r.estornado_em is not None,
+                motivo_estorno=r.motivo_estorno,
             ))
 
     # filtro categoria residual (defesa extra; allowed ja restringe por origem)
@@ -658,6 +686,14 @@ async def get_prontuario(
     if has_more and page:
         last = page[-1]
         next_cursor = _encode_cursor(last["ocorrido_em"], last["registrado_em"] or last["ocorrido_em"], last["origem"], last["registro_id"], last["tipo"])
+
+    # N1: nome do autor resolvido no servidor, so para os ids da pagina (linhas
+    # ja filtradas pelo tenant). Sem FK, vale o nome em texto gravado na origem.
+    autor_ids = {e["autor_id"] for e in page if e["autor_id"]}
+    nomes = dict((await db.execute(select(m.User.id, m.User.nome).where(m.User.id.in_(autor_ids)))).all()) if autor_ids else {}
+    for e in page:
+        texto = e.pop("autor_texto")
+        e["autor_nome"] = nomes.get(e["autor_id"]) or texto
 
     items = [ProntuarioEvento(**e) for e in page]
     return ProntuarioResponse(items=items, next_cursor=next_cursor, has_more=has_more)

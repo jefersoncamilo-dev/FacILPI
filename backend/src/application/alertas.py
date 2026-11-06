@@ -45,6 +45,7 @@ from ..infrastructure.database import get_db
 from . import schemas as s
 from .audit import add_audit
 from .rotina import _has_admin_vigente, _has_execucao_vigente, _utc, garantir_horizonte, local_do_leito
+from .saida_residente import SITUACOES_SAIDA
 from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_permission
 
 central_alertas_router = APIRouter(prefix="/central-alertas", tags=["alertas"])
@@ -60,6 +61,8 @@ LIMITE_POR_REGRA = 100
 
 FUSO_PADRAO = "America/Sao_Paulo"
 RESIDENTE_ATIVO = "Ativo"
+# N2 (030): residente que saiu (SITUACOES_SAIDA) nao gera alerta em nenhuma regra
+# (grau e PAIS ja olhavam so "Ativo"); "Em admissao" segue igual.
 ADMISSAO_ENCERRADA = ("concluida", "cancelada", "desistencia")
 PAIS_EM_CICLO = ("rascunho", "em_elaboracao", "em_revisao", "aprovado")
 ORDEM_GRAVIDADE = {"critico": 0, "atencao": 1, "aviso": 2}
@@ -113,9 +116,10 @@ _local = local_do_leito
 class _Coletor:
     """Junta os itens de todas as regras, com teto por regra."""
 
-    def __init__(self, nomes: dict[str, str], leitos: dict[str, tuple]):
+    def __init__(self, nomes: dict[str, str], leitos: dict[str, tuple], saidos: frozenset[str] = frozenset()):
         self.nomes = nomes
         self.leitos = leitos
+        self.saidos = saidos
         self.itens: list[dict] = []
         self._por_regra: dict[str, int] = defaultdict(int)
         # #123: regras calculadas nesta consulta e as que bateram no teto — so as
@@ -128,6 +132,8 @@ class _Coletor:
 
     def add(self, regra, categoria, gravidade, titulo, *, referencia, chave=None, residente_id=None,
             detalhe=None, desde=None, prazo=None):
+        if residente_id is not None and residente_id in self.saidos:
+            return
         if self._por_regra[regra] >= LIMITE_POR_REGRA:
             self.truncadas.add(regra)
             return
@@ -403,7 +409,10 @@ async def projetar(db: AsyncSession, context: SecurityContext) -> _Projecao:
             select(m.QuartoLeito.residente_atual_id, m.QuartoLeito.unidade, m.QuartoLeito.quarto, m.QuartoLeito.leito)
             .where(m.QuartoLeito.instituicao_id == ilpi, m.QuartoLeito.residente_atual_id.is_not(None))
         )).all()}
-    c = _Coletor(nomes, leitos)
+    # So remove itens; nao expoe nada a quem nao tem residentes:ler.
+    saidos = frozenset((await db.scalars(select(m.Residente.id).where(
+        m.Residente.instituicao_id == ilpi, m.Residente.situacao.in_(SITUACOES_SAIDA)))).all())
+    c = _Coletor(nomes, leitos, saidos)
 
     if "admissoes:ler" in chaves:
         await _admissoes(db, ilpi, agora, c)
@@ -714,6 +723,26 @@ async def liberar_alerta(payload: s.AlertaAcao, request: Request, db: AsyncSessi
                   valores_posteriores={"alerta_id": atual.alerta_id, "situacao": "liberado"}, request=request)
         await db.commit()
     return await _responder_estado(db, context.ilpi_id, context.user.id, payload.alerta_id)
+
+
+@central_alertas_router.get("/expirados", response_model=list[s.AlertaExpiradoItem])
+async def alertas_expirados(a_partir_de: datetime, db: AsyncSession = Depends(get_db),
+                            context: SecurityContext = Depends(require_permission("alertas:ler"))):
+    """G5 (#198): so leitura. Estados ``expirado`` encerrados desde ``a_partir_de``, da ILPI da
+    sessao e apenas das regras cuja origem a sessao le (mesmo filtro do historico)."""
+    permitidas = set(await allowed_permission_keys(db, context))
+    regras = [regra for regra, exige in ORIGEM_DA_REGRA.items() if exige <= permitidas]
+    if not regras:
+        return []
+    estados = (await db.scalars(select(m.AlertaEstado).where(
+        m.AlertaEstado.ilpi_id == context.ilpi_id, m.AlertaEstado.situacao == "expirado",
+        m.AlertaEstado.regra.in_(regras), m.AlertaEstado.encerrado_em >= _utc(a_partir_de))
+        .order_by(m.AlertaEstado.encerrado_em.desc(), m.AlertaEstado.id).limit(200))).all()
+    nomes = await _nomes_de(db, context.ilpi_id, estados)
+    return [{
+        "id": e.id, "alerta_id": e.alerta_id, "regra": e.regra, "residente_id": e.residente_id,
+        "por_nome": nomes.get(e.assumido_por, ""), "assumido_em": _utc(e.assumido_em), "encerrado_em": _utc(e.encerrado_em),
+    } for e in estados]
 
 
 @central_alertas_router.get("/historico", response_model=list[s.AlertaEstadoHistorico])

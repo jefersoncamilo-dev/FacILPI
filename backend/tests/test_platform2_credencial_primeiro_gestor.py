@@ -29,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from tests.db_safety import run_alembic
+from tests.banco_modelo import migrar_de_modelo
 
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 if str(BACKEND) not in sys.path:
@@ -565,8 +566,7 @@ def test_17_regerar_login_troca_e_contexto(platform2_db):
 def _roda_bootstrap(tmp_path: pathlib.Path, *extra: str) -> subprocess.CompletedProcess:
     banco = tmp_path / f"bootstrap-{uuid.uuid4().hex[:8]}.db"
     url = f"sqlite+aiosqlite:///{banco.resolve().as_posix()}"
-    resultado = run_alembic(url, "upgrade", "head")
-    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+    migrar_de_modelo(url)
 
     ambiente = dict(os.environ)
     ambiente["DATABASE_URL"] = url

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import {
   ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, CircleDot, ClipboardSignature, FileText,
   HeartPulse, History, Loader2, RotateCcw, TriangleAlert, XCircle,
@@ -110,7 +110,7 @@ export function AdmissaoDetalhe() {
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{nomeResidente}</h1>
+            <h1 className="font-display text-titulo-tela text-brand-ink">{nomeResidente}</h1>
             <p className="text-sm text-muted-foreground">Admissão iniciada em {formatDate(a.iniciada_em)}</p>
           </div>
           <Badge variant={a.situacao === 'concluida' ? 'success' : andamento ? 'brand' : 'neutral'} className="text-sm">
@@ -132,8 +132,8 @@ export function AdmissaoDetalhe() {
       {a.situacao === 'concluida' && <Conclusao admissao={a} nome={nomeResidente} />}
 
       {(a.situacao === 'cancelada' || a.situacao === 'desistencia') && (
-        <section className="rounded-card border border-border bg-card p-5 shadow-card" aria-label="Processo encerrado">
-          <h2 className="font-display text-base font-semibold text-foreground">
+        <section className="glass rounded-card p-5" aria-label="Processo encerrado">
+          <h2 className="font-display text-titulo-secao text-brand-ink">
             {a.situacao === 'cancelada' ? 'Admissão cancelada' : 'Desistência registrada'} em {formatDate(a.cancelada_em || a.desistencia_em)}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">Motivo: {a.motivo_cancelamento || a.motivo_desistencia}</p>
@@ -147,17 +147,17 @@ export function AdmissaoDetalhe() {
 
       {andamento && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          <section className="space-y-4 rounded-card border border-border bg-card p-5 shadow-card lg:col-span-2" aria-label="Etapa atual">
+          <section className="glass space-y-4 rounded-card p-5 lg:col-span-2" aria-label="Etapa atual">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Etapa atual</p>
-              <h2 className="font-display text-lg font-semibold text-foreground">{ROTULO_SITUACAO[a.situacao]}</h2>
+              <h2 className="font-display text-titulo-secao text-brand-ink">{ROTULO_SITUACAO[a.situacao]}</h2>
             </div>
 
             {a.situacao === 'contrato' && (
               <div className="rounded-lg border border-border p-4">
                 {a.contrato_registrado_em ? (
                   <p className="flex items-center gap-2 text-sm text-foreground">
-                    <CheckCircle2 className="size-4 text-emerald-700" aria-hidden="true" /> Contrato registrado em {formatDateTime(a.contrato_registrado_em)}
+                    <CheckCircle2 className="size-4 text-primary" aria-hidden="true" /> Contrato registrado em {formatDateTime(a.contrato_registrado_em)}
                   </p>
                 ) : (
                   <div className="flex flex-wrap items-center justify-between gap-3">
@@ -175,7 +175,7 @@ export function AdmissaoDetalhe() {
             {pendenciasDaEtapa.length > 0 ? (
               <ListaPendencias pendencias={pendenciasDaEtapa} residenteId={a.residente_id} />
             ) : (
-              <p className="flex items-center gap-2 text-sm text-emerald-800">
+              <p className="flex items-center gap-2 text-sm text-primary">
                 <Check className="size-4" aria-hidden="true" /> Nenhuma pendência nesta etapa.
               </p>
             )}
@@ -207,22 +207,22 @@ export function AdmissaoDetalhe() {
           </section>
 
           <aside className="space-y-6">
-            <section className="rounded-card border border-border bg-card p-5 shadow-card" aria-label="Situação geral">
-              <h2 className="font-display text-base font-semibold text-foreground">Para concluir</h2>
+            <section className="glass rounded-card p-5" aria-label="Situação geral">
+              <h2 className="font-display text-titulo-secao text-brand-ink">Para concluir</h2>
               {verificacao.requisitos_cumpridos ? (
-                <p className="mt-2 flex items-center gap-2 text-sm text-emerald-800"><Check className="size-4" aria-hidden="true" /> Todos os requisitos cumpridos.</p>
+                <p className="mt-2 flex items-center gap-2 text-sm text-primary"><Check className="size-4" aria-hidden="true" /> Todos os requisitos cumpridos.</p>
               ) : (
                 <ListaPendencias pendencias={verificacao.pendencias} compacta />
               )}
               <p className="mt-3 text-xs text-muted-foreground">Verificado em {formatDate(verificacao.data_verificacao)}.</p>
             </section>
             {pode('admissoes:cancelar') && (
-              <section className="rounded-card border border-border bg-card p-5 shadow-card" aria-label="Encerrar processo">
-                <h2 className="font-display text-base font-semibold text-foreground">Encerrar processo</h2>
+              <section className="glass rounded-card p-5" aria-label="Encerrar processo">
+                <h2 className="font-display text-titulo-secao text-brand-ink">Encerrar processo</h2>
                 <p className="mt-1 text-xs text-muted-foreground">O histórico é sempre preservado.</p>
                 <div className="mt-3 grid gap-2">
                   <Button variant="outline" onClick={() => setDialogo('desistir')}>Registrar desistência</Button>
-                  <Button variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => setDialogo('cancelar')}>
+                  <Button variant="ghost" className="text-critico-texto hover:bg-critico-soft" onClick={() => setDialogo('cancelar')}>
                     <XCircle aria-hidden="true" /> Cancelar admissão
                   </Button>
                 </div>
@@ -274,7 +274,7 @@ function Stepper({ admissao: a, verificacao }: { admissao: Admissao; verificacao
               <span
                 className={cn(
                   'flex size-8 items-center justify-center rounded-full border-2 text-xs font-semibold',
-                  feito && 'border-brand bg-brand text-white',
+                  feito && 'border-primary bg-primary text-primary-foreground',
                   corrente && !feito && 'border-brand bg-brand-soft text-primary ring-4 ring-brand/15',
                   !feito && !corrente && 'border-border bg-card text-muted-foreground',
                 )}
@@ -286,7 +286,7 @@ function Stepper({ admissao: a, verificacao }: { admissao: Admissao; verificacao
               </span>
               <span className="sr-only">{feito ? 'concluída' : corrente ? 'etapa atual' : 'pendente'}</span>
               {pendente && (
-                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-orange-800">
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-medium text-alerta-forte">
                   <CircleDot className="size-3" aria-hidden="true" /> pendência
                 </span>
               )}
@@ -319,8 +319,8 @@ function ListaPendencias({ pendencias, compacta = false, residenteId }: { penden
         const etapa = ETAPA_DA_PENDENCIA[p.codigo]
         const onde = ONDE_RESOLVER[etapa]
         return (
-          <li key={`${p.codigo}-${p.referencia_id ?? i}`} className="flex items-start gap-2.5 rounded-lg bg-orange-50/60 px-3 py-2 text-sm">
-            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-orange-700" aria-hidden="true" />
+          <li key={`${p.codigo}-${p.referencia_id ?? i}`} className="flex items-start gap-2.5 rounded-lg bg-alerta-soft/60 px-3 py-2 text-sm">
+            <TriangleAlert className="mt-0.5 size-4 shrink-0 text-alerta-forte" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="text-foreground">{descreverPendencia(p)}</p>
               {compacta ? (
@@ -348,11 +348,11 @@ function Conclusao({ admissao: a, nome }: { admissao: Admissao; nome: string }) 
     { to: '/intercorrencias', label: 'Registrar intercorrência', icon: TriangleAlert, permissao: 'intercorrencias:criar' },
   ].filter(x => pode(x.permissao))
   return (
-    <section className="rounded-card border border-emerald-200 bg-emerald-50/50 p-5 shadow-card" aria-label="Admissão concluída">
+    <section className="rounded-card border border-brand/30 bg-accent/50 p-5 shadow-card" aria-label="Admissão concluída">
       <div className="flex items-start gap-3">
-        <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-emerald-700" aria-hidden="true" />
+        <CheckCircle2 className="mt-0.5 size-6 shrink-0 text-primary" aria-hidden="true" />
         <div>
-          <h2 className="font-display text-lg font-semibold text-foreground">Admissão concluída</h2>
+          <h2 className="font-display text-titulo-secao text-brand-ink">Admissão concluída</h2>
           <p className="text-sm text-muted-foreground">
             {nome} foi admitido(a) em {formatDate(a.concluida_em)} e agora aparece como residente ativo.
           </p>
@@ -381,7 +381,7 @@ function Historico({ id, versao }: { id: string; versao: number }) {
   }, [aberto, id, versao])
 
   return (
-    <section className="rounded-card border border-border bg-card shadow-card" aria-label="Histórico">
+    <section className="glass rounded-card" aria-label="Histórico">
       <button
         type="button"
         onClick={() => setAberto(v => !v)}
@@ -451,7 +451,7 @@ function DialogoMotivo({
                 id="contrato-documento"
                 value={documentoId}
                 onChange={e => setDocumentoId(e.target.value)}
-                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <option value="">Sem documento vinculado</option>
                 {documentos.map(d => <option key={d.id} value={d.id}>{d.tipo} · {d.situacao}</option>)}
@@ -467,7 +467,7 @@ function DialogoMotivo({
               maxLength={2000}
               value={motivo}
               onChange={e => setMotivo(e.target.value)}
-              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
             />
           </div>
           <Button type="submit" variant={cfg.destrutiva ? 'destructive' : 'default'} className="w-full" disabled={!motivo.trim() || enviando}>

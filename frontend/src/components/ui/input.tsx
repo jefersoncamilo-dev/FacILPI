@@ -8,7 +8,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       className={cn(
         // 16px evita o zoom automático do iOS ao focar o campo.
-        'flex h-12 w-full rounded-lg border border-input bg-card px-4 text-[16px] text-foreground transition-colors placeholder:text-muted-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-destructive',
+        'flex h-12 w-full rounded-lg border border-input bg-card px-4 text-[16px] text-foreground transition-colors placeholder:text-muted-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-destructive',
         className,
       )}
       {...props}

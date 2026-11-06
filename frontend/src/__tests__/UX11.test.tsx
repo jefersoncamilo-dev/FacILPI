@@ -7,7 +7,7 @@ import { Modal } from '../components/Modal'
 import { MetricCard } from '../components/ui/metric-card'
 import { rotuloAcao, rotuloModulo, rotuloSituacaoEvento, rotuloSituacaoResidente } from '../lib/rotulos'
 import { rotuloDoItem } from '../services/plantao'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router'
 import { BarraSegmentada, percentual, Rosca, type Segmento } from '../components/ui/charts'
 import { acoesDoPerfil } from '../components/shell/acoesRapidas'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
@@ -75,12 +75,12 @@ describe('UX-11 — Modal único sobre o Radix', () => {
 })
 
 describe('UX-11 — indicador (KPI)', () => {
-  it('cartão sempre branco; o status vai no número e no ícone', () => {
+  it('cartão sempre neutro (vidro da Onda 5); o status vai no número e no ícone', () => {
     const { container, rerender } = render(<MetricCard icon={Activity} titulo="Intercorrências abertas" valor={2} tom="alerta" />)
     const cartao = container.firstElementChild as HTMLElement
     expect(cartao.getAttribute('data-tom')).toBe('alerta')
-    expect(cartao.className).toContain('bg-card')
-    expect(cartao.className).not.toMatch(/bg-(orange|amber)/)
+    expect(cartao.className).toMatch(/(^|\s)glass(\s|$)/)
+    expect(cartao.className).not.toMatch(/bg-(orange|amber|alerta|critico)/)
     expect(screen.getByText('2').className).toContain('text-alerta-forte')
     rerender(<MetricCard icon={Activity} titulo="Residentes" valor={40} tom="normal" />)
     expect(screen.getByText('40').className).toContain('text-primary')
@@ -90,8 +90,8 @@ describe('UX-11 — indicador (KPI)', () => {
 describe('UX-11 — Início visual: gráficos com dado real', () => {
   const LEITOS: Segmento[] = [
     { rotulo: 'Ocupados', valor: 3, fundo: 'bg-primary', traco: 'stroke-primary' },
-    { rotulo: 'Livres', valor: 1, fundo: 'bg-emerald-300', traco: 'stroke-emerald-300' },
-    { rotulo: 'Indisponíveis', valor: 0, fundo: 'bg-slate-300', traco: 'stroke-slate-300' },
+    { rotulo: 'Livres', valor: 1, fundo: 'bg-brand-light', traco: 'stroke-brand-light' },
+    { rotulo: 'Indisponíveis', valor: 0, fundo: 'bg-border', traco: 'stroke-border' },
   ]
 
   it('rosca e barra expõem os números e respeitam as proporções', () => {

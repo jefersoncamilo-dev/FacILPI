@@ -22,6 +22,7 @@ OFFICIAL_DB = ROOT / "storage" / "app.db"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from tests.banco_modelo import migrar_de_modelo
 from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application.fase3a import ADMIN_EMAIL, ILPI_DRAFT  # noqa: E402
@@ -97,13 +98,15 @@ def _database_backends() -> list[str]:
 def perfis_db(request: pytest.FixtureRequest, tmp_path: pathlib.Path) -> pathlib.Path | str:
     if request.param == "sqlite":
         path = tmp_path / "fase3b-perfis.db"
-        _run_migration(path, "upgrade", "head")
+        _assert_disposable_database(path)
+        migrar_de_modelo(_database_url(path))
         return path
 
     url = os.environ.get("FASE3B_TEST_POSTGRES_URL") or os.environ["FASE3A_TEST_POSTGRES_URL"]
     try:
         asyncio.run(_reset_postgres(url))
-        _run_migration(url, "upgrade", "head")
+        _assert_disposable_database(url)
+        migrar_de_modelo(_database_url(url))
     except Exception as error:
         pytest.skip(f"PostgreSQL descartável indisponível: {error}")
     return url
@@ -346,6 +349,14 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
         # ilpi_admin +3, cuidador/enfermagem/responsavel_tecnico +2 cada, medico +1.
         # 98 + 1 e 196 + 6: a 026 (#123) cria alertas:assumir para ilpi_admin e os 5 institucionais.
         # 99 + 2 e 202 + 9: a 027 (#125) cria passagem_plantao:ler/registrar (medico so ler).
-        assert counts == {"permissoes": 101, "template_perfis": 7, "template_permissoes": 211}
+        # 101 + 2 e 211 + 6: a 030 (#171) cria residentes:registrar_saida (ilpi_admin, RT,
+        # enfermagem, administrativo) e residentes:estornar_saida (ilpi_admin, RT).
+        # 217 + 8: a 031 (M10, D1) concede medicamentos:criar/atualizar e prescricoes:criar/atualizar
+        # a enfermagem e responsavel_tecnico (catalogo da 012, sem permissao nova).
+        # 225 + 1: a 033 (#11, D2) concede administracoes:corrigir ao responsavel_tecnico
+        # (enfermagem ja tinha desde a 015; catalogo da 012, sem permissao nova).
+        # 226 - 17: a 034 (#15, D3) retira do template ilpi_admin as 17 escritas clinicas
+        # (security.ESCRITAS_CLINICAS_ADMIN); a transicao de 30 dias e por ILPI, fora do template.
+        assert counts == {"permissoes": 103, "template_perfis": 7, "template_permissoes": 209}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))

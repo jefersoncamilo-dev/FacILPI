@@ -37,11 +37,11 @@ export function InativarFuncionarioModal({ open, onClose, funcionario, onConfirm
   return (
     <Modal open={open} onClose={handleClose} title="Inativar funcionário">
       <div className="space-y-4">
-        <div className="p-4 rounded-xl bg-orange-50 border border-orange-200">
+        <div className="p-4 rounded-xl bg-alerta-soft border border-alerta/30">
           <div className="flex items-start gap-3">
-            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-orange-700" aria-hidden="true" />
+            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-alerta-forte" aria-hidden="true" />
             <div>
-              <p className="text-sm font-medium text-orange-700">Confirmar inativação</p>
+              <p className="text-sm font-medium text-alerta-forte">Confirmar inativação</p>
               <p className="text-sm text-textMuted mt-1">
                 Deseja inativar o funcionário <strong>{funcionario?.nome}</strong>?
               </p>
@@ -62,13 +62,13 @@ export function InativarFuncionarioModal({ open, onClose, funcionario, onConfirm
           </p>
         </div>
 
-        {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+        {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
 
         <div className="flex gap-3">
           <button type="button" onClick={handleClose} className="btn-secondary flex-1">Cancelar</button>
           <button
             onClick={handleConfirm}
-            className="flex-1 px-5 py-3 rounded-xl font-semibold text-white bg-orange-500 hover:bg-orange-600 transition min-h-[44px] flex items-center justify-center gap-2"
+            className="flex-1 px-5 py-3 rounded-xl font-semibold text-primary-foreground bg-alerta-forte hover:bg-alerta-forte/90 transition min-h-[44px] flex items-center justify-center gap-2"
             disabled={saving}
           >
             {saving ? 'Inativando...' : 'Inativar funcionário'}

@@ -247,8 +247,9 @@ def test_019_concede_ao_template_cuidador_sem_atualizar(c4_db):
         assert "intercorrencias:atualizar" not in chaves
         # Catalogo intocado: a 019 concede vinculos, nao cria permissao.
         # HEAD: 94 + 1 da 022 (#107, alertas:ler) + 3 da 024 (#120, escala e plantao:registrar)
-        # + 1 da 026 (#123, alertas:assumir) + 2 da 027 (#125, passagem_plantao).
-        assert (await db.execute(select(func.count()).select_from(m.Permissao))).scalar_one() == 101
+        # + 1 da 026 (#123, alertas:assumir) + 2 da 027 (#125, passagem_plantao)
+        # + 2 da 030 (#171, residentes:registrar_saida/estornar_saida).
+        assert (await db.execute(select(func.count()).select_from(m.Permissao))).scalar_one() == 103
     asyncio.run(_with_client(c4_db, scenario))
 
 

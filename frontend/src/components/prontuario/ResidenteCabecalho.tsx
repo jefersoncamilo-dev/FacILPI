@@ -2,6 +2,7 @@ import { TriangleAlert } from 'lucide-react'
 import { formatDate } from '../../services/api'
 import { idade, type ContextoResidente } from '../../hooks/useContextoResidente'
 import { Badge } from '../ui/feedback'
+import { AvatarResidente } from '../residente/AvatarResidente'
 import { rotuloSituacaoResidente } from '../../lib/rotulos'
 
 // GET /api/residentes/{id} não traz leito, ausência nem grau oficial: esses vêm
@@ -18,6 +19,7 @@ export interface ResidenteResumo {
   alergias?: string | null
   restricoes?: string | null
   necessidades_especiais?: string | null
+  foto?: string | null
 }
 
 const SEM_CONTEXTO: ContextoResidente = { leito: undefined, ausencia: undefined, grau: undefined }
@@ -42,13 +44,8 @@ export function ResidenteCabecalho({
   return (
     <div className="card space-y-4 p-4 lg:sticky lg:top-20 lg:p-6">
       <div className="flex items-center gap-3 lg:flex-col lg:items-start lg:gap-2">
-        {/* Inicial é decorativa: repete a primeira letra do nome logo ao lado. */}
-        <div
-          aria-hidden="true"
-          className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-lg font-bold text-primary"
-        >
-          {residente.nome.charAt(0).toUpperCase()}
-        </div>
+        {/* M4 (#186): foto ou iniciais; decorativo, o nome está ao lado. */}
+        <AvatarResidente nome={residente.nome} foto={residente.foto} className="size-12 text-lg" />
         {/* lg:self-stretch: em lg o container vira flex-col com items-start, e sem isso este
             filho dimensiona pelo conteúdo — o min-w-0 não constrange, o h1 cresce e transborda
             o card em vez de truncar. */}
@@ -56,7 +53,7 @@ export function ResidenteCabecalho({
           {/* Trunca só a partir de lg, onde a coluna lateral é fixa em 280px; abaixo disso o
               cabeçalho ocupa a largura toda e o nome pode quebrar em quantas linhas forem
               necessárias. O title cobre o caso truncado, já que em desktop existe hover. */}
-          <h1 className="text-lg font-bold text-foreground lg:truncate lg:text-xl" title={residente.nome}>{residente.nome}</h1>
+          <h1 className="font-display text-titulo-secao text-brand-ink lg:truncate lg:text-titulo-tela" title={residente.nome}>{residente.nome}</h1>
           {residente.nome_social && <p className="text-sm text-muted-foreground">Nome social: {residente.nome_social}</p>}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             <Badge variant={residente.situacao === 'Ativo' ? 'success' : 'brand'}>{residente.situacao ? rotuloSituacaoResidente(residente.situacao) : 'Sem situação'}</Badge>
@@ -99,9 +96,9 @@ export function ResidenteCabecalho({
       </dl>
 
       {alertas.length > 0 && (
-        <div className="space-y-2 rounded-lg border border-red-100 bg-red-50 p-3">
+        <div className="space-y-2 rounded-lg border border-critico/20 bg-critico-soft p-3">
           {alertas.map(([rotulo, valor]) => (
-            <p key={rotulo} className="flex gap-2 text-sm text-red-800">
+            <p key={rotulo} className="flex gap-2 text-sm text-critico-texto">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span><strong className="font-semibold">{rotulo}:</strong> {valor}</span>
             </p>

@@ -25,6 +25,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from tests.banco_modelo import migrar_de_modelo
 from tests.db_safety import OFFICIAL_DB, reset_postgres, run_alembic, validate_pg_target, validate_target
 
 
@@ -70,8 +71,7 @@ def _migrate(ref) -> None:
     else:
         url = validate_pg_target(ref)
     validate_target(url)
-    result = run_alembic(url, "upgrade", "head")
-    assert result.returncode == 0, result.stdout + result.stderr
+    migrar_de_modelo(url)
 
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("P0_TEST_POSTGRES_URL") else []))

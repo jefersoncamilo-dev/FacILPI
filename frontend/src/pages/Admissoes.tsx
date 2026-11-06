@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router'
 import { ChevronRight, ClipboardList, Loader2, Plus, Search, UserPlus } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
 import {
@@ -68,7 +68,7 @@ export function Admissoes() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Admissões</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Admissões</h1>
           <p className="text-sm text-muted-foreground">Da chegada do residente até a conclusão, etapa por etapa.</p>
         </div>
         {pode('admissoes:criar') && carga.status === 'ok' && (
@@ -102,7 +102,7 @@ export function Admissoes() {
                   onClick={() => setAba(a.id)}
                   className={cn(
                     'min-h-[40px] shrink-0 rounded-md px-3 text-sm font-medium transition-colors',
-                    aba === a.id ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground',
+                    aba === a.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {a.label} <span className="text-xs text-muted-foreground">({contagem(a.id)})</span>
@@ -164,7 +164,7 @@ function ItemAdmissao({ admissao: a, nome }: { admissao: Admissao; nome?: string
   return (
     <Link
       to={`/admissoes/${a.id}`}
-      className="flex min-h-[72px] items-center gap-4 rounded-card border border-border bg-card px-4 py-3 shadow-card transition-colors hover:border-brand/50 sm:px-5"
+      className="glass flex min-h-[72px] items-center gap-4 rounded-card px-4 py-3 transition-colors hover:border-brand/50 sm:px-5"
     >
       <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-primary">
         {(nome || 'R')[0]}
@@ -258,7 +258,7 @@ function NovaAdmissaoDialog({
                 required
                 value={residenteId}
                 onChange={e => setResidenteId(e.target.value)}
-                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <option value="" disabled>Selecione…</option>
                 {elegiveis.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}

@@ -34,7 +34,7 @@ export function Rosca({ segmentos, centro, subcentro, titulo, tamanho = 136 }: {
   return (
     <div className="relative shrink-0" style={{ width: tamanho, height: tamanho }}>
       <svg viewBox="0 0 100 100" role="img" aria-label={`${titulo}: ${descrever(segmentos)}`} className="size-full -rotate-90">
-        <circle cx="50" cy="50" r={raio} fill="none" strokeWidth="12" className="stroke-slate-100" />
+        <circle cx="50" cy="50" r={raio} fill="none" strokeWidth="12" className="stroke-border" />
         {total > 0 && segmentos.filter(s => s.valor > 0).map(s => {
           const comprimento = (s.valor / total) * circ
           const arco = (
@@ -57,7 +57,7 @@ export function Rosca({ segmentos, centro, subcentro, titulo, tamanho = 136 }: {
 export function BarraSegmentada({ segmentos, titulo, className }: { segmentos: Segmento[]; titulo: string; className?: string }) {
   const total = segmentos.reduce((n, s) => n + s.valor, 0)
   return (
-    <div role="img" aria-label={`${titulo}: ${descrever(segmentos)}`} className={cn('flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100', className)}>
+    <div role="img" aria-label={`${titulo}: ${descrever(segmentos)}`} className={cn('flex h-2.5 w-full overflow-hidden rounded-full bg-muted', className)}>
       {total > 0 && segmentos.filter(s => s.valor > 0).map(s => (
         <span key={s.rotulo} className={cn('h-full first:rounded-l-full last:rounded-r-full', s.fundo)} style={{ width: `${(s.valor / total) * 100}%` }} />
       ))}
@@ -90,7 +90,7 @@ export function MiniBarras({ valores, rotulos, titulo, destaque }: {
     <div role="img" aria-label={`${titulo}: ${valores.map((v, i) => `${rotulos[i]} ${v}`).join(', ')}`} className="flex h-9 items-end gap-[3px]">
       {valores.map((v, i) => (
         <span key={i} title={`${rotulos[i]}: ${v}`}
-          className={cn('min-h-[3px] flex-1 rounded-sm', v === 0 ? 'bg-slate-200' : destaque?.(v, i) ? 'bg-alerta' : 'bg-brand')}
+          className={cn('min-h-[3px] flex-1 rounded-sm', v === 0 ? 'bg-secondary' : destaque?.(v, i) ? 'bg-alerta' : 'bg-brand')}
           style={{ height: `${v === 0 ? 8 : Math.max(18, (v / max) * 100)}%` }} />
       ))}
     </div>

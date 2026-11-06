@@ -75,7 +75,7 @@ function Campos({ valor, onChange }: { valor: FiltrosValue; onChange: (v: Filtro
       <label className="flex items-center gap-2 text-sm sm:col-span-2">
         <input
           type="checkbox"
-          className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary"
+          className="w-4 h-4 rounded border-input text-primary focus:ring-primary"
           checked={valor.incluirMovimentacoes}
           onChange={e => onChange({ ...valor, incluirMovimentacoes: e.target.checked })}
         />

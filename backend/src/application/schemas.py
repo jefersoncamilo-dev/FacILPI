@@ -136,6 +136,18 @@ class AlertaEstadoHistorico(BaseModel):
     encerramento: Optional[Literal["fonte", "liberado", "janela"]] = None
 
 
+class AlertaExpiradoItem(BaseModel):
+    """G5 (#198): episodio que expirou sem registro no periodo — leitura para o Meu Plantao."""
+
+    id: str
+    alerta_id: str
+    regra: str
+    residente_id: Optional[str] = None
+    por_nome: str
+    assumido_em: datetime
+    encerrado_em: datetime
+
+
 class AlertaGestorItem(BaseModel):
     # id estavel: regra:referencia[:contexto] — nunca muda so porque a projecao foi recalculada.
     id: str
@@ -537,8 +549,9 @@ class ResidenteCreate(BaseModel):
     data_nascimento: date
     sexo: Optional[str] = None
     foto: Optional[str] = None
-    data_admissao: Optional[date] = None
-    situacao: Optional[str] = "Em admissao"
+    # M14 (#172): situacao e data_admissao fora do contrato de escrita. O servidor
+    # cria sempre "Em admissao"; so a Admissao ativa e so a saida (N2) tira de
+    # "Ativo". Extras enviados sao ignorados.
     # F5A-3A2: grau_dependencia REMOVIDO do contrato de escrita. O campo
     # legado em Residente é congelado (sem escrita, sem sincronização);
     # a fonte oficial é GrauDependencia. Extras enviados são ignorados.
@@ -581,8 +594,7 @@ class ResidenteUpdate(BaseModel):
     data_nascimento: Optional[date] = None
     sexo: Optional[str] = None
     foto: Optional[str] = None
-    data_admissao: Optional[date] = None
-    situacao: Optional[str] = None
+    # M14 (#172): sem situacao e data_admissao no update (Admissao e saida decidem).
     # F5A-3A2: sem grau_dependencia no update (legado congelado).
     restricoes: Optional[str] = None
     alergias: Optional[str] = None
@@ -591,6 +603,9 @@ class ResidenteUpdate(BaseModel):
 
 class ResidenteResponse(ResidenteCreate):
     id: str
+    # M14 (#172): continuam na leitura, fora da escrita.
+    data_admissao: Optional[date] = None
+    situacao: Optional[str] = None
     # F5A-3A2: leitura do legado mantida por compatibilidade; escrita
     # bloqueada (ausente em Create/Update). Fonte oficial: GrauDependencia.
     grau_dependencia: Optional[str] = None
@@ -911,6 +926,9 @@ class C5AdministracaoResponse(BaseModel):
     motivo_estorno: Optional[str] = None
     substitui_id: Optional[str] = None
     substituto: Optional["C5AdministracaoResponse"] = None
+    # #11: so na listagem — nome do medicamento e de quem registrou.
+    descricao: Optional[str] = None
+    executor_nome: Optional[str] = None
 
     @field_validator("quantidade_realizada", mode="before")
     @classmethod
@@ -1128,8 +1146,29 @@ class DocumentoUpdate(BaseModel):
     numero: Optional[str] = None
     validade: Optional[date] = None
     obrigatorio: Optional[bool] = None
-    situacao: Optional[str] = None
+    # N5: dominio fechado so na entrada. "validado" fica de fora: so
+    # POST /documentos/{id}/validar grava, com autoria e auditoria. A resposta
+    # segue `str` para nao quebrar registros antigos.
+    situacao: Optional[Literal["pendente", "rejeitado"]] = None
     responsavel_envio: Optional[str] = None
+
+    @field_validator("situacao", mode="before")
+    @classmethod
+    def _situacao_sem_espacos(cls, v):
+        # Preserva o .strip() que o PUT generico ja aplicava antes do N5.
+        v = v.strip() if isinstance(v, str) else v
+        if v == "validado":
+            # Mantem o codigo do contrato H03 (#25) em vez do erro generico do
+            # Literal: o cliente segue sabendo que deve usar o ato dedicado.
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "DOCUMENTO_TRANSICAO_PROTEGIDA",
+                    "message": "Transição de situação protegida; use POST /documentos/{id}/validar.",
+                },
+            )
+        return v
 
 class DocumentoResponse(BaseModel):
     id: str
@@ -1622,11 +1661,15 @@ class ExecucaoCreate(D2Input):
     ocorrido_em: AwareDatetime
     observacao: Optional[str] = None
     justificativa: Optional[Annotated[str, Field(min_length=1)]] = None
+    # G4 (D6): quanto da refeicao foi consumido; opcional, so com "executada".
+    percentual_consumido: Optional[Literal[0, 25, 50, 75, 100]] = None
 
     @model_validator(mode="after")
     def outcome_fields(self):
         if self.resultado != "executada" and not self.justificativa:
             raise ValueError("Justificativa obrigatoria para recusa ou omissao")
+        if self.resultado != "executada" and self.percentual_consumido is not None:
+            raise ValueError("Percentual consumido so vale para cuidado realizado")
         return self
 
 
@@ -1686,6 +1729,7 @@ class ExecucaoResponse(BaseModel):
     executor_id: str
     observacao: Optional[str] = None
     justificativa: Optional[str] = None
+    percentual_consumido: Optional[int] = None
     estornado_em: Optional[datetime] = None
     estornado_por: Optional[str] = None
     motivo_estorno: Optional[str] = None
@@ -1736,3 +1780,23 @@ class MatrizPerfilResponse(BaseModel):
     descricao: Optional[str] = None
     clone_id: Optional[str] = None
     permissoes: list[str] = []
+
+
+# ---- #15 (034, D3 = opcao B): transicao das escritas clinicas do ilpi_admin ----
+
+class TransicaoClinicaResponse(BaseModel):
+    afeta_esta_sessao: bool
+    prazo: Optional[datetime] = None
+    em_carencia: bool
+    perfil_clinico_atribuido: bool
+    escritas_retiradas: list[str]
+
+
+class TransicaoClinicaIlpi(BaseModel):
+    ilpi_id: str
+    nome: str
+    situacao: Optional[str] = None
+    prazo: Optional[datetime] = None
+    em_carencia: bool
+    perfil_clinico_atribuido: bool
+    escritas_que_o_administrador_perde: list[str]

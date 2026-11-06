@@ -68,7 +68,12 @@ export interface ExecucaoCuidadoPayload {
   ocorrido_em: string
   observacao?: string
   justificativa?: string
+  percentual_consumido?: PercentualConsumido
 }
+
+// G4 (D6): quanto da refeição foi consumido; opcional e só com "executada".
+export type PercentualConsumido = 0 | 25 | 50 | 75 | 100
+export const PERCENTUAIS_CONSUMO: PercentualConsumido[] = [0, 25, 50, 75, 100]
 
 export async function registrarExecucaoCuidado(payload: ExecucaoCuidadoPayload) {
   const { data } = await api.post('/execucoes-cuidado/', payload)
@@ -86,10 +91,13 @@ export interface RegistroCuidado {
   resultado: ResultadoCuidado
   justificativa?: string
   observacao?: string
+  // G7: horário real do cuidado (ISO), até 24 h para trás; ausente = agora.
+  ocorrido_em?: string
+  percentual_consumido?: PercentualConsumido | null
 }
 
 /**
- * Registro de UM cuidado do plantão, no instante atual. Ponto único de escrita
+ * Registro de UM cuidado do plantão, no instante atual (ou no informado). Ponto único de escrita
  * da tela: o registro em lote (UX-01C) chama esta função item a item — o banco
  * continua recebendo uma execução por ocorrência.
  */
@@ -99,9 +107,11 @@ export async function registrarCuidado(item: Pick<PlantaoItem, 'registro_id'>, r
   return registrarExecucaoCuidado({
     ocorrencia_id: item.registro_id,
     resultado: registro.resultado,
-    ocorrido_em: new Date().toISOString(),
+    ocorrido_em: registro.ocorrido_em ?? new Date().toISOString(),
     ...(registro.resultado !== 'executada' && justificativa ? { justificativa } : {}),
     ...(observacao ? { observacao } : {}),
+    ...(registro.resultado === 'executada' && registro.percentual_consumido != null
+      ? { percentual_consumido: registro.percentual_consumido } : {}),
   })
 }
 
@@ -171,6 +181,62 @@ export interface AdministracaoPayload {
 
 export async function registrarAdministracao(payload: AdministracaoPayload) {
   const { data } = await api.post('/administracoes/', payload)
+  return data
+}
+
+// ---- #11 (D2 = sim): estorno de administração de dose ----
+// Mesmo modelo da UX-01F, com `administracoes:corrigir` (Enfermagem e RT):
+// motivo obrigatório, substituto opcional, nada apagado.
+
+export const ROTULO_RESULTADO_DOSE: Record<ResultadoDose, string> = {
+  administrada: 'Administrada',
+  recusada: 'Recusada',
+  omitida: 'Não administrada',
+}
+
+export interface AdministracaoRegistrada {
+  id: string
+  residente_id: string
+  dose_prevista_id: string
+  resultado: ResultadoDose
+  ocorrido_em: string
+  quantidade_realizada?: string | number | null
+  justificativa?: string | null
+  estornado_em?: string | null
+  motivo_estorno?: string | null
+  substitui_id?: string | null
+  descricao?: string | null
+  executor_nome?: string | null
+}
+
+export async function listarDosesRecentes(aPartirDe: string): Promise<AdministracaoRegistrada[]> {
+  const { data } = await api.get<AdministracaoRegistrada[]>('/administracoes/', { params: { a_partir_de: aPartirDe, limit: 200 } })
+  return data
+}
+
+export interface CorrecaoDose {
+  motivo: string
+  // null = anular: a dose volta a ficar pendente.
+  novo: { resultado: ResultadoDose; justificativa?: string; quantidade_realizada?: number } | null
+}
+
+export async function corrigirDose(registro: AdministracaoRegistrada, correcao: CorrecaoDose) {
+  const justificativa = correcao.novo?.justificativa?.trim()
+  const { data } = await api.post(`/administracoes/${registro.id}/estornar`, {
+    motivo: correcao.motivo.trim(),
+    ...(correcao.novo
+      ? {
+          substituto: {
+            resultado: correcao.novo.resultado,
+            // Corrige o resultado, não o horário: o fato continua no mesmo instante.
+            ocorrido_em: registro.ocorrido_em,
+            ...(correcao.novo.resultado === 'administrada'
+              ? { quantidade_realizada: correcao.novo.quantidade_realizada }
+              : justificativa ? { justificativa } : {}),
+          },
+        }
+      : {}),
+  })
   return data
 }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import { AuthProvider } from '../context/AuthContext'
 import { Layout } from '../components/Layout'
 import { AvatarResidente, iniciais } from '../components/residente/AvatarResidente'
@@ -116,9 +116,11 @@ describe('Avatar do residente', () => {
     expect(iniciais('  ')).toBe('?')
   })
 
-  it('só usa foto embutida ou https; outro texto vira iniciais', () => {
+  it('só usa foto embutida (CSP img-src self data:); outro texto vira iniciais', () => {
     const { container, rerender } = render(<AvatarResidente nome="Ana Reis" foto="data:image/jpeg;base64,AAAA" />)
     expect(container.querySelector('img')).toBeTruthy()
+    rerender(<AvatarResidente nome="Ana Reis" foto="https://exemplo/foto.jpg" />)
+    expect(container.querySelector('img')).toBeNull()
     rerender(<AvatarResidente nome="Ana Reis" foto="http://exemplo/foto.jpg" />)
     expect(container.querySelector('img')).toBeNull()
     expect(container.textContent).toBe('AR')

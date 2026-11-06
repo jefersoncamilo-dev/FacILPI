@@ -29,6 +29,7 @@ OFFICIAL_DB = ROOT / "storage" / "app.db"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
+from tests.banco_modelo import migrar_de_modelo
 from src import main  # noqa: E402
 from src.application import auth  # noqa: E402
 from src.application.auth import create_access_token  # noqa: E402
@@ -90,14 +91,7 @@ def _run_migration(ref) -> None:
     else:
         _assert_disposable_postgres(ref)
     url = _database_url(ref)
-    env = os.environ.copy()
-    env["DATABASE_URL"] = url
-    env.pop("APP_DATABASE_URL", None)
-    result = subprocess.run(
-        [sys.executable, "-m", "alembic", "-x", f"database_url={url}", "upgrade", "head"],
-        cwd=BACKEND, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace",
-    )
-    assert result.returncode == 0, result.stdout + result.stderr
+    migrar_de_modelo(url)
 
 
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D2_TEST_POSTGRES_URL") else []))
@@ -842,4 +836,43 @@ def test_25_ux01f_listagem_para_correcao_e_anulacao(rotina_db):
         lista = (await client.get("/api/execucoes-cuidado/", headers=h)).json()
         assert lista[0]["id"] == eid and lista[0]["estornado_em"] is not None
         assert lista[0]["motivo_estorno"] == "Registrado no residente errado"
+    asyncio.run(_with_client(rotina_db, op))
+
+
+def test_26_g4_percentual_refeicao(rotina_db):
+    async def op(client, db):
+        ilpi = _new_institution()
+        user = await _create_ilpi_user(db, ilpi, permissions=PAIS6 | D2_ALL)
+        rev = await _create_funcionario(db, ilpi)
+        res = await _create_residente(db, ilpi.id)
+        await db.commit()
+        h = _headers(user, ilpi_id=ilpi.id)
+        pid, iid = await _setup_pais_vigente(client, h, res.id, rev.id)
+        prog_id = (await client.post("/api/programacoes-cuidado/", json=_prog_payload(pid, iid), headers=h)).json()["id"]
+        ocorrencias = (await client.get("/api/ocorrencias-cuidado/", params={"programacao_id": prog_id}, headers=h)).json()
+        agora = datetime.now(timezone.utc).isoformat()
+        # Fora de 0/25/50/75/100 e percentual sem "executada" sao recusados no schema.
+        for corpo in ({"resultado": "executada", "percentual_consumido": 30},
+                      {"resultado": "executada", "percentual_consumido": 101},
+                      {"resultado": "recusada", "justificativa": "Recusou", "percentual_consumido": 0}):
+            r = await client.post("/api/execucoes-cuidado/", json={
+                "ocorrencia_id": ocorrencias[0]["id"], "ocorrido_em": agora, **corpo}, headers=h)
+            assert r.status_code == 422, r.text
+        # Opcional: sem percentual continua valendo.
+        r = await client.post("/api/execucoes-cuidado/", json={
+            "ocorrencia_id": ocorrencias[1]["id"], "resultado": "executada", "ocorrido_em": agora}, headers=h)
+        assert r.status_code == 201 and r.json()["percentual_consumido"] is None
+        r = await client.post("/api/execucoes-cuidado/", json={
+            "ocorrencia_id": ocorrencias[0]["id"], "resultado": "executada", "ocorrido_em": agora,
+            "percentual_consumido": 75}, headers=h)
+        assert r.status_code == 201, r.text
+        assert r.json()["percentual_consumido"] == 75
+        lista = (await client.get("/api/execucoes-cuidado/", params={"ocorrencia_id": ocorrencias[0]["id"]}, headers=h)).json()
+        assert lista[0]["percentual_consumido"] == 75
+        # CHECK no banco barra valor fora do dominio mesmo sem passar pelo schema.
+        with pytest.raises(Exception):
+            await db.execute(text("UPDATE execucoes_cuidado SET percentual_consumido = 30 WHERE id = :id"),
+                             {"id": r.json()["id"]})
+            await db.commit()
+        await db.rollback()
     asyncio.run(_with_client(rotina_db, op))

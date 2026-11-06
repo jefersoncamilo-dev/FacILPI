@@ -15,7 +15,8 @@ import pytest
 from sqlalchemy import func, select, text
 
 from .revisoes import ESQUEMA_DOS_MODELOS
-from .test_d3_admissao_migration import _engine, _migrate, _ref
+from .test_d3_admissao_migration import _engine, _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from .test_d3_admissao_migration import HEAD as PRE_017_HEAD
 from .test_d3_admissao import ALL, DOMAIN, URL as ADMISSOES_URL, _client, _create, _setup
 from .test_d2_rotina import _code, _create_platform_user, _headers, _new_id
@@ -31,7 +32,7 @@ HEAD = "017_h03_documentos_validar"
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def h03_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=ESQUEMA_DOS_MODELOS)
+    migrar_de_modelo(_url(ref), ESQUEMA_DOS_MODELOS)
     return ref
 
 

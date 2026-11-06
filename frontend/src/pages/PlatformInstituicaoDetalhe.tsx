@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router'
 import { InstituicaoForm } from '../components/platform/InstituicaoForm'
 import { PrimeiroGestorForm } from '../components/platform/PrimeiroGestorForm'
 import { CredencialTemporariaDialog } from '../components/platform/CredencialTemporariaDialog'
@@ -125,7 +125,7 @@ export function PlatformInstituicaoDetalhe() {
     return (
       <div className="space-y-4">
         {erro ? (
-          <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
+          <div role="alert" className="text-sm p-3 rounded-xl bg-alerta-soft text-alerta-forte border border-alerta/30">
             {erro}
           </div>
         ) : (
@@ -145,7 +145,7 @@ export function PlatformInstituicaoDetalhe() {
     <div className="space-y-6 max-w-3xl">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">
+          <h1 className="truncate font-display text-titulo-tela text-brand-ink">
             {instituicao.nome_fantasia?.trim() || instituicao.razao_social}
           </h1>
           <p className="text-sm text-textMuted">Situação: {rotuloSituacao(instituicao.situacao)}</p>
@@ -156,18 +156,18 @@ export function PlatformInstituicaoDetalhe() {
       </div>
 
       {erro && (
-        <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
+        <div role="alert" className="text-sm p-3 rounded-xl bg-alerta-soft text-alerta-forte border border-alerta/30">
           {erro}
         </div>
       )}
       {aviso && (
-        <div role="status" className="text-sm p-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200">
+        <div role="status" className="text-sm p-3 rounded-xl bg-accent text-primary border border-brand/30">
           {aviso}
         </div>
       )}
 
       <section className="space-y-2">
-        <h2 className="font-semibold">Dados da instituição</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Dados da instituição</h2>
         <InstituicaoForm
           instituicao={instituicao}
           onSubmit={salvar}
@@ -177,7 +177,7 @@ export function PlatformInstituicaoDetalhe() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold">Primeiro gestor</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Primeiro gestor</h2>
         <div className="card space-y-3">
           {ativa ? (
             <p className="text-sm text-textMuted">
@@ -188,7 +188,7 @@ export function PlatformInstituicaoDetalhe() {
             <PrimeiroGestorForm onSubmit={cadastrarGestor} disabled={ocupado} />
           )}
 
-          <div className="border-t border-slate-200 pt-3 space-y-2">
+          <div className="border-t border-border pt-3 space-y-2">
             <p className="text-sm text-textMuted">
               {inativa
                 ? 'A instituição está inativa e não recebe nova credencial. Reative-a antes.'
@@ -208,7 +208,7 @@ export function PlatformInstituicaoDetalhe() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold">Ativação</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Ativação</h2>
         <div className="card space-y-3">
           {ativa ? (
             <>
@@ -263,7 +263,7 @@ export function PlatformInstituicaoDetalhe() {
           </p>
           {/* UX-11: o erro aparece onde a pessoa está — dentro do diálogo. Com o
               diálogo aberto, a página atrás fica coberta e oculta a leitores de tela. */}
-          {erro && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro}</div>}
+          {erro && <div role="alert" className="rounded-lg border border-critico/30 bg-critico-soft p-3 text-sm text-critico-texto">{erro}</div>}
           <div className="flex gap-2">
             <button onClick={() => setConfirmarInativacao(false)} className="btn-secondary flex-1 min-h-[44px]">
               Cancelar
@@ -290,7 +290,7 @@ export function PlatformInstituicaoDetalhe() {
           </p>
           {/* UX-11: o erro aparece onde a pessoa está — dentro do diálogo. Com o
               diálogo aberto, a página atrás fica coberta e oculta a leitores de tela. */}
-          {erro && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{erro}</div>}
+          {erro && <div role="alert" className="rounded-lg border border-critico/30 bg-critico-soft p-3 text-sm text-critico-texto">{erro}</div>}
           <div className="flex gap-2">
             <button
               onClick={() => setConfirmarRegeneracao(false)}

@@ -57,15 +57,15 @@ export function ConcederAcessoModal({ open, onClose, funcionario, perfis, onSucc
       {senhaTemp ? (
         <div className="space-y-4">
           <div className="text-center">
-            <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto mb-3">
-              <CheckCircle2 className="size-7 text-emerald-700" aria-hidden="true" />
+            <div className="w-14 h-14 rounded-full bg-accent flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="size-7 text-primary" aria-hidden="true" />
             </div>
             <h4 className="font-semibold text-textMain">Acesso concedido</h4>
             <p className="text-sm text-textMuted mt-1">Senha temporária para {funcionario?.nome}:</p>
           </div>
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+          <div className="bg-muted border border-border rounded-xl p-4">
             <label className="text-xs text-textMuted font-medium">Senha temporária</label>
-            <div className="mt-1 p-3 bg-white rounded-lg border border-slate-200 font-mono text-sm break-all select-all">
+            <div className="mt-1 p-3 bg-card rounded-lg border border-border font-mono text-sm break-all select-all">
               {senhaTemp}
             </div>
           </div>
@@ -77,7 +77,7 @@ export function ConcederAcessoModal({ open, onClose, funcionario, perfis, onSucc
         </div>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="p-3 rounded-xl bg-blue-50 border border-blue-100">
+          <div className="p-3 rounded-xl bg-info-soft border border-info/20">
             <p className="text-sm text-primary font-medium">Conceder acesso para:</p>
             <p className="text-sm text-textMain font-semibold mt-1">{funcionario?.nome}</p>
             {funcionario?.email && <p className="text-xs text-textMuted mt-0.5">{funcionario.email}</p>}
@@ -97,7 +97,7 @@ export function ConcederAcessoModal({ open, onClose, funcionario, perfis, onSucc
             Uma senha temporária será gerada e exibida após a criação. O usuário deverá alterá-la no primeiro acesso.
           </p>
 
-          {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+          {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
 
           <div className="flex gap-3">
             <button type="button" onClick={handleClose} className="btn-secondary flex-1">Cancelar</button>

@@ -38,9 +38,9 @@ export function RevogarAcessoModal({ open, onClose, funcionario, usuario, onConf
   return (
     <Modal open={open} onClose={handleClose} title="Revogar acesso">
       <div className="space-y-4">
-        <div className="p-4 rounded-xl bg-red-50 border border-red-200">
+        <div className="p-4 rounded-xl bg-critico-soft border border-critico/30">
           <div className="flex items-start gap-3">
-            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-orange-700" aria-hidden="true" />
+            <TriangleAlert className="mt-0.5 size-5 shrink-0 text-alerta-forte" aria-hidden="true" />
             <div>
               <p className="text-sm font-medium text-danger">Atenção: esta ação é irreversível imediata</p>
               <p className="text-sm text-textMuted mt-1">
@@ -63,13 +63,13 @@ export function RevogarAcessoModal({ open, onClose, funcionario, usuario, onConf
           </p>
         </div>
 
-        {msg && <div className="text-sm text-danger bg-red-50 border border-red-200 p-3 rounded-xl">{msg}</div>}
+        {msg && <div className="text-sm text-danger bg-critico-soft border border-critico/30 p-3 rounded-xl">{msg}</div>}
 
         <div className="flex gap-3">
           <button type="button" onClick={handleClose} className="btn-secondary flex-1">Cancelar</button>
           <button
             onClick={handleConfirm}
-            className="flex-1 px-5 py-3 rounded-xl font-semibold text-white bg-danger hover:bg-red-700 transition min-h-[44px] flex items-center justify-center gap-2"
+            className="flex-1 px-5 py-3 rounded-xl font-semibold text-destructive-foreground bg-destructive hover:bg-destructive/90 transition min-h-[44px] flex items-center justify-center gap-2"
             disabled={saving}
           >
             {saving ? 'Revogando...' : 'Revogar acesso'}

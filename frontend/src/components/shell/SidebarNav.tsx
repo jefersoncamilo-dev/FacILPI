@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import {
@@ -198,7 +198,7 @@ export function SidebarGrupo({
                   linha,
                   'relative',
                   isActive
-                    ? 'bg-brand-soft font-semibold text-accent-foreground before:absolute before:-left-[9px] before:inset-y-2 before:w-[3px] before:rounded-full before:bg-primary'
+                    ? 'bg-brand-soft font-semibold text-accent-foreground before:absolute before:left-[-9px] before:inset-y-2 before:w-[3px] before:rounded-full before:bg-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 )
               }

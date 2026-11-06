@@ -18,7 +18,8 @@ from sqlalchemy import func, inspect as sa_inspect, select, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .test_d3_admissao_migration import _engine, _migrate, _ref
+from .test_d3_admissao_migration import _engine, _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from .test_d3_admissao import ALL, DOMAIN, _client, _setup
 from .test_d2_rotina import _code, _create_platform_user, _headers, _new_id
 from src import main
@@ -39,7 +40,7 @@ TEXTO = b"isto nao tem assinatura reconhecida\n"
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def a3_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    migrar_de_modelo(_url(ref), HEAD)
     return ref
 
 

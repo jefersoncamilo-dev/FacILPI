@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { TriangleAlert } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'
@@ -48,7 +48,14 @@ export function Intercorrencias() {
   const [params, setParams] = useSearchParams()
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
-  const [residenteId, setResidenteId] = useState<string>(TODOS)
+  // M5 (#177): `?residente=` chega filtrado e `?id=` destaca o registro (destino dos alertas).
+  const [residenteId, setResidenteId] = useState<string>(() => params.get('residente') || TODOS)
+  const destacado = params.get('id')
+  useEffect(() => {
+    if (destacado && registros.some(r => r.id === destacado)) {
+      document.getElementById(`intercorrencia-${destacado}`)?.scrollIntoView?.({ block: 'center' })
+    }
+  }, [destacado, registros])
 
   const [modalAberto, setModalAberto] = useState(() => params.get('registrar') === '1')
   // UX-11 (#101): `?registrar=1` (ações rápidas do Início) abre o registro
@@ -108,7 +115,7 @@ export function Intercorrencias() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Intercorrências</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Intercorrências</h1>
           <p className="text-textMuted text-sm">Eventos relevantes com gravidade, SBAR e providências</p>
         </div>
         {/* UX-05: só para quem pode registrar; o 403 segue como defesa. */}
@@ -133,7 +140,15 @@ export function Intercorrencias() {
           id="int-filtro-residente"
           className="input sm:flex-1"
           value={residenteId}
-          onChange={e => { setSucesso(''); setResidenteId(e.target.value) }}
+          onChange={e => {
+            setSucesso('')
+            setResidenteId(e.target.value)
+            if (params.has('residente') || params.has('id')) {
+              const p = new URLSearchParams(params)
+              p.delete('residente'); p.delete('id')
+              setParams(p, { replace: true })
+            }
+          }}
         >
           <option value={TODOS}>Todos os residentes</option>
           {residentes.map(r => (
@@ -183,7 +198,7 @@ export function Intercorrencias() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
@@ -205,7 +220,9 @@ export function Intercorrencias() {
             return (
             <article
               key={registro.id}
-              className={`card min-w-0 border-l-4 ${
+              id={`intercorrencia-${registro.id}`}
+              aria-current={registro.id === destacado ? 'true' : undefined}
+              className={`card min-w-0 border-l-4 ${registro.id === destacado ? 'ring-2 ring-primary ' : ''}${
                 registro.situacao === 'aberta' ? 'border-l-warning' : foraDoContrato ? 'border-l-border' : 'border-l-success'
               }`}
             >
@@ -225,18 +242,18 @@ export function Intercorrencias() {
                 )}
               </div>
 
-              <p className="mt-3 font-medium break-words">{rotuloTipo(registro.tipo)}</p>
+              <p className="mt-3 font-medium wrap-break-word">{rotuloTipo(registro.tipo)}</p>
 
               {registro.sbar_situacao && (
-                <p className="mt-2 text-sm text-textMuted break-words">{registro.sbar_situacao}</p>
+                <p className="mt-2 text-sm text-textMuted wrap-break-word">{registro.sbar_situacao}</p>
               )}
               {registro.providencia && (
-                <p className="mt-2 text-sm text-textMuted break-words">
+                <p className="mt-2 text-sm text-textMuted wrap-break-word">
                   <span className="font-medium text-textMain">Providência:</span> {registro.providencia}
                 </p>
               )}
               {registro.desfecho && (
-                <p className="mt-2 text-sm text-textMuted break-words">
+                <p className="mt-2 text-sm text-textMuted wrap-break-word">
                   <span className="font-medium text-textMain">Desfecho:</span> {registro.desfecho}
                 </p>
               )}

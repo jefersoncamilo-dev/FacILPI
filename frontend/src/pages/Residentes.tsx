@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { BedDouble, Loader2, Lock, Plus, Search, TriangleAlert } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
@@ -13,7 +13,7 @@ import { LoadingState } from '../components/ui/states'
 import { cn } from '../lib/utils'
 import { rotuloSituacaoResidente } from '../lib/rotulos'
 
-const FORM_VAZIO = { nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M', situacao: 'Em admissao' }
+const FORM_VAZIO = { nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M' }
 
 /** Lista de residentes (UX-04 / #89). Estrutura do card: Issue #34; estados: PH-01. */
 export function Residentes() {
@@ -97,7 +97,7 @@ export function Residentes() {
     <div className="space-y-6">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Residentes</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Residentes</h1>
           <p className="text-sm text-muted-foreground">Quem vive na instituição, com a história de cada pessoa no prontuário.</p>
         </div>
         {pode('residentes:criar') && (
@@ -164,8 +164,8 @@ export function Residentes() {
         </div>
       ) : erro ? (
         <div className="card py-10 text-center" role="alert">
-          <TriangleAlert className="mx-auto mb-3 size-7 text-orange-700" aria-hidden="true" />
-          <p className="text-sm font-medium text-red-700">{erro}</p>
+          <TriangleAlert className="mx-auto mb-3 size-7 text-alerta-forte" aria-hidden="true" />
+          <p className="text-sm font-medium text-critico-texto">{erro}</p>
           <p className="mt-1 text-xs text-muted-foreground">Isso não significa que não há residentes cadastrados.</p>
           <Button onClick={load} className="mt-4">Tentar novamente</Button>
         </div>
@@ -187,7 +187,7 @@ export function Residentes() {
                 o texto do card deixa de ser selecionável. */}
             <Link
               to={`/residentes/${r.id}`}
-              className="flex gap-3 after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring/50"
+              className="flex gap-3 after:absolute after:inset-0 after:rounded-card focus-visible:outline-hidden focus-visible:after:ring-2 focus-visible:after:ring-ring/50"
             >
               {/* Decorativa: sem aria-hidden, o nome acessível começa com a inicial duplicada. */}
               <div aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-lg font-bold text-primary">{r.nome[0]}</div>
@@ -201,7 +201,7 @@ export function Residentes() {
               </div>
             </Link>
             {(r.alergias || r.restricoes) && (
-              <div className="mt-3 flex gap-2 rounded-lg border border-red-100 bg-red-50 p-2 text-xs text-red-700">
+              <div className="mt-3 flex gap-2 rounded-lg border border-critico/20 bg-critico-soft p-2 text-xs text-critico-texto">
                 <TriangleAlert data-icone="alerta" className="size-4 shrink-0" aria-hidden="true" />
                 <span className="truncate">{r.alergias || r.restricoes}</span>
               </div>
@@ -211,11 +211,11 @@ export function Residentes() {
                   exibida no prontuário). Mantido aqui por compatibilidade (Issue #34). */}
               <span className="badge-success">{r.grau_dependencia || 'Sem grau'}</span>
               {leito && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-slate-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-muted-foreground">
                   <BedDouble className="size-3.5" aria-hidden="true" /> {leito}
                 </span>
               )}
-              {r.cpf && <span className="rounded-full bg-muted px-2 py-1 text-slate-600">CPF {r.cpf}</span>}
+              {r.cpf && <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">CPF {r.cpf}</span>}
             </div>
           </div>
           )
@@ -246,7 +246,7 @@ export function Residentes() {
                 <Label htmlFor="res-sexo">Sexo</Label>
                 <select
                   id="res-sexo"
-                  className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
                   value={form.sexo}
                   onChange={e => setForm({ ...form, sexo: e.target.value })}
                 >

@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `029_autoria_autor_id` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário). Na homologação a 029 só entra antes da próxima promoção para a `main` (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até a 034 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -32,12 +32,27 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Meu Plantão operacional (UX-00/UX-01, #138–#145): registro rápido de cuidado, visões por horário/cuidado/residente, filtros, seleção múltipla e registro em lote com persistência individual; local do residente (G3) e grau de dependência ativo (decisão C) na própria fila; horizonte de cuidados e doses renovado na leitura (G1, #139).
 - Matriz de permissões clínicas/institucionais.
 - Admissão ponta a ponta.
+- Saída do residente (N2, #171, migration 030): óbito, transferência, desligamento e retorno à família, com estorno; regras em `docs/DOMAIN_RULES.md`. O estorno ainda não tem tela (só API).
+- Situação do residente só pela Admissão e pela saída (M14, #172).
+- Meu Plantão: "Passar plantão" como ação principal e confirmação ao encerrar, com atrasados e estado da passagem (M1, #176). Validação visual no celular pendente para a Onda 3.
+- Destinos dos alertas com contexto do residente e do registro (M5, #177).
+- Vincular funcionário a usuário de outra ILPI devolve o mesmo 404 de id inexistente (N4, #178).
+- Cuidados programados criados e editados pela tela (M12, #185).
+- Aba Resumo do residente (M4, #186) com os familiares do residente, filtrados no servidor (M13, #194).
+- Medicação (migration 031, D1): Enfermagem e RT cadastram medicamento e transcrevem receita; o Médico mantém prescrever (M10, #188). Tela de medicação substitui o placeholder (M9, #192); a grade de doses ainda mostra o horário no fuso do navegador.
+- Onda 3: N5 (PR #201), G5 aba Feitos/Expirados (PR #202), UX do Início e da fila (PR #203), G7 cuidado em outro horário até 24 h (PR #205).
+- Onda 4: N6+N7 e CSP `img-src` (PR #209), N3 auditoria de acesso (PR #210), guard de 1 worker para o rate limit (PR #212), cookie HttpOnly + CSRF (#207, PR #216).
+- Onda 5: tokens de tema (PR #215), cores fixas em tokens (PRs #221, #224, #229), React Router 7 (PR #218), E2E Playwright (PR #223).
+- Percentual de refeição opcional 0/25/50/75/100 (D6, PR #220, migration 032).
+- Estorno de dose pela tela só por Enfermagem e RT, com motivo (D2, #11, PR #226, migration 033).
+- Escritas clínicas fora do `ilpi_admin` (D3 opção B, #15, PR #228, migration 034): relatório por ILPI, transição de 30 dias, bloqueio só da escrita clínica sem perfil clínico.
+- CI mais rápido (#184): o job SQLite caiu de cerca de 29 para cerca de 4 min.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
 
 ## Estado funcional importante
 
 ### Prontuário longitudinal
-D.4 é a próxima frente funcional em recuperação/correção no fluxo atual. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. Não assuma que D.4 está integrado sem verificar GitHub.
+As Issues do D.4 (#21 backend, #27 frontend) estão fechadas. O contrato aprovado o trata como projeção read-only de fatos oficiais, não como nova tabela genérica de eventos. O PLAN do M20 (20/10/2026) confirmou a aderência ao contrato (paginação por cursor no SQL, um evento por transição, estornos e substituições visíveis). A Passagem de Plantão não entra no prontuário. N1 (#169): cada evento traz `autor_id` (UUID ou nulo) e `autor_nome` resolvido no servidor, com o nome em texto como fallback antes da 029; só o PAIS tem link de tela (`/plano/:id`), as demais origens vêm sem link. Follow-ups: #163, #164, #165 e #166.
 
 ### Camada Operacional (Fases 1–5 integradas)
 Fluxo diário completo: inicia plantão → área/residentes → prioridades/atividades → assume → resolve na origem → a fonte encerra → passagem → próximo turno confirma. Regras em `docs/DOMAIN_RULES.md`; visão e Fases 6–14 (fora do ciclo, sem design técnico) em `docs/ROADMAP.md`.
@@ -51,17 +66,33 @@ As migrations 021–028 precisam ser aplicadas em ordem em qualquer ambiente per
 ### Meu Plantão — UX-01
 Integrado (#139–#145): G1, G3, registro rápido (Realizado / Recusado / Não realizado, motivo obrigatório nas exceções), três visões e filtros, fila padrão a partir de 24 h atrás (atrasados visíveis), seleção múltipla, registro em lote (uma execução e uma auditoria por cuidado; "Marcar até 1 h" no atalho de grupo), cards compactos com foto/iniciais, Emergência (abre o prontuário), título com o nome do funcionário e grau ativo na fila para quem tem `plantao:ler` (o histórico do grau continua exigindo `grau_dependencia:ler`). Regras em `docs/DOMAIN_RULES.md`.
 
-Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de registros (UX-01F, decisão A): Enfermagem, RT e administrador corrigem via estorno com `execucoes:corrigir` no próprio Meu Plantão; cuidador registra mas não corrige; sem exclusão; só cuidados — confirme no GitHub se o PR já foi integrado. G4 (percentual de refeição), G5 (concluídos/expirados) e G7 ("outro horário") seguem adiados.
+Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de registros (UX-01F, decisão A): Enfermagem, RT e administrador corrigem via estorno com `execucoes:corrigir` no próprio Meu Plantão; cuidador registra mas não corrige; sem exclusão; só cuidados — confirme no GitHub se o PR já foi integrado. G4 (PR #220), G5 (PR #202) e G7 (PR #205) foram integrados.
 
 ### Auditoria geral (11/10/2026) — decisões e riscos conhecidos
-- **Situação do residente:** a API ainda aceita `situacao`/`data_admissao` do cliente no cadastro e na edição genéricos; a decisão foi manter como está. Só a Admissão ativa o residente pelas telas atuais. Risco conhecido, não corrigido.
-- **Adiados (exigem migration/RBAC):** autoria por FK em avaliações, sinais vitais e intercorrências (hoje nome em texto) e retirada das permissões clínicas de escrita do template `ilpi_admin` (herança das migrations 006–014).
-- **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. O JWT segue em `localStorage`; a CSP sem script inline reduz o risco, e a saída para cookie fica como decisão futura.
-- **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 e React Router 7 (upgrades maiores, sem decisão).
-- **Branches:** `main` está muitos commits atrás da linha integrada; a promoção para `main` ainda não tem critério definido.
+- **Situação do residente:** fora do contrato de escrita desde o M14 (#172): o cadastro nasce "Em admissao", só a Admissão ativa e só a saída (N2, #171) tira de "Ativo"; `situacao`/`data_admissao` enviados no cadastro ou na edição genéricos são ignorados.
+- **Autoria por FK:** integrada em avaliações, sinais vitais e intercorrências (029, PR #158); o nome em texto segue como foto. A exibição legível no prontuário é o N1.
+- **`ilpi_admin`:** escritas clínicas retiradas com transição de 30 dias (D3, PR #228, migration 034).
+- **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. Desde o #207 o access token vai em cookie HttpOnly `SameSite=Strict` (mesma origem: Caddy na VPS, rewrite de `/api/*` no Render), com CSRF double-submit (`csrf_token` + `X-CSRF-Token`) e logout que revoga a família e apaga os cookies; o `localStorage` guarda só as claims, sem assinatura. O Bearer continua aceito na transição.
+- **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 (React Router 7 integrado no PR #218).
+- **Branches:** a `main` foi promovida a partir da linha integrada pelo PR #160 (20/10/2026, v0.6.0), com conteúdo igual ao da `fase-3b`. A `fase-3b` continua sendo a linha integrada; a `main` só avança por promoção.
+
+- **Alerta de quem saiu:** o estado aberto de um alerta de residente que saiu fecha como "resolvido pela fonte"; o encerramento próprio `saida` é o #173 (exige migration 031).
+
+### Critério de promoção para a `main` (decisão D4, 20/10/2026)
+Uma promoção da `fase-3b` para a `main` exige:
+1. os três jobs de CI verdes (Frontend, Backend SQLite, Backend PostgreSQL);
+2. homologação com contas sintéticas;
+3. migrations aplicadas em ordem no ambiente de homologação, por decisão humana;
+4. aprovação explícita do responsável no PR de promoção.
+
+### Pendências registradas (03/11/2026)
+- Neon: aplicar as migrations 029 a 034 em ordem, só por decisão humana.
+- Render: configurar o rewrite de `/api/*` e o `VITE_API_BASE_URL` (necessário para o cookie do #207).
+- Follow-ups: #163, #164, #165, #166, #173, tela de estorno da saída, fuso horário da grade de doses (M9), UUID em `Documentos.tsx`, validação visual do M1 e do M5.
+- Ordem dos complementares (D5) em `docs/ROADMAP.md` §20.
 
 ### Passagem de Plantão
-Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. A integração com o Prontuário longitudinal (D.4) segue posterior.
+Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. Não integra o Prontuário longitudinal (decisão do M20).
 
 ### Frontend
 Existe frontend funcional, mas a consolidação visual/mobile-first definitiva ainda é uma etapa posterior ao hardening do núcleo operacional. Não iniciar redesign amplo dentro de uma Issue backend.
@@ -83,7 +114,7 @@ Ferramental: `ops/backup.sh`, `ops/restore.sh`, `ops/offhost_upload.sh`, `ops/of
 Pendências conhecidas desta frente, **nenhuma bloqueando a VPS**: lifecycle rule do bucket (GATE-5), instalação na VPS (GATE-7) e os testes negativos de `DeleteObject` do GATE-6, não executados porque DELETE permaneceu proibido em todos os gates.
 
 ### CI / cloud / produção
-O CI do GitHub Actions está configurado e é a validação integrada autoritativa: três jobs — `Frontend (testes, TypeScript, build)`, `Backend (SQLite)` e `Backend (PostgreSQL)`. Existe uma homologação publicada (`docs/RUNBOOK_HOMOLOGACAO.md`): API e frontend no Render, publicados automaticamente **a partir da `main`** (desde 16/10/2026; antes publicavam a `fase-3b`), banco PostgreSQL no Neon (cadeia em 028). A `v0.5.0` (`aa2bd10`) é a primeira versão promovida; o frontend publicado tem os cabeçalhos de segurança do SEC-02. Produção não está configurada; a VPS com o `docker-compose.yml` (Caddy + PostgreSQL próprio, `docs/RUNBOOK_PILOT.md`) é a frente seguinte. Verifique a situação atual antes de qualquer ação operacional.
+O CI do GitHub Actions está configurado e é a validação integrada autoritativa: três jobs — `Frontend (testes, TypeScript, build)`, `Backend (SQLite)` e `Backend (PostgreSQL)`. Existe uma homologação publicada (`docs/RUNBOOK_HOMOLOGACAO.md`): API e frontend no Render, publicados automaticamente **a partir da `main`** (desde 16/10/2026; antes publicavam a `fase-3b`), banco PostgreSQL no Neon (cadeia em 028 no último registro; confirmar se a 029 já foi aplicada). A `v0.5.0` (`aa2bd10`) foi a primeira versão promovida, e a v0.6.0 veio pelo PR #160 (sem release publicada no GitHub); o frontend publicado tem os cabeçalhos de segurança do SEC-02. Produção não está configurada; a VPS com o `docker-compose.yml` (Caddy + PostgreSQL próprio, `docs/RUNBOOK_PILOT.md`) é a frente seguinte. Verifique a situação atual antes de qualquer ação operacional.
 
 ```
 FEATURE_FREEZE = ACTIVE

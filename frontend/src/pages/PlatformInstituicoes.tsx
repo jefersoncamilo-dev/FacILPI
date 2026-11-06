@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { listarInstituicoes, LIMITE_LISTAGEM } from '../services/platform'
 import { mensagemDeErro, formatDate } from '../services/api'
 import { rotuloSituacao, ehAtiva, ehInativa } from '../types/platform'
@@ -7,10 +7,10 @@ import type { Instituicao } from '../types/platform'
 
 function Selo({ situacao }: { situacao: string }) {
   const cor = ehAtiva(situacao)
-    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    ? 'bg-accent text-primary border-brand/30'
     : ehInativa(situacao)
-      ? 'bg-slate-100 text-slate-600 border-slate-200'
-      : 'bg-orange-50 text-orange-800 border-orange-200'
+      ? 'bg-muted text-muted-foreground border-border'
+      : 'bg-alerta-soft text-alerta-forte border-alerta/30'
   return (
     <span className={`inline-block text-xs font-medium px-2 py-1 rounded-lg border ${cor}`}>
       {rotuloSituacao(situacao)}
@@ -51,7 +51,7 @@ export function PlatformInstituicoes() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Instituições</h1>
+        <h1 className="font-display text-titulo-tela text-brand-ink">Instituições</h1>
         <Link to="/platform/instituicoes/nova" className="btn-primary ml-auto min-h-[44px] px-4 py-2 text-sm">
           Nova ILPI
         </Link>
@@ -66,7 +66,7 @@ export function PlatformInstituicoes() {
       />
 
       {erro && (
-        <div role="alert" className="text-sm p-3 rounded-xl bg-orange-50 text-orange-800 border border-orange-200">
+        <div role="alert" className="text-sm p-3 rounded-xl bg-alerta-soft text-alerta-forte border border-alerta/30">
           {erro}
         </div>
       )}

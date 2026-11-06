@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router'
 import { ChevronRight, Loader2, NotebookPen, Plus } from 'lucide-react'
 import { api, formatDate, mensagemDeErro } from '../services/api'
 import { paisApi, ROTULO_PAIS, TERMINAIS_PAIS, type Plano } from '../services/pais'
@@ -14,7 +14,7 @@ import { cn } from '../lib/utils'
 
 type ResidenteRef = { id: string; nome: string }
 type Filtro = 'todos' | 'vigentes' | 'andamento' | 'encerrados'
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 /** Plano atual de um residente: o vigente, senão a versão mais recente. */
 function planoAtual(planos: Plano[]): Plano {
@@ -83,7 +83,7 @@ export function Pais() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Plano de cuidados (PAIS)</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Plano de cuidados (PAIS)</h1>
           <p className="text-sm text-muted-foreground">
             {residenteFiltro ? <>Planos de {nomes.get(residenteFiltro) || 'um residente'} · <Link to="/plano" className="font-medium text-primary hover:underline">ver todos</Link></> : 'O plano vigente de cada residente e o que está em construção.'}
           </p>
@@ -115,7 +115,7 @@ export function Pais() {
             <ul className="space-y-2">
               {visiveis.map(({ residenteId, atual, versoes }) => (
                 <li key={residenteId}>
-                  <Link to={`/plano/${atual.id}`} className="flex min-h-[72px] items-center gap-4 rounded-card border border-border bg-card px-4 py-3 shadow-card transition-colors hover:border-brand/50 sm:px-5">
+                  <Link to={`/plano/${atual.id}`} className="glass flex min-h-[72px] items-center gap-4 rounded-card px-4 py-3 transition-colors hover:border-brand/50 sm:px-5">
                     <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft font-semibold text-primary">
                       {(nomes.get(residenteId) || 'R')[0]}
                     </span>
@@ -183,7 +183,7 @@ function NovoPais({ residentes, residenteInicial, aoFechar }: { residentes: Resi
           <div className="space-y-2">
             <Label htmlFor="np-objetivos">Objetivos (opcional)</Label>
             <textarea id="np-objetivos" rows={3} value={objetivos} onChange={e => setObjetivos(e.target.value)}
-              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" />
+              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40" />
           </div>
           {erro && <Alert variant="error">{erro}</Alert>}
           <Button type="submit" className="w-full" disabled={!residenteId || salvando}>

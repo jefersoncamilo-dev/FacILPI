@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useAberturaPorParametro } from '../hooks/useAberturaPorParametro'
-import { Link } from 'react-router-dom'
+import { Link } from 'react-router'
 import { ArrowRightLeft, BedDouble, DoorOpen, History, Loader2, LogOut, Plus, UserPlus } from 'lucide-react'
 import { api, formatDate, formatDateTime, mensagemDeErro } from '../services/api'
 import {
@@ -22,7 +22,7 @@ type FiltroLeito = 'todos' | EstadoLeito
 const ROTULO_ESTADO: Record<EstadoLeito, string> = {
   ocupado: 'Ocupado', livre: 'Livre', indisponivel: 'Indisponível', inativo: 'Inativo',
 }
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 /** Quartos, leitos e ausências (UX-08 / #81). Substitui o placeholder de /quartos. */
 export function QuartosLeitos() {
@@ -96,7 +96,7 @@ export function QuartosLeitos() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Quartos e leitos</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Quartos e leitos</h1>
           <p className="text-sm text-muted-foreground">Ocupação, disponibilidade e ausências dos residentes.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -128,7 +128,7 @@ export function QuartosLeitos() {
             <div role="tablist" aria-label="Visão" className="flex w-fit gap-1 rounded-lg bg-muted p-1">
               {([['leitos', 'Leitos'], ['ausencias', 'Ausências']] as [Aba, string][]).map(([id, rotulo]) => (
                 <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
-                  className={cn('min-h-[40px] rounded-md px-4 text-sm font-medium', aba === id ? 'bg-card text-foreground shadow-sm' : 'text-slate-600 hover:text-foreground')}>
+                  className={cn('min-h-[40px] rounded-md px-4 text-sm font-medium', aba === id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
                   {rotulo}
                 </button>
               ))}
@@ -157,7 +157,7 @@ export function QuartosLeitos() {
                 <div className="space-y-5">
                   {[...porQuarto.entries()].map(([quarto, itens]) => (
                     <section key={quarto} aria-label={quarto} className="space-y-2">
-                      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{quarto}</h2>
+                      <h2 className="text-rotulo uppercase text-muted-foreground">{quarto}</h2>
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                         {itens.map(l => (
                           <CartaoLeito key={l.id} leito={l} nome={l.residente_atual_id ? nomes.get(l.residente_atual_id) : undefined}
@@ -194,7 +194,7 @@ export function QuartosLeitos() {
 
 function Resumo({ titulo, valor }: { titulo: string; valor: React.ReactNode }) {
   return (
-    <div className="rounded-card border border-border bg-card p-4 shadow-card">
+    <div className="glass rounded-card p-4">
       <p className="text-sm text-muted-foreground">{titulo}</p>
       <p className="mt-1 font-display text-2xl font-bold text-foreground">{valor}</p>
     </div>
@@ -205,7 +205,7 @@ function CartaoLeito({ leito: l, nome, ausencia, aoAbrir }: { leito: Leito; nome
   const estado = estadoDoLeito(l)
   return (
     <button type="button" onClick={aoAbrir}
-      className={cn('flex min-h-[88px] w-full flex-col items-start gap-1.5 rounded-card border bg-card p-4 text-left shadow-card transition-colors hover:border-brand/50',
+      className={cn('glass flex min-h-[88px] w-full flex-col items-start gap-1.5 rounded-card p-4 text-left transition-colors hover:border-brand/50',
         estado === 'inativo' ? 'border-dashed border-border opacity-70' : 'border-border')}>
       <div className="flex w-full items-center justify-between gap-2">
         <span className="font-medium text-foreground">Leito {l.leito}</span>
@@ -215,7 +215,7 @@ function CartaoLeito({ leito: l, nome, ausencia, aoAbrir }: { leito: Leito; nome
       </div>
       {estado === 'ocupado' && <span className="truncate text-sm text-foreground">{nome || 'Residente'}</span>}
       {ausencia && (
-        <span className="text-xs font-medium text-orange-800">
+        <span className="text-xs font-medium text-alerta-forte">
           {ROTULO_AUSENCIA[ausencia.tipo]} desde {formatDate(ausencia.data_inicio)}
         </span>
       )}
@@ -231,7 +231,7 @@ function ListaAusencias({ ausencias, nomes, podeEncerrar, aoEncerrar }: {
   const encerradas = ausencias.filter(a => a.data_fim).slice(0, 20)
   if (ausencias.length === 0) return <EmptyState icon={DoorOpen} title="Nenhuma ausência registrada" />
   const Linha = ({ a }: { a: Ausencia }) => (
-    <li className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-card p-4 shadow-card">
+    <li className="glass flex flex-wrap items-center gap-3 rounded-card p-4">
       <div className="min-w-0 flex-1">
         <p className="font-medium text-foreground">{nomes.get(a.residente_id) || 'Residente'}</p>
         <p className="text-xs text-muted-foreground">
@@ -247,12 +247,12 @@ function ListaAusencias({ ausencias, nomes, podeEncerrar, aoEncerrar }: {
   return (
     <div className="space-y-6">
       <section aria-label="Ausências ativas" className="space-y-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ativas ({ativas.length})</h2>
+        <h2 className="text-rotulo uppercase text-muted-foreground">Ativas ({ativas.length})</h2>
         {ativas.length === 0 ? <p className="text-sm text-muted-foreground">Nenhum residente ausente agora.</p> : <ul className="space-y-2">{ativas.map(a => <Linha key={a.id} a={a} />)}</ul>}
       </section>
       {encerradas.length > 0 && (
         <section aria-label="Ausências encerradas" className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Encerradas recentes</h2>
+          <h2 className="text-rotulo uppercase text-muted-foreground">Encerradas recentes</h2>
           <ul className="space-y-2">{encerradas.map(a => <Linha key={a.id} a={a} />)}</ul>
         </section>
       )}
@@ -339,7 +339,7 @@ function DetalheLeito({ leito: l, leitos, residentes, nomes, ausencia, aoFechar,
                   <ArrowRightLeft aria-hidden="true" /> Transferir
                 </Button>
               </div>
-              <Button variant="ghost" className="w-full text-red-700 hover:bg-red-50" disabled={ocupado}
+              <Button variant="ghost" className="w-full text-critico-texto hover:bg-critico-soft" disabled={ocupado}
                 onClick={() => acao(() => leitosApi.liberar(l.id), `${nomeDoLeito(l)} liberado.`)}>
                 <LogOut aria-hidden="true" /> Liberar leito
               </Button>

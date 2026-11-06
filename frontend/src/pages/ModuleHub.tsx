@@ -1,4 +1,4 @@
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams } from 'react-router'
 import { Lock } from 'lucide-react'
 import { usePermissoes } from '../context/PermissoesContext'
 import { ModuleHubCard } from '../components/shell/ModuleHubCard'
@@ -29,12 +29,12 @@ export function ModuleHub() {
   return (
     <div className="space-y-6">
       <header className="flex items-start gap-3">
-        <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-primary" aria-hidden="true">
+        <span className="flex size-11 shrink-0 items-center justify-center rounded-icon bg-brand-soft text-primary shadow-icon" aria-hidden="true">
           <Icone className="size-5" />
         </span>
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">{modulo.label}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{modulo.descricao}</p>
+          <h1 className="font-display text-titulo-tela text-brand-ink">{modulo.label}</h1>
+          <p className="mt-1 text-apoio text-muted-foreground">{modulo.descricao}</p>
         </div>
       </header>
 

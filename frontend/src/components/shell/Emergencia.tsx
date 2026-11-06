@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, matchPath, useLocation } from 'react-router-dom'
+import { Link, matchPath, useLocation } from 'react-router'
 import { ChevronRight, FileText, Search, Siren } from 'lucide-react'
 import { Dialog, DialogContent } from '../ui/dialog'
 import { usePermissoes } from '../../context/PermissoesContext'
@@ -31,7 +31,7 @@ export function Emergencia({ compacto = false }: { compacto?: boolean }) {
         aria-expanded={aberto}
         aria-label="Emergência"
         className={cn(
-          'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-red-300 bg-card px-3 text-sm font-semibold text-red-700 transition-colors hover:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500',
+          'inline-flex min-h-[44px] min-w-[44px] items-center justify-center gap-1.5 rounded-full border border-critico/40 bg-card px-3 text-sm font-semibold text-critico-texto transition-colors hover:bg-critico-soft focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-critico',
           compacto && 'px-2.5',
         )}
       >

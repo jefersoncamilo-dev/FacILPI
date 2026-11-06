@@ -16,7 +16,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from sqlalchemy import func, select, update
 
-from .test_d3_admissao_migration import _migrate, _ref
+from .test_d3_admissao_migration import _migrate, _ref, _url
+from .banco_modelo import migrar_de_modelo
 from .test_d3_admissao import _client
 from .test_d2_rotina import _create_ilpi_user, _headers, _new_id, _new_institution
 from src.infrastructure import models as m
@@ -29,7 +30,7 @@ GESTOR = {"escala:ler", "escala:gerenciar", "plantao:registrar", "residentes:ler
 @pytest.fixture(params=["sqlite"] + (["postgresql"] if os.getenv("D3_TEST_POSTGRES_URL") else []))
 def escala_db(request, tmp_path):
     ref = _ref(request, tmp_path)
-    _migrate(ref, target=HEAD)
+    migrar_de_modelo(_url(ref), HEAD)
     return ref
 
 

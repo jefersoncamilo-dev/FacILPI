@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router'
 import { ClipboardCheck, Loader2, Plus, Search, ShieldCheck } from 'lucide-react'
 import { api, formatDate, formatDateTime, mensagemDeErro } from '../services/api'
 import {
@@ -14,8 +14,8 @@ import { Dialog, DialogContent } from '../components/ui/dialog'
 import { EmptyState, ErrorState } from '../components/ui/states'
 
 type ResidenteRef = { id: string; nome: string }
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
-const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
+const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 /** Avaliações (UX-06 / #79). Substitui o placeholder de /avaliacoes. */
 export function Avaliacoes() {
@@ -44,6 +44,13 @@ export function Avaliacoes() {
   }, [])
 
   useEffect(() => { carregar() }, [carregar])
+  // M5 (#177): `?novo=1&id=` chega do alerta de avaliação vencida, que não traz
+  // tipo nem instrumento — a nova copia os da avaliação vencida, se visível.
+  const idBase = params.get('id')
+  const inicialNova = useMemo(() => {
+    const base = nova && !nova.tipo && idBase ? avaliacoes?.find(a => a.id === idBase) : undefined
+    return base ? { ...nova, tipo: base.tipo, instrumento: base.instrumento || '' } : nova
+  }, [nova, idBase, avaliacoes])
   useEffect(() => {
     api.get<ResidenteRef[]>('/residentes/').then(r => setResidentes(r.data || [])).catch(() => setResidentes([]))
   }, [])
@@ -67,7 +74,7 @@ export function Avaliacoes() {
     const p = new URLSearchParams(params)
     if (id) p.set('residente', id)
     else p.delete('residente')
-    p.delete('novo'); p.delete('tipo'); p.delete('instrumento')
+    p.delete('novo'); p.delete('tipo'); p.delete('instrumento'); p.delete('id')
     setParams(p, { replace: true })
   }
 
@@ -75,7 +82,7 @@ export function Avaliacoes() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Avaliações</h1>
+          <h1 className="font-display text-titulo-tela text-brand-ink">Avaliações</h1>
           <p className="text-sm text-muted-foreground">Instrumentos aplicados aos residentes, como foram registrados.</p>
         </div>
         {pode('avaliacoes:criar') && avaliacoes !== null && (
@@ -118,7 +125,7 @@ export function Avaliacoes() {
                 return (
                   <li key={a.id}>
                     <button type="button" onClick={() => { setAviso(''); setAberta(a) }}
-                      className="flex min-h-[72px] w-full items-start gap-4 rounded-card border border-border bg-card px-4 py-3 text-left shadow-card transition-colors hover:border-brand/50 sm:px-5">
+                      className="glass flex min-h-[72px] w-full items-start gap-4 rounded-card px-4 py-3 text-left transition-colors hover:border-brand/50 sm:px-5">
                       <span aria-hidden="true" className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-soft text-primary">
                         <ClipboardCheck className="size-5" />
                       </span>
@@ -144,8 +151,9 @@ export function Avaliacoes() {
         </>
       )}
 
-      {nova && (
-        <NovaAvaliacaoDialogo inicial={nova} residentes={residentes} usados={usados} aoFechar={() => setNova(null)}
+      {/* Com `?id=` espera a lista para o formulário já nascer preenchido. */}
+      {inicialNova && pode('avaliacoes:criar') && (!idBase || avaliacoes !== null) && (
+        <NovaAvaliacaoDialogo inicial={inicialNova} residentes={residentes} usados={usados} aoFechar={() => setNova(null)}
           aoCriar={a => {
             setNova(null)
             setAviso(`Avaliação registrada para ${nomes.get(a.residente_id) || 'o residente'}.`)
@@ -288,7 +296,7 @@ function DetalheAvaliacao({ avaliacao: a, nome, aoFechar }: { avaliacao: Avaliac
           </dl>
           {respostas && (
             <section aria-label="Respostas" className="space-y-1.5">
-              <h3 className="text-sm font-semibold text-foreground">Respostas</h3>
+              <h3 className="text-titulo-cartao text-brand-ink">Respostas</h3>
               {'pares' in respostas ? (
                 <dl className="divide-y divide-border rounded-lg border border-border text-sm">
                   {respostas.pares.map(([k, v]) => <div key={k} className="flex justify-between gap-3 px-3 py-1.5"><dt className="text-muted-foreground">{k}</dt><dd className="text-right font-medium">{v}</dd></div>)}
@@ -300,7 +308,7 @@ function DetalheAvaliacao({ avaliacao: a, nome, aoFechar }: { avaliacao: Avaliac
 
           {graus !== 'sem_acesso' && (
             <section aria-label="Grau de dependência" className="space-y-2 rounded-lg border border-border p-3">
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><ShieldCheck className="size-4 text-primary" aria-hidden="true" /> Grau de dependência oficial</h3>
+              <h3 className="flex items-center gap-2 text-titulo-cartao text-brand-ink"><ShieldCheck className="size-4 text-primary" aria-hidden="true" /> Grau de dependência oficial</h3>
               {graus === null ? <Skeleton className="h-5 w-40" /> : (
                 <p className="text-sm text-foreground">
                   {ativo ? <>{ativo.classificacao}{desta ? ', confirmado a partir desta avaliação' : ''}{ativo.confirmado_em ? ` · desde ${formatDate(ativo.confirmado_em)}` : ''}</> : 'Não definido'}

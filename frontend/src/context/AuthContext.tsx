@@ -3,7 +3,7 @@ import { api } from '../services/api'
 import { contextApi, logoutServidor, resolveContextLabels } from '../services/context'
 import {
   TOKEN_KEY, USER_KEY, CONTEXT_KEY, CONTEXT_CHANGED_EVENT, SESSION_ENDED_KEY,
-  decodeJwt, isTokenExpired, contextFromToken, sameContext,
+  decodeJwt, isTokenExpired, contextFromToken, sameContext, semAssinatura,
 } from '../types/context'
 import type { ActiveContext, ContextOption } from '../types/context'
 
@@ -73,7 +73,8 @@ async function discoverContexts(token: string): Promise<ContextOption[]> {
 }
 
 function persist(token: string, user: User, ctx: ActiveContext) {
-  localStorage.setItem(TOKEN_KEY, token)
+  // #207: só as claims; a credencial fica no cookie HttpOnly.
+  localStorage.setItem(TOKEN_KEY, semAssinatura(token))
   localStorage.setItem(USER_KEY, JSON.stringify(user))
   localStorage.setItem(CONTEXT_KEY, JSON.stringify(ctx))
 }
@@ -99,11 +100,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * A limpeza local e o redirect acontecem no `finally`: rede fora, 500 ou
    * timeout não podem prender o usuário numa sessão que ele já mandou encerrar.
    *
-   * PH-02/PR-2: a chamada usa a instância `api`, cujo interceptor anexa o
-   * Bearer antes de enviar. O backend deriva dele o `sid` (família da sessão) e
-   * revoga essa família imediatamente; o cookie httpOnly, quando disponível,
-   * funciona como prova adicional. Assim a revogação não depende de SameSite
-   * atravessar as duas origens do Render.
+   * #207: a chamada leva os cookies de sessão (mesma origem). O backend deriva
+   * do access token o `sid` (família da sessão), revoga essa família e apaga os
+   * cookies; o refresh token é a prova adicional.
    */
   const logout = useCallback(async () => {
     try {

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import { AuthProvider } from './context/AuthContext'
 import { Layout } from './components/Layout'
 import { PrivateRoute } from './components/PrivateRoute'
@@ -11,7 +11,7 @@ import { MeuPlantao } from './pages/MeuPlantao'
 import { SinaisVitais } from './pages/SinaisVitais'
 import { Intercorrencias } from './pages/Intercorrencias'
 import { Documentos } from './pages/Documentos'
-import { Placeholder } from './pages/Placeholder'
+import { Medicacao } from './pages/Medicacao'
 import { Admissoes } from './pages/Admissoes'
 import { Alertas } from './pages/Alertas'
 import { Escala } from './pages/Escala'
@@ -21,6 +21,7 @@ import { Avaliacoes } from './pages/Avaliacoes'
 import { PassagemPlantao } from './pages/PassagemPlantao'
 import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
+import { Cuidados } from './pages/Cuidados'
 import { ModuleHub } from './pages/ModuleHub'
 import { ErrorBoundary } from './components/ui/states'
 import { Equipe } from './pages/Equipe'
@@ -55,28 +56,20 @@ export default function App() {
           <Route path="/plantao" element={<Protected><MeuPlantao /></Protected>} />
           <Route path="/residentes" element={<Protected><Residentes /></Protected>} />
           <Route path="/residentes/:id" element={<Protected><ResidenteProntuario /></Protected>} />
+          <Route path="/residentes/:id/medicacao" element={<Protected><Medicacao /></Protected>} />
           <Route path="/admissoes" element={<Protected><Admissoes /></Protected>} />
           <Route path="/admissoes/:id" element={<Protected><AdmissaoDetalhe /></Protected>} />
           <Route path="/avaliacoes" element={<Protected><Avaliacoes /></Protected>} />
           <Route path="/plano" element={<Protected><Pais /></Protected>} />
           <Route path="/plano/:id" element={<Protected><PaisDetalhe /></Protected>} />
-          <Route path="/cuidados" element={<Protected><Placeholder title="Cuidados Diários" /></Protected>} />
-          <Route path="/medicacao" element={<Protected><Placeholder title="Medicação" /></Protected>} />
+          <Route path="/cuidados" element={<Protected><Cuidados /></Protected>} />
+          <Route path="/medicacao" element={<Protected><Medicacao /></Protected>} />
           <Route path="/sinais" element={<Protected><SinaisVitais /></Protected>} />
           <Route path="/intercorrencias" element={<Protected><Intercorrencias /></Protected>} />
           <Route path="/documentos" element={<Protected><Documentos /></Protected>} />
-          <Route path="/agenda" element={<Protected><Placeholder title="Agenda Clínica" /></Protected>} />
           <Route path="/passagem" element={<Protected><PassagemPlantao /></Protected>} />
           <Route path="/quartos" element={<Protected><QuartosLeitos /></Protected>} />
           <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
-          <Route path="/estoque" element={<Protected><Placeholder title="Estoque" /></Protected>} />
-          <Route path="/financeiro" element={<Protected><Placeholder title="Financeiro" /></Protected>} />
-          <Route path="/familia" element={<Protected><Placeholder title="Portal da Família" /></Protected>} />
-          <Route path="/relatorios" element={<Protected><Placeholder title="Relatórios" /></Protected>} />
-          <Route path="/supervisao" element={<Protected><Placeholder title="Supervisão" /></Protected>} />
-          <Route path="/compliance" element={<Protected><Placeholder title="Compliance e Fiscalização" /></Protected>} />
-          <Route path="/auditoria" element={<Protected><Placeholder title="Auditoria" /></Protected>} />
-          <Route path="/config" element={<Protected><Placeholder title="Configurações" /></Protected>} />
           <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
           <Route path="/escala" element={<Protected><Escala /></Protected>} />
           {/* UX-00C: página-hub de cada módulo (slug inválido volta ao Início). */}

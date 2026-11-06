@@ -31,14 +31,9 @@ export interface TokenPayload {
 /**
  * PH-01: encerramento de sessão no servidor.
  *
- * PH-02/PR-2: o interceptor de api.ts anexa o Bearer armazenado e ele é a
- * identidade suficiente para o backend revogar a família da sessão. Isso fecha
- * o logout também na topologia cross-origin do Render, onde o cookie
- * SameSite=Strict pode não atravessar facilpi-web → facilpi-api.
- *
- * `withCredentials` permanece como segunda prova quando o cookie está
- * disponível (mesma origem/topologia futura). Cookie e Bearer divergentes são
- * tratados pelo servidor como sessão inconsistente; nunca há escolha silenciosa.
+ * #207: API e frontend na mesma origem; o cookie HttpOnly de access identifica
+ * a família da sessão e o de refresh é a segunda prova. Provas divergentes são
+ * tratadas pelo servidor como sessão inconsistente; nunca há escolha silenciosa.
  *
  * `timeout` existe porque sair não pode depender da rede: se o servidor não
  * responder, quem chama ainda precisa limpar a sessão local e seguir.

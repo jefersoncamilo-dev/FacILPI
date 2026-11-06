@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter } from 'react-router'
 import { PermissoesProvider } from '../context/PermissoesContext'
 import { Escala } from '../pages/Escala'
 import { MeuTurno } from '../components/plantao/MeuTurno'
@@ -128,7 +128,7 @@ describe('Meu turno — iniciar a partir da própria escala (#122)', () => {
       } }
       return { data: atual.plantao } as any
     })
-    render(<MeuTurno />)
+    render(<MemoryRouter><MeuTurno /></MemoryRouter>)
     expect(await screen.findByText(/Sua escala:/)).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: /Iniciar minha escala/ }))
     await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/plantoes/iniciar', { area_ids: [], escala_id: 'e1' }))

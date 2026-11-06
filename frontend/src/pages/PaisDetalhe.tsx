@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, CheckCircle2, CircleDot, Copy, Loader2, Plus, Trash2, XCircle } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router'
+import { ArrowLeft, Check, CheckCircle2, CircleDot, Clock, Copy, Loader2, Plus, Trash2, XCircle } from 'lucide-react'
 import { api, formatDate, formatDateTime, mensagemDeErro } from '../services/api'
 import {
   CICLO, EDITAVEL, paisApi, PROXIMA_ACAO, ROTULO_PAIS, TERMINAIS_PAIS,
-  type Plano, type TipoItem,
+  type Intervencao, type Plano, type TipoItem,
 } from '../services/pais'
+import { cuidadosApi, timezoneLocal, type Prioridade, type ProgramacaoNova } from '../services/cuidados'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { variantePais } from './Pais'
 import { Button } from '../components/ui/button'
@@ -16,8 +17,8 @@ import { ErrorState } from '../components/ui/states'
 import { cn } from '../lib/utils'
 
 type Funcionario = { id: string; nome: string; situacao: string; cargo?: string | null }
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
-const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
+const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 const SECOES: { tipo: TipoItem; titulo: string; singular: string }[] = [
   { tipo: 'necessidades', titulo: 'Necessidades', singular: 'necessidade' },
@@ -39,6 +40,7 @@ export function PaisDetalhe() {
   const [executando, setExecutando] = useState(false)
   const [dialogo, setDialogo] = useState<'encerrar' | 'versao' | TipoItem | null>(null)
   const [anterior, setAnterior] = useState<Plano | null>(null)
+  const [programar, setProgramar] = useState<Intervencao | null>(null)
 
   const carregar = useCallback(async () => {
     try {
@@ -114,7 +116,7 @@ export function PaisDetalhe() {
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{nome || 'Residente'}</h1>
+            <h1 className="font-display text-titulo-tela text-brand-ink">{nome || 'Residente'}</h1>
             <p className="text-sm text-muted-foreground">
               PAIS versão {p.versao} · desde {formatDate(p.data_inicial)}{p.data_final ? ` até ${formatDate(p.data_final)}` : ''}
               {' · '}<Link to={`/residentes/${p.residente_id}`} className="font-medium text-primary hover:underline">prontuário</Link>
@@ -135,7 +137,7 @@ export function PaisDetalhe() {
             return (
               <li key={etapa} aria-current={corrente ? 'step' : undefined} className="flex flex-col items-center gap-1.5 text-center">
                 <span className={cn('flex size-8 items-center justify-center rounded-full border-2 text-xs font-semibold',
-                  feito && 'border-brand bg-brand text-white', corrente && !feito && 'border-brand bg-brand-soft text-primary ring-4 ring-brand/15',
+                  feito && 'border-primary bg-primary text-primary-foreground', corrente && !feito && 'border-brand bg-brand-soft text-primary ring-4 ring-brand/15',
                   !feito && !corrente && 'border-border bg-card text-muted-foreground')}>
                   {feito ? <Check className="size-4" aria-hidden="true" /> : i + 1}
                 </span>
@@ -155,14 +157,14 @@ export function PaisDetalhe() {
       )}
 
       {proxima && pode(proxima.permissao) && (
-        <section aria-label="Próxima etapa" className="space-y-3 rounded-card border border-border bg-card p-5 shadow-card">
-          <h2 className="font-display text-base font-semibold text-foreground">Próxima etapa: {proxima.rotulo}</h2>
+        <section aria-label="Próxima etapa" className="glass space-y-3 rounded-card p-5">
+          <h2 className="font-display text-titulo-secao text-brand-ink">Próxima etapa: {proxima.rotulo}</h2>
           {proxima.acao === 'aprovar' && (
             <ul className="space-y-1 text-sm">
               {SECOES.map(s => {
                 const ok = ativos[s.tipo].length > 0
                 return (
-                  <li key={s.tipo} className={cn('flex items-center gap-2', ok ? 'text-emerald-800' : 'text-orange-800')}>
+                  <li key={s.tipo} className={cn('flex items-center gap-2', ok ? 'text-primary' : 'text-alerta-forte')}>
                     {ok ? <CheckCircle2 className="size-4" aria-hidden="true" /> : <CircleDot className="size-4" aria-hidden="true" />}
                     Ao menos uma {s.singular} ativa{ok ? '' : ' — pendente'}
                   </li>
@@ -203,9 +205,9 @@ export function PaisDetalhe() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {SECOES.map(s => (
-          <section key={s.tipo} aria-label={s.titulo} className="space-y-3 rounded-card border border-border bg-card p-5 shadow-card">
+          <section key={s.tipo} aria-label={s.titulo} className="glass space-y-3 rounded-card p-5">
             <div className="flex items-center justify-between gap-2">
-              <h2 className="font-display text-base font-semibold text-foreground">{s.titulo} <span className="text-sm font-normal text-muted-foreground">({ativos[s.tipo].length})</span></h2>
+              <h2 className="font-display text-titulo-secao text-brand-ink">{s.titulo} <span className="text-sm font-normal text-muted-foreground">({ativos[s.tipo].length})</span></h2>
               {editavel && (
                 <Button variant="outline" size="sm" className="h-9" onClick={() => setDialogo(s.tipo)}>
                   <Plus aria-hidden="true" /> Adicionar
@@ -222,10 +224,16 @@ export function PaisDetalhe() {
                       <p className="text-foreground">{item.descricao}</p>
                       <DetalheItem tipo={s.tipo} item={item} plano={p} nomeFuncionario={nomeFuncionario} />
                     </div>
+                    {s.tipo === 'intervencoes' && p.situacao === 'vigente' && pode('programacoes:criar') && (
+                      <Button variant="outline" size="sm" className="h-9 shrink-0" disabled={executando}
+                        aria-label={`Programar horários: ${item.descricao}`} onClick={() => setProgramar(item as Intervencao)}>
+                        <Clock aria-hidden="true" /> Programar horários
+                      </Button>
+                    )}
                     {editavel && (
                       <button type="button" aria-label={`Remover ${s.singular}: ${item.descricao}`} disabled={executando}
                         onClick={() => executar(() => paisApi.inativar(p.id, s.tipo, item.id), `${s.singular[0].toUpperCase()}${s.singular.slice(1)} removida do plano.`)}
-                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-red-50 hover:text-red-700">
+                        className="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-critico-soft hover:text-critico-texto">
                         <Trash2 className="size-4" aria-hidden="true" />
                       </button>
                     )}
@@ -246,7 +254,7 @@ export function PaisDetalhe() {
             <Button variant="outline" onClick={() => setDialogo('versao')}><Copy aria-hidden="true" /> Criar nova versão</Button>
           )}
           {p.situacao === 'vigente' && pode('planos_cuidados:encerrar') && (
-            <Button variant="ghost" className="text-red-700 hover:bg-red-50" onClick={() => setDialogo('encerrar')}><XCircle aria-hidden="true" /> Encerrar plano</Button>
+            <Button variant="ghost" className="text-critico-texto hover:bg-critico-soft" onClick={() => setDialogo('encerrar')}><XCircle aria-hidden="true" /> Encerrar plano</Button>
           )}
         </section>
       )}
@@ -255,6 +263,11 @@ export function PaisDetalhe() {
       {(dialogo === 'necessidades' || dialogo === 'metas' || dialogo === 'intervencoes') && (
         <DialogoItem tipo={dialogo} plano={p} equipe={equipe} aoFechar={() => setDialogo(null)}
           aoSalvar={dados => executar(() => paisApi.adicionar(p.id, dialogo, dados), 'Item adicionado ao plano.')} />
+      )}
+      {programar && (
+        <DialogoProgramar plano={p} intervencao={programar} aoFechar={() => setProgramar(null)}
+          aoSalvar={dados => executar(() => cuidadosApi.criar(dados),
+            'Horários programados. Os cuidados aparecem no Meu Plantão de quem estiver no turno.', () => setProgramar(null))} />
       )}
       {dialogo === 'versao' && (
         <DialogoTexto titulo="Criar nova versão" descricao={p.situacao === 'vigente'
@@ -376,6 +389,75 @@ function DialogoTexto({ titulo, descricao, rotulo, botao, destrutiva, equipe, ao
           ))}
           <div className="space-y-2"><Label htmlFor="dt-texto">{rotulo}</Label><textarea id="dt-texto" required rows={3} className={AREA} value={texto} onChange={e => setTexto(e.target.value)} /></div>
           <Button type="submit" variant={destrutiva ? 'destructive' : 'default'} className="w-full" disabled={!texto.trim() || (exigeFuncionario && !fid)}>{botao}</Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+const hojeISO = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
+// Início hoje vale a partir de agora (não cria cuidados já atrasados); em outra data, desde 00:00 local.
+function inicioDe(data: string) {
+  return data === hojeISO() ? new Date().toISOString() : new Date(`${data}T00:00:00`).toISOString()
+}
+
+/** Programar horários de uma intervenção do PAIS vigente (M12 / #185). Programação não é execução. */
+function DialogoProgramar({ plano, intervencao, aoFechar, aoSalvar }: {
+  plano: Plano; intervencao: Intervencao; aoFechar: () => void; aoSalvar: (dados: ProgramacaoNova) => void
+}) {
+  const [horarios, setHorarios] = useState<string[]>([''])
+  const inicioMinimo = plano.data_inicial > hojeISO() ? plano.data_inicial : hojeISO()
+  const [inicio, setInicio] = useState(inicioMinimo)
+  const [fim, setFim] = useState('')
+  const [perfil, setPerfil] = useState(intervencao.perfil_responsavel || '')
+  const [prioridade, setPrioridade] = useState<Prioridade>('media')
+  const validos = horarios.filter(h => h)
+  const repetido = new Set(validos).size !== validos.length
+  function salvar(e: React.FormEvent) {
+    e.preventDefault()
+    aoSalvar({
+      plano_id: plano.id, intervencao_id: intervencao.id, horarios: [...validos].sort(), timezone: timezoneLocal(),
+      vigencia_inicio: inicioDe(inicio), ...(fim ? { vigencia_fim: new Date(`${fim}T23:59:59`).toISOString() } : {}),
+      ...(perfil.trim() ? { perfil_responsavel: perfil.trim() } : {}), prioridade,
+    })
+  }
+  return (
+    <Dialog open onOpenChange={a => { if (!a) aoFechar() }}>
+      <DialogContent title="Programar horários" description={`${intervencao.descricao}. A programação gera os cuidados previstos no Meu Plantão; a execução continua sendo registrada por quem cuida.`}>
+        <form onSubmit={salvar} className="space-y-4">
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-foreground">Horários do dia</legend>
+            {horarios.map((h, i) => (
+              <div key={i} className="flex gap-2">
+                <Input type="time" aria-label={`Horário ${i + 1}`} value={h} required={i === 0}
+                  onChange={e => setHorarios(horarios.map((x, j) => (j === i ? e.target.value : x)))} />
+                {horarios.length > 1 && (
+                  <button type="button" aria-label={`Remover horário ${i + 1}`} onClick={() => setHorarios(horarios.filter((_, j) => j !== i))}
+                    className="inline-flex size-12 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-critico-soft hover:text-critico-texto">
+                    <Trash2 className="size-4" aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            ))}
+            {horarios.length < 48 && (
+              <Button type="button" variant="outline" size="sm" className="h-9" onClick={() => setHorarios([...horarios, ''])}><Plus aria-hidden="true" /> Outro horário</Button>
+            )}
+            {repetido && <p className="text-sm text-critico-texto">Há horários repetidos.</p>}
+          </fieldset>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label htmlFor="prog-inicio">A partir de</Label><Input id="prog-inicio" type="date" required min={inicioMinimo} max={plano.data_final || undefined} value={inicio} onChange={e => setInicio(e.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="prog-fim">Até (opcional)</Label><Input id="prog-fim" type="date" min={inicio} max={plano.data_final || undefined} value={fim} onChange={e => setFim(e.target.value)} /></div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2"><Label htmlFor="prog-perfil">Área responsável</Label><Input id="prog-perfil" maxLength={100} placeholder="Ex.: Enfermagem" value={perfil} onChange={e => setPerfil(e.target.value)} /></div>
+            <div className="space-y-2">
+              <Label htmlFor="prog-prioridade">Prioridade</Label>
+              <select id="prog-prioridade" className={SELECT} value={prioridade} onChange={e => setPrioridade(e.target.value as Prioridade)}>
+                <option value="baixa">Baixa</option><option value="media">Média</option><option value="alta">Alta</option>
+              </select>
+            </div>
+          </div>
+          <Button type="submit" className="w-full" disabled={!validos.length || repetido || !inicio}>Programar</Button>
         </form>
       </DialogContent>
     </Dialog>

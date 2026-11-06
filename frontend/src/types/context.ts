@@ -61,6 +61,16 @@ export function decodeJwt(token: string | null): JwtClaims | null {
   }
 }
 
+/**
+ * #207: a sessão vive no cookie HttpOnly; o navegador guarda só as claims.
+ * Sem a assinatura o valor não autentica em lugar nenhum — um XSS que lê o
+ * localStorage leva contexto e validade, não a credencial.
+ */
+export function semAssinatura(token: string): string {
+  const [header, payload] = token.split('.')
+  return `${header}.${payload}.`
+}
+
 export function isTokenExpired(token: string | null, skewSec = 30): boolean {
   const claims = decodeJwt(token)
   if (!claims || typeof claims.exp !== 'number') return true

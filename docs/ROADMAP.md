@@ -26,11 +26,13 @@ Perfis clínicos/institucionais explícitos. Profissão não concede permissão 
 
 Fluxo próprio de Admissão ligado às fontes oficiais de Residente, documentos, avaliações, quarto/leito e PAIS.
 
-## 7. D.4 — Prontuário longitudinal — próximo gate funcional
+## 7. D.4 — Prontuário longitudinal — integrado
 
-Implementar/corrigir como projeção read-only das fontes oficiais, com paginação/cursor real, eventos historicamente honestos e sem tabela duplicadora de prontuário.
+Projeção read-only das fontes oficiais, sem tabela duplicadora (#21 backend, #27 frontend). O PLAN do M20 (20/10/2026) confirmou aderência ao contrato: cursor keyset no SQL, um evento por transição de prescrição, estorno e substituição visíveis, tenant da sessão e RBAC por origem; CI verde no commit `6328994`.
 
-Antes do BUILD, recuperar/sincronizar com segurança a worktree/branch de D.4 e preservar alterações locais autorizadas.
+Decisão: a Passagem de Plantão não entra no prontuário.
+
+Follow-ups: N1 (autoria legível e links das origens para a tela), #163 (cursor com `data` nula em avaliações e sinais vitais), #164 (documentos), #165 (conclusão da admissão) e #166 (vínculos de familiares).
 
 ## 8. D.5 — Passagem de Plantão
 
@@ -72,7 +74,7 @@ Estoque, financeiro, portal da família, agenda ampliada, relatórios e outras f
 
 ## 16. Camada Operacional — ciclo atual: Fases 1–5
 
-Registrada em 28/09 (#115). **Status: Fases 1–5 integradas** (migrations 021–028); homologação técnica concluída. Confirme no GitHub antes de assumir o estado de uma fase. Ciclo autorizado em 28/09; o D.4 (seção 7) segue pendente e não é substituído por este ciclo.
+Registrada em 28/09 (#115). **Status: Fases 1–5 integradas** (migrations 021–028); homologação técnica concluída. Confirme no GitHub antes de assumir o estado de uma fase. Ciclo autorizado em 28/09; o D.4 (seção 7) foi integrado à parte e não é substituído por este ciclo.
 
 Objetivo do ciclo: o primeiro fluxo operacional diário completo.
 
@@ -151,3 +153,35 @@ Somente direção de produto. Nenhuma destas fases tem design técnico, migratio
 - **Fase 14 — Automação e detecção de padrões.** Organização, sumarização, priorização e identificação de padrões sobre dados existentes. Sem diagnóstico automático, decisão clínica ou predição não validada.
 
 **RH completo** — folha, ponto e banco de horas — permanece fora das 14 fases e fora do escopo do FacILPI neste ciclo.
+
+## 18. Mapa do FacILPI — Ondas 0 e 1 integradas (20–24/10/2026)
+
+Exceção ao FEATURE_FREEZE dada pelo responsável em 20/10/2026, só para os itens destas ondas. Todos os PRs entraram na `fase-3b` com os três jobs de CI verdes.
+
+- **Onda 0 (governança e prontuário):** M19 (#161, PR #162), M20 (#167, PR #168), N1 (#169, PR #170).
+- **Onda 1 (núcleo):** N2 saída do residente (#171, PR #174, migration 030), M14 situação fora da escrita (#172, PR #175), M1 Passar plantão (#176, PR #181), M5 destinos dos alertas (#177, PR #180), N4 404 uniforme (#178, PR #179).
+- **Follow-ups abertos:** #163 (cursor com `data` nula), #164 (documentos no prontuário), #165 (conclusão da admissão), #166 (familiares), #173 (encerramento `saida` dos alertas), validação visual do M1 (Onda 3), tela de estorno da saída.
+- **Homologação:** 029 e 030 aplicadas em ordem no Neon só por decisão humana.
+- **Ondas 2–8:** somente PLAN até nova autorização (a Onda 2 foi autorizada depois; ver §19). Dependem das decisões D1 (medicação/receita), D2 (estorno de dose), D3 (transição do `ilpi_admin`), D5 (ordem dos complementares), D6 (percentual de refeição) e da identidade visual.
+
+## 19. Mapa do FacILPI — Onda 2 integrada (27–29/10/2026)
+
+Exceção ao FEATURE_FREEZE dada pelo responsável em 27/10/2026, só para os itens desta onda, com a decisão D1 (Enfermagem e RT cadastram medicamento e transcrevem receita; o Médico mantém prescrever). Todos os PRs entraram na `fase-3b` com os três jobs de CI verdes.
+
+- **Onda 2:** M12 cuidados programados pela tela (#185, PR #189), M4 aba Resumo (#186, PR #190), M10 grants de medicação (#188, PR #191, migration 031), M9 tela de medicação (#192, PR #193), M13 familiares do residente (#194, PR #195, com filtro no backend autorizado).
+- **CI:** #184 (PR #187), job SQLite de cerca de 29 para cerca de 4 min.
+- **Follow-ups novos:** fuso horário da grade de doses (M9).
+- **Homologação:** 029, 030 e 031 aplicadas em ordem no Neon só por decisão humana.
+- **Ondas 3–8:** somente PLAN até nova autorização. Pendentes D2, D3, D5, D6 e a identidade visual.
+
+## 20. Mapa do FacILPI — Ondas 3, 4 e 5 integradas (29/10–03/11/2026)
+
+Exceção ao FEATURE_FREEZE dada pelo responsável, só para os itens destas ondas e das decisões abaixo, com fluxo em lote e merge com o CI verde. Todos os PRs entraram na `fase-3b`.
+
+- **Onda 3:** N5 domínio fechado de `DocumentoUpdate.situacao` (PR #201), G5 aba Feitos/Expirados do Meu Plantão (PR #202), UX do Início, origem antes de Assumir, janela da fila e rotas Placeholder (PR #203), G7 cuidado em outro horário, até 24 h (PR #205).
+- **Onda 4 (segurança):** N6+N7 ausências/escala clínicas e CSP `img-src` restrita (PR #209), N3 auditoria de acesso (PR #210), guard de boot do rate limit em memória com 1 worker (#211, PR #212), JWT em cookie HttpOnly + CSRF com Bearer na transição (#207, PR #216; na homologação depende do rewrite de `/api/*` no Render).
+- **Onda 5 (UX e frontend):** tokens de tema, vidro + aurora e plano B (#213, PR #215), cores fixas viradas tokens (#217, PRs #221, #224 e #229), React Router 7 (#214, PR #218), E2E Playwright do fluxo crítico e cross-tenant 404 (#222, PR #223). O grupo A (#230, PR #231) ainda não foi integrado.
+- **Decisões aplicadas:** D6 percentual de refeição opcional 0/25/50/75/100 (G4, PR #220, migration 032); D2 estorno de dose pela tela só por Enfermagem e RT, com motivo (#11, PR #226, migration 033); D3 opção B — escritas clínicas fora do `ilpi_admin`, com relatório por ILPI, transição de 30 dias e bloqueio só da escrita clínica de quem não tem perfil clínico (#15, PR #228, migration 034).
+- **D5 (ordem dos complementares):** Configurações, Auditoria, Relatórios, Agenda, Multidisciplinar, PIA, Farmácia e estoque, Portal da família e Financeiro.
+- **Homologação:** migrations 029 a 034 aplicadas em ordem no Neon só por decisão humana; no Render, rewrite de `/api/*` e `VITE_API_BASE_URL`.
+- **Follow-ups abertos:** #163, #164, #165, #166, #173, tela de estorno da saída, fuso horário da grade de doses (M9), UUID em `Documentos.tsx`, validação visual do M1 e do M5.

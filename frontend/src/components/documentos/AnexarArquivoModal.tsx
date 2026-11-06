@@ -64,7 +64,7 @@ export function AnexarArquivoModal({ open, onClose, onAnexado, documento, onPerm
       <div className="space-y-4">
         {documento && (
           <p className="text-sm text-textMuted">
-            Documento: <span className="font-medium text-textMain break-words">{documento.tipo}</span>
+            Documento: <span className="font-medium text-textMain wrap-break-word">{documento.tipo}</span>
           </p>
         )}
 
@@ -82,7 +82,7 @@ export function AnexarArquivoModal({ open, onClose, onAnexado, documento, onPerm
         </div>
 
         {arquivo && (
-          <p className="text-sm text-textMuted break-words">
+          <p className="text-sm text-textMuted wrap-break-word">
             Selecionado: <span className="font-medium text-textMain">{arquivo.name}</span>
             {arquivo.size > 0 && <> — {formatarTamanho(arquivo.size)}</>}
           </p>

@@ -3,6 +3,7 @@ import time
 import logging
 import hashlib
 import secrets
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any
@@ -100,6 +101,19 @@ REFRESH_COOKIE_SECURE = cookie_secure_for(ENVIRONMENT)
 # Access token sem sid e recusado em qualquer ambiente, sem excecao para
 # development/test: testes que cunham JWT abrem uma sessao real antes.
 
+# #207: o access token tambem vai em cookie HttpOnly. A API e o frontend
+# respondem na mesma origem (Caddy na VPS; rewrite de /api/* no Render), entao
+# SameSite=Strict basta e nao ha cookie de terceiros. O Bearer continua aceito
+# na transicao e, quando presente, vence: e explicito, o cookie e ambiente.
+ACCESS_COOKIE_NAME = "access_token"
+ACCESS_COOKIE_PATH = "/api"
+# CSRF por double-submit: cookie legivel pelo JS + cabecalho igual. So e exigido
+# quando a autenticacao veio do cookie; outra origem nao consegue ler o cookie
+# nem enviar o cabecalho.
+CSRF_COOKIE_NAME = "csrf_token"
+CSRF_HEADER_NAME = "x-csrf-token"
+CSRF_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
 logger = logging.getLogger("facilpi.security")
 security = HTTPBearer(auto_error=False)
 
@@ -110,6 +124,40 @@ _rate_store: Dict[str, list] = {}
 _login_failure_store = _rate_store
 _LOGIN_FAILURE_PREFIX = "login-fail:"
 _LOGIN_PENDING_PREFIX = "login-pending:"
+
+
+def _requested_workers(env, argv) -> int:
+    """Workers pedidos via WEB_CONCURRENCY (padrao do uvicorn) ou --workers/-w."""
+    values = []
+    if env.get("WEB_CONCURRENCY"):
+        values.append(env["WEB_CONCURRENCY"])
+    for i, arg in enumerate(argv):
+        if arg in ("--workers", "-w") and i + 1 < len(argv):
+            values.append(argv[i + 1])
+        elif arg.startswith("--workers="):
+            values.append(arg.split("=", 1)[1])
+    workers = 1
+    for value in values:
+        try:
+            workers = max(workers, int(value))
+        except ValueError:
+            raise RuntimeError(f"Numero de workers invalido: {value!r}") from None
+    return workers
+
+
+def assert_rate_limit_single_process(env=None, argv=None) -> None:
+    """#211: `_rate_store` e process-local. Com mais de 1 worker cada processo
+    teria o proprio contador e o limite de login se multiplicaria em silencio.
+    Enquanto nao houver armazenamento compartilhado, o boot recusa."""
+    env = os.environ if env is None else env
+    argv = sys.argv if argv is None else argv
+    workers = _requested_workers(env, argv)
+    if workers > 1:
+        raise RuntimeError(
+            f"{workers} workers pedidos, mas o rate limit de login fica na memoria "
+            "do processo e nao ha armazenamento compartilhado: rode com 1 worker "
+            "(ver docs/RUNBOOK_PILOT.md)."
+        )
 
 
 def _key_rule(key: str) -> tuple[int, int] | None:
@@ -300,12 +348,13 @@ def access_session_identity_for_logout(request: Request) -> tuple[str, str] | No
     nomeia. Bearer ausente, malformado, com assinatura invalida ou sem sid nao
     deve impedir o cliente de limpar a sessao local nem revelar detalhes.
     """
-    header = request.headers.get("authorization")
-    if not header:
+    try:
+        found = request_access_token(request)
+    except HTTPException:
         return None
-    scheme, _, token = header.partition(" ")
-    if scheme.lower() != "bearer" or not token:
+    if found is None:
         return None
+    token = found[0]
     try:
         payload = jwt.decode(
             token,
@@ -346,6 +395,76 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
         samesite="strict",
         path=REFRESH_COOKIE_PATH,
     )
+
+
+def set_access_cookies(response: Response, access_token: str) -> None:
+    response.set_cookie(
+        ACCESS_COOKIE_NAME,
+        access_token,
+        max_age=JWT_EXPIRY,
+        httponly=True,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite="strict",
+        path=ACCESS_COOKIE_PATH,
+    )
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        secrets.token_urlsafe(32),
+        max_age=REFRESH_TOKEN_DAYS * 24 * 60 * 60,
+        httponly=False,
+        secure=REFRESH_COOKIE_SECURE,
+        samesite="strict",
+        path="/",
+    )
+
+
+def clear_access_cookies(response: Response) -> None:
+    response.delete_cookie(
+        ACCESS_COOKIE_NAME, path=ACCESS_COOKIE_PATH, secure=REFRESH_COOKIE_SECURE, samesite="strict"
+    )
+    response.delete_cookie(
+        CSRF_COOKIE_NAME, path="/", secure=REFRESH_COOKIE_SECURE, samesite="strict"
+    )
+
+
+def request_access_token(request: Request) -> tuple[str, bool] | None:
+    """Devolve (token, veio_do_cookie). Bearer malformado continua sendo Bearer."""
+    header = request.headers.get("authorization")
+    if header:
+        scheme, _, token = header.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise _authentication_required("missing_or_invalid_scheme")
+        return token, False
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
+    if token:
+        return token, True
+    return None
+
+
+def _require_csrf(request: Request) -> None:
+    if request.method.upper() in CSRF_SAFE_METHODS:
+        return
+    cookie = request.cookies.get(CSRF_COOKIE_NAME) or ""
+    header = request.headers.get(CSRF_HEADER_NAME) or ""
+    if not cookie or not header or not secrets.compare_digest(cookie, header):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "CSRF_FAILED", "message": "Sessão inválida; recarregue a página"},
+        )
+
+
+async def session_credentials(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> HTTPAuthorizationCredentials | None:
+    """Credencial da requisicao: Bearer explicito ou cookie com CSRF."""
+    if request.headers.get("authorization"):
+        return credentials or HTTPAuthorizationCredentials(scheme="invalid", credentials="")
+    token = request.cookies.get(ACCESS_COOKIE_NAME)
+    if not token:
+        return None
+    _require_csrf(request)
+    return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
 def clear_refresh_cookie(response: Response) -> None:
@@ -423,14 +542,11 @@ async def load_active_session_token(
 
 
 def access_session_identity(request: Request) -> tuple[str, str] | None:
-    """Extrai (user_id, sid) de Bearer assinado sem escolher sessao por heuristica."""
-    header = request.headers.get("authorization")
-    if not header:
+    """Extrai (user_id, sid) de Bearer ou cookie assinado sem escolher sessao por heuristica."""
+    found = request_access_token(request)
+    if found is None:
         return None
-    scheme, _, token = header.partition(" ")
-    if scheme.lower() != "bearer" or not token:
-        raise _authentication_required("missing_or_invalid_scheme")
-    payload = decode_access_token(token)
+    payload = decode_access_token(found[0])
     user_id = payload.get("sub")
     sid = payload.get("sid")
     if not isinstance(user_id, str) or not user_id:
@@ -538,7 +654,7 @@ def _authentication_context_required(user_id: str) -> HTTPException:
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: HTTPAuthorizationCredentials = Depends(session_credentials),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     if (

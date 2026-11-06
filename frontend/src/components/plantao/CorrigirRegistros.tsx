@@ -137,7 +137,7 @@ function Lista({
               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">{nome}</div>
                 <div className="truncate text-sm text-muted-foreground">{cuidado} • {formatDateTime(registro.ocorrido_em)}</div>
-                <div className={cn('mt-1 text-sm font-medium', corrigido ? 'text-muted-foreground line-through' : registro.resultado === 'executada' ? 'text-emerald-700' : 'text-orange-800')}>
+                <div className={cn('mt-1 text-sm font-medium', corrigido ? 'text-muted-foreground line-through' : registro.resultado === 'executada' ? 'text-primary' : 'text-alerta-forte')}>
                   {ROTULO_RESULTADO_CUIDADO[registro.resultado]}{registro.justificativa ? `: ${registro.justificativa}` : ''}
                 </div>
                 <div className="text-sm text-muted-foreground">

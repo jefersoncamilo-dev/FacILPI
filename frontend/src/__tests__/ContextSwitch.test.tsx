@@ -6,7 +6,7 @@ import { AuthProvider, useAuth } from '../context/AuthContext'
 import { ContextSwitcher } from '../components/ContextSwitcher'
 import { api } from '../services/api'
 import { contextApi } from '../services/context'
-import { TOKEN_KEY, USER_KEY, CONTEXT_KEY } from '../types/context'
+import { TOKEN_KEY, USER_KEY, CONTEXT_KEY, semAssinatura } from '../types/context'
 
 // Preserva os helpers reais do módulo (mensagemDeErro, formatDate…): substituir o módulo
 // inteiro deixaria essas funções indefinidas nas telas sob teste.
@@ -89,7 +89,7 @@ describe('ContextSwitch — login e contexto', () => {
       expect(get().activeContext?.scope).toBe('global')
       expect(get().availableContexts).toHaveLength(1)
     })
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN)
+    expect(localStorage.getItem(TOKEN_KEY)).toBe(semAssinatura(GLOBAL_TOKEN))
     // A lista de ILPIs não é mais consultada para montar opções de contexto.
     expect(mockListInst).not.toHaveBeenCalled()
   })
@@ -116,7 +116,7 @@ describe('ContextSwitch — login e contexto', () => {
     const { get } = renderAuth()
     await waitFor(() => expect(get().activeContext?.ilpi_id).toBe('ilpi1'))
     await get().switchContext(OPCAO_ILPI2)
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(GESTOR_ILPI2)
+    expect(localStorage.getItem(TOKEN_KEY)).toBe(semAssinatura(GESTOR_ILPI2))
     await waitFor(() => expect(get().activeContext?.ilpi_id).toBe('ilpi2'))
   })
 
@@ -162,7 +162,7 @@ describe('ContextSwitch — login e contexto', () => {
     await waitFor(() => expect(get().activeContext?.scope).toBe('global'))
     await get().switchContext({ key: 'global', scope: 'global', label: 'Plataforma', sublabel: 'Superusuário' })
     expect(mockSelect).toHaveBeenCalledWith({ scope: 'global' })
-    expect(localStorage.getItem(TOKEN_KEY)).toBe(GLOBAL_TOKEN_2)
+    expect(localStorage.getItem(TOKEN_KEY)).toBe(semAssinatura(GLOBAL_TOKEN_2))
     await waitFor(() => expect(get().activeContext?.scope).toBe('global'))
   })
 

@@ -26,6 +26,7 @@ from ..infrastructure.database import get_db
 from . import schemas as s
 from .audit import add_audit
 from .medicacao import garantir_horizonte_doses
+from .saida_residente import SITUACOES_SAIDA
 from .security import RESOURCE_NOT_FOUND, SecurityContext, allowed_permission_keys, require_ilpi_context, require_permission
 
 
@@ -607,7 +608,11 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
         if residente is None:
             _missing()
     items: list[dict] = []
+    # N2 (030): residente que saiu da ILPI nao entra na fila do plantao.
+    saidos = select(m.Residente.id).where(
+        m.Residente.instituicao_id == context.ilpi_id, m.Residente.situacao.in_(SITUACOES_SAIDA))
     ocorrencias = (await db.scalars(select(m.OcorrenciaCuidado).where(
+        m.OcorrenciaCuidado.residente_id.not_in(saidos),
         m.OcorrenciaCuidado.ilpi_id == context.ilpi_id,
         m.OcorrenciaCuidado.situacao == "prevista",
         m.OcorrenciaCuidado.previsto_em >= inicio, m.OcorrenciaCuidado.previsto_em < fim,
@@ -634,6 +639,7 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
     doses = [] if not ve_doses else (await db.execute(select(m.DosePrevista, True).where(
         m.DosePrevista.ilpi_id == context.ilpi_id,
         m.DosePrevista.situacao == "prevista",
+        m.DosePrevista.residente_id.not_in(saidos),
         m.DosePrevista.previsto_em >= inicio, m.DosePrevista.previsto_em < fim,
         ~_has_admin_vigente(),
         *([m.DosePrevista.residente_id == residente_id] if residente_id is not None else []),
@@ -654,6 +660,7 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
     abertas = (await db.scalars(select(m.Intercorrencia).where(
         m.Intercorrencia.ilpi_id == context.ilpi_id,
         m.Intercorrencia.situacao == "aberta",
+        m.Intercorrencia.residente_id.not_in(saidos),
         *([m.Intercorrencia.residente_id == residente_id] if residente_id is not None else []),
     ).order_by(m.Intercorrencia.ocorrido_em.desc(), m.Intercorrencia.id).limit(limit))).all()
     for intercorrencia in abertas:

@@ -9,6 +9,8 @@
 const SITUACAO_RESIDENTE: Record<string, string> = {
   'Em admissao': 'Em admissão',
   'Pre-admissao': 'Pré-admissão',
+  // N2 (#171): situações de quem saiu da ILPI.
+  'Retornou a familia': 'Retornou à família',
 }
 
 /** Situação do residente (campo `Residente.situacao`). */
@@ -25,6 +27,7 @@ const SITUACAO_EVENTO: Record<string, string> = {
   executada: 'Executada', administrada: 'Administrada', recusada: 'Recusada', omitida: 'Omitida',
   alocacao: 'Alocação', transferencia: 'Transferência', liberacao: 'Liberação',
   hospitalizacao: 'Hospitalização', saida_temporaria: 'Saída temporária',
+  obito: 'Óbito', desligamento: 'Desligamento', retorno_familia: 'Retorno à família',
 }
 
 /** Situação/resultado de um evento da linha do tempo do prontuário. */

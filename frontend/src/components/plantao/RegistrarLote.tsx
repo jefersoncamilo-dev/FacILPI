@@ -124,14 +124,14 @@ function Lote({ itens, nomes, onSalvos }: { itens: PlantaoItem[]; nomes: Record<
           // Nome acessível único mesmo com dois cuidados do mesmo residente.
           const quem = `${nomes[item.residente_id] || item.residente_id}, ${rotuloDoItem(item)}`
           return (
-            <li key={k} className={cn('rounded-lg border p-3', linha.erro ? 'border-danger' : linha.resultado === 'executada' ? 'border-border' : 'border-orange-300')}>
+            <li key={k} className={cn('rounded-lg border p-3', linha.erro ? 'border-danger' : linha.resultado === 'executada' ? 'border-border' : 'border-alerta/40')}>
               <div className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-medium">{nomes[item.residente_id] || item.residente_id}</div>
                   <div className="truncate text-sm text-muted-foreground">
                     {rotuloDoItem(item)}{item.previsto_em ? ` • ${quando(item.previsto_em)}` : ''}
                   </div>
-                  <div className={cn('mt-1 text-sm font-medium', linha.resultado === 'executada' ? 'text-emerald-700' : 'text-orange-800')}>
+                  <div className={cn('mt-1 text-sm font-medium', linha.resultado === 'executada' ? 'text-primary' : 'text-alerta-forte')}>
                     {ROTULO_RESULTADO_CUIDADO[linha.resultado]}{linha.resultado !== 'executada' && linha.motivo.trim() ? `: ${linha.motivo.trim()}` : ''}
                   </div>
                 </div>
@@ -187,7 +187,7 @@ function Lote({ itens, nomes, onSalvos }: { itens: PlantaoItem[]; nomes: Record<
         })}
       </ul>
 
-      {aviso && <p className="text-sm font-medium text-orange-900" role="status">{aviso}</p>}
+      {aviso && <p className="text-sm font-medium text-alerta-forte" role="status">{aviso}</p>}
 
       <button
         type="button"

@@ -11,6 +11,7 @@ export type ProntuarioOrigem =
   | 'execucao_cuidado'
   | 'ocupacao'
   | 'ausencia'
+  | 'saida'
 
 export type ProntuarioCategoria = 'clinico' | 'assistencia' | 'medicacao' | 'administrativo'
 
@@ -28,6 +29,7 @@ export const PRONTUARIO_ORIGENS: { value: ProntuarioOrigem; label: string; categ
   { value: 'administracao', label: 'Administração', categoria: 'medicacao', permissao: 'administracoes:ler' },
   { value: 'ocupacao', label: 'Ocupação', categoria: 'administrativo', permissao: 'quartos_leitos:ler' },
   { value: 'ausencia', label: 'Ausência', categoria: 'administrativo', permissao: 'ausencias:ler' },
+  { value: 'saida', label: 'Saída do residente', categoria: 'administrativo', permissao: 'residentes:ler' },
 ]
 
 export const PRONTUARIO_CATEGORIAS: { value: ProntuarioCategoria; label: string }[] = [
@@ -46,6 +48,7 @@ export interface ProntuarioEvento {
   ocorrido_em: string
   registrado_em?: string | null
   autor_id?: string | null
+  autor_nome?: string | null
   resumo: string
   situacao?: string | null
   estornado: boolean

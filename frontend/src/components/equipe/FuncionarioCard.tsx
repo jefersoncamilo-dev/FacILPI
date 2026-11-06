@@ -54,7 +54,7 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
         {temAcao && <div className="relative shrink-0">
           <button
             onClick={() => setMenuOpen(!menuOpen)}
-            className="w-10 h-10 rounded-full hover:bg-slate-100 flex items-center justify-center text-textMuted"
+            className="w-10 h-10 rounded-full hover:bg-muted flex items-center justify-center text-textMuted"
             aria-label="Ações"
           >
             <EllipsisVertical className="size-5" aria-hidden="true" />
@@ -62,10 +62,10 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
           {menuOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-slate-100 py-1 z-50 min-w-[180px]">
+              <div className="absolute right-0 top-full mt-1 bg-card rounded-xl shadow-lg border border-border py-1 z-50 min-w-[180px]">
                 {acoes.editar && (
                 <button
-                  className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px]"
+                  className="w-full text-left px-4 py-3 text-sm hover:bg-muted flex items-center gap-2 min-h-[44px]"
                   onClick={() => { setMenuOpen(false); onEdit(funcionario) }}
                 >
                   <Pencil className="size-4 text-textMuted" aria-hidden="true" /> Editar
@@ -73,7 +73,7 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
                 )}
                 {acoes.conceder && (
                   <button
-                    className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-primary"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-muted flex items-center gap-2 min-h-[44px] text-primary"
                     onClick={() => { setMenuOpen(false); onConcederAcesso(funcionario) }}
                   >
                     <KeyRound className="size-4" aria-hidden="true" /> Conceder acesso
@@ -81,7 +81,7 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
                 )}
                 {acoes.vincular && (
                   <button
-                    className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-primary"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-muted flex items-center gap-2 min-h-[44px] text-primary"
                     onClick={() => { setMenuOpen(false); onVincular(funcionario) }}
                   >
                     <Link2 className="size-4" aria-hidden="true" /> Vincular usuário existente
@@ -89,7 +89,7 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
                 )}
                 {acoes.revogar && (
                   <button
-                    className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-danger"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-muted flex items-center gap-2 min-h-[44px] text-danger"
                     onClick={() => { setMenuOpen(false); onRevogarAcesso(funcionario) }}
                   >
                     <Ban className="size-4" aria-hidden="true" /> Revogar acesso
@@ -97,7 +97,7 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
                 )}
                 {acoes.inativar && (
                   <button
-                    className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50 flex items-center gap-2 min-h-[44px] text-danger"
+                    className="w-full text-left px-4 py-3 text-sm hover:bg-muted flex items-center gap-2 min-h-[44px] text-danger"
                     onClick={() => { setMenuOpen(false); onInativar(funcionario) }}
                   >
                     <UserX className="size-4" aria-hidden="true" /> Inativar funcionário
@@ -116,7 +116,7 @@ export function FuncionarioCard({ funcionario, perfilNome, onEdit, onConcederAce
         {temAcesso ? (
           <span className="badge-success">Acesso: {perfilNome || 'Ativo'}</span>
         ) : (
-          <span className="px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 bg-slate-50 text-textMuted border border-slate-200">
+          <span className="px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1 bg-muted text-textMuted border border-border">
             Sem acesso ao sistema
           </span>
         )}
