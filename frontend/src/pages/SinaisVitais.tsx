@@ -184,7 +184,7 @@ export function SinaisVitais() {
                 ))}
               </ul>
               {registro.observacao && (
-                <p className="mt-3 text-sm text-textMuted break-words">{registro.observacao}</p>
+                <p className="mt-3 text-sm text-textMuted wrap-break-word">{registro.observacao}</p>
               )}
               <p className="mt-3 text-xs text-textMuted">Registrado por {registro.profissional || '—'}</p>
             </article>

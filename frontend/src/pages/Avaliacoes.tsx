@@ -14,8 +14,8 @@ import { Dialog, DialogContent } from '../components/ui/dialog'
 import { EmptyState, ErrorState } from '../components/ui/states'
 
 type ResidenteRef = { id: string; nome: string }
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
-const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
+const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 /** Avaliações (UX-06 / #79). Substitui o placeholder de /avaliacoes. */
 export function Avaliacoes() {

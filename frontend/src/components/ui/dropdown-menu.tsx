@@ -37,8 +37,8 @@ export const DropdownMenuItem = forwardRef<
     ref={ref}
     className={cn(
       // 44px: alvo de toque; o menu também é usado no tablet (menu lateral).
-      'flex min-h-[44px] cursor-pointer select-none items-center gap-2.5 rounded-md px-3 text-sm font-medium outline-none transition-colors',
-      'focus:bg-muted data-[highlighted]:bg-muted data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
+      'flex min-h-[44px] cursor-pointer select-none items-center gap-2.5 rounded-md px-3 text-sm font-medium outline-hidden transition-colors',
+      'focus:bg-muted data-highlighted:bg-muted data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
       className,
     )}
     {...props}

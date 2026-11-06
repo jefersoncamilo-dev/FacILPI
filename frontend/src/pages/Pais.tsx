@@ -14,7 +14,7 @@ import { cn } from '../lib/utils'
 
 type ResidenteRef = { id: string; nome: string }
 type Filtro = 'todos' | 'vigentes' | 'andamento' | 'encerrados'
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 /** Plano atual de um residente: o vigente, senão a versão mais recente. */
 function planoAtual(planos: Plano[]): Plano {
@@ -183,7 +183,7 @@ function NovoPais({ residentes, residenteInicial, aoFechar }: { residentes: Resi
           <div className="space-y-2">
             <Label htmlFor="np-objetivos">Objetivos (opcional)</Label>
             <textarea id="np-objetivos" rows={3} value={objetivos} onChange={e => setObjetivos(e.target.value)}
-              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40" />
+              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40" />
           </div>
           {erro && <Alert variant="error">{erro}</Alert>}
           <Button type="submit" className="w-full" disabled={!residenteId || salvando}>

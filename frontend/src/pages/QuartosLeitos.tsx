@@ -22,7 +22,7 @@ type FiltroLeito = 'todos' | EstadoLeito
 const ROTULO_ESTADO: Record<EstadoLeito, string> = {
   ocupado: 'Ocupado', livre: 'Livre', indisponivel: 'Indisponível', inativo: 'Inativo',
 }
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 /** Quartos, leitos e ausências (UX-08 / #81). Substitui o placeholder de /quartos. */
 export function QuartosLeitos() {
@@ -128,7 +128,7 @@ export function QuartosLeitos() {
             <div role="tablist" aria-label="Visão" className="flex w-fit gap-1 rounded-lg bg-muted p-1">
               {([['leitos', 'Leitos'], ['ausencias', 'Ausências']] as [Aba, string][]).map(([id, rotulo]) => (
                 <button key={id} role="tab" aria-selected={aba === id} onClick={() => setAba(id)}
-                  className={cn('min-h-[40px] rounded-md px-4 text-sm font-medium', aba === id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+                  className={cn('min-h-[40px] rounded-md px-4 text-sm font-medium', aba === id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground')}>
                   {rotulo}
                 </button>
               ))}

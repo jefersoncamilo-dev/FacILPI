@@ -17,8 +17,8 @@ import { ErrorState } from '../components/ui/states'
 import { cn } from '../lib/utils'
 
 type Funcionario = { id: string; nome: string; situacao: string; cargo?: string | null }
-const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
-const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40'
+const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
+const AREA = 'w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40'
 
 const SECOES: { tipo: TipoItem; titulo: string; singular: string }[] = [
   { tipo: 'necessidades', titulo: 'Necessidades', singular: 'necessidade' },

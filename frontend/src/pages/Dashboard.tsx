@@ -265,14 +265,14 @@ function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, atalhos }:
           )}
         </div>
         {atalhos.length === 0 && (
-          <span aria-hidden="true" className="hidden size-20 shrink-0 items-center justify-center rounded-3xl bg-card/70 text-primary shadow-sm ring-1 ring-brand-soft lg:inline-flex">
+          <span aria-hidden="true" className="hidden size-20 shrink-0 items-center justify-center rounded-3xl bg-card/70 text-primary shadow-xs ring-1 ring-brand-soft lg:inline-flex">
             <HeartHandshake className="size-10" />
           </span>
         )}
         {atalhos.length > 0 && (
           <div className="flex flex-col gap-2 sm:flex-row lg:shrink-0">
             {atalhos.map(a => (
-              <Button key={a.id} asChild size="lg" variant={a.destaque === 'alerta' ? 'alerta' : 'default'} className="shadow-sm">
+              <Button key={a.id} asChild size="lg" variant={a.destaque === 'alerta' ? 'alerta' : 'default'} className="shadow-xs">
                 <Link to={a.to}><a.icone aria-hidden="true" />{a.rotulo}</Link>
               </Button>
             ))}
