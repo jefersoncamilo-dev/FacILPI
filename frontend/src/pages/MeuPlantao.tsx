@@ -370,7 +370,7 @@ export function MeuPlantao() {
               onClick={() => setVisao(opcao.valor)}
               className={cn(
                 'min-h-[44px] rounded-md px-2 text-sm font-medium transition-colors',
-                visao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                visao === opcao.valor ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <span className="sm:hidden">{opcao.curto}</span>
@@ -386,7 +386,7 @@ export function MeuPlantao() {
                 onClick={() => setFiltros({ ...filtros, situacao: opcao.valor })}
                 className={cn(
                   'inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-sm font-medium transition-colors',
-                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {opcao.rotulo}{' '}

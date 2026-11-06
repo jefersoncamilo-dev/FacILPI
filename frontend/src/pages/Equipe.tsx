@@ -135,7 +135,7 @@ export function Equipe() {
             onClick={() => setTab(t.key)}
             className={`flex-1 min-w-0 px-2 sm:px-4 py-3 rounded-lg text-[13px] sm:text-sm font-medium transition min-h-[44px] whitespace-nowrap ${
               tab === t.key
-                ? 'bg-card text-primary shadow-sm'
+                ? 'bg-card text-primary shadow-xs'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
           >

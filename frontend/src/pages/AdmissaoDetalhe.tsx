@@ -451,7 +451,7 @@ function DialogoMotivo({
                 id="contrato-documento"
                 value={documentoId}
                 onChange={e => setDocumentoId(e.target.value)}
-                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <option value="">Sem documento vinculado</option>
                 {documentos.map(d => <option key={d.id} value={d.id}>{d.tipo} · {d.situacao}</option>)}
@@ -467,7 +467,7 @@ function DialogoMotivo({
               maxLength={2000}
               value={motivo}
               onChange={e => setMotivo(e.target.value)}
-              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="w-full rounded-lg border border-input bg-card px-3 py-2 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
             />
           </div>
           <Button type="submit" variant={cfg.destrutiva ? 'destructive' : 'default'} className="w-full" disabled={!motivo.trim() || enviando}>

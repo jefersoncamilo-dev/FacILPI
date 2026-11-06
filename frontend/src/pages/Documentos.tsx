@@ -263,7 +263,7 @@ export function Documentos() {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="font-semibold break-words">{documento.tipo}</div>
+                  <div className="font-semibold wrap-break-word">{documento.tipo}</div>
                   <div className="text-xs text-textMuted truncate">
                     {nomes[documento.residente_id ?? ''] || documento.residente_id || '—'}
                   </div>
@@ -278,7 +278,7 @@ export function Documentos() {
                 {documento.numero && (
                   <div className="flex gap-2">
                     <dt className="text-textMuted">Número:</dt>
-                    <dd className="font-medium break-words">{documento.numero}</dd>
+                    <dd className="font-medium wrap-break-word">{documento.numero}</dd>
                   </div>
                 )}
                 {documento.validade && (
@@ -292,7 +292,7 @@ export function Documentos() {
                 {documento.responsavel_envio && (
                   <div className="flex gap-2">
                     <dt className="text-textMuted">Envio:</dt>
-                    <dd className="font-medium break-words">{documento.responsavel_envio}</dd>
+                    <dd className="font-medium wrap-break-word">{documento.responsavel_envio}</dd>
                   </div>
                 )}
               </dl>
@@ -312,7 +312,7 @@ export function Documentos() {
 
               {documento.arquivo_presente ? (
                 <div className="mt-3 space-y-2">
-                  <p className="text-sm text-textMuted break-words">
+                  <p className="text-sm text-textMuted wrap-break-word">
                     <Paperclip className="mr-1 inline size-4 align-[-2px]" aria-hidden="true" />{documento.arquivo_nome_original || 'Arquivo anexado'}
                     {documento.arquivo_tamanho != null && <> — {formatarTamanho(documento.arquivo_tamanho)}</>}
                   </p>

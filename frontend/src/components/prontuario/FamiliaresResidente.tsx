@@ -172,7 +172,7 @@ export function FamiliaresResidente({ residenteId }: { residenteId: string }) {
                 </p>
                 {f.tipo_responsabilidade && <p className="text-muted-foreground">{f.tipo_responsabilidade}</p>}
                 {(f.telefone || f.email) && (
-                  <p className="text-muted-foreground break-words">
+                  <p className="text-muted-foreground wrap-break-word">
                     {f.telefone && <a href={`tel:${f.telefone}`} className="text-primary hover:underline">{f.telefone}</a>}
                     {f.telefone && f.email && ' · '}
                     {f.email}

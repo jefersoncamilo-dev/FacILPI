@@ -102,7 +102,7 @@ export function Admissoes() {
                   onClick={() => setAba(a.id)}
                   className={cn(
                     'min-h-[40px] shrink-0 rounded-md px-3 text-sm font-medium transition-colors',
-                    aba === a.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    aba === a.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
                   {a.label} <span className="text-xs text-muted-foreground">({contagem(a.id)})</span>
@@ -258,7 +258,7 @@ function NovaAdmissaoDialog({
                 required
                 value={residenteId}
                 onChange={e => setResidenteId(e.target.value)}
-                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <option value="" disabled>Selecione…</option>
                 {elegiveis.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}

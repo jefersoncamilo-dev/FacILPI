@@ -83,7 +83,7 @@ export function DialogContent({
         }}
         onCloseAutoFocus={foco.devolver}
         className={cn(
-          'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto glass-strong rounded-card p-6 focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+          'fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 overflow-y-auto glass-strong rounded-card p-6 focus:outline-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
           className,
         )}
       >
@@ -131,7 +131,7 @@ export function SheetContent({
         }}
         onCloseAutoFocus={foco.devolver}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex h-full w-[86%] max-w-[320px] flex-col glass-strong rounded-r-card focus:outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left data-[state=open]:duration-200 data-[state=closed]:duration-150',
+          'fixed inset-y-0 left-0 z-50 flex h-full w-[86%] max-w-[320px] flex-col glass-strong rounded-r-card focus:outline-hidden data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left data-[state=open]:duration-200 data-[state=closed]:duration-150',
           className,
         )}
       >

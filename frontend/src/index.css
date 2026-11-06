@@ -1,6 +1,258 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@plugin 'tailwindcss-animate';
+
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --color-brand: hsl(var(--brand));
+  --color-brand-strong: hsl(var(--brand-strong));
+  --color-brand-soft: hsl(var(--brand-soft));
+  --color-brand-ink: hsl(var(--brand-ink));
+
+  --color-alerta: hsl(var(--alerta));
+  --color-alerta-forte: hsl(var(--alerta-forte));
+
+  --color-critico: hsl(var(--critico));
+  --color-critico-texto: hsl(var(--critico-texto));
+  --color-primaryDeep: hsl(var(--foreground));
+  --color-primaryLight: hsl(var(--brand-soft));
+  --color-bg: hsl(var(--background));
+  --color-surface: hsl(var(--card));
+  --color-textMain: hsl(var(--foreground));
+  --color-textMuted: hsl(var(--muted-foreground));
+  --color-success: hsl(var(--primary));
+  --color-warning: hsl(var(--alerta-forte));
+  --color-danger: hsl(var(--critico-texto));
+
+  --color-avatar: hsl(var(--avatar));
+  --color-avatar-foreground: hsl(var(--avatar-foreground));
+
+  --color-alerta-soft: hsl(var(--alerta-soft));
+  --color-critico-soft: hsl(var(--critico-soft));
+
+  --color-info: hsl(var(--info));
+  --color-info-soft: hsl(var(--info-soft));
+
+  --color-brand-light: hsl(var(--brand-light));
+  --color-background-desktop: hsl(var(--background-desktop));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-card: var(--radius-card);
+  --radius-icon: var(--radius-icon);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-cardHover: 0 14px 32px rgba(11, 49, 45, 0.12);
+  --shadow-icon: var(--shadow-icon);
+  --shadow-search: var(--shadow-search);
+  --shadow-glass: var(--shadow-glass);
+
+  --background-image-side: var(--gradient-side);
+  --background-image-highlight: var(--gradient-highlight);
+
+  --font-sans: Inter, system-ui, -apple-system, sans-serif;
+  --font-display: Poppins, Inter, sans-serif;
+
+  --text-titulo-tela: 28px;
+  --text-titulo-tela--line-height: 34px;
+  --text-titulo-tela--letter-spacing: -0.02em;
+  --text-titulo-tela--font-weight: 600;
+  --text-titulo-secao: 18px;
+  --text-titulo-secao--line-height: 24px;
+  --text-titulo-secao--letter-spacing: -0.01em;
+  --text-titulo-secao--font-weight: 600;
+  --text-titulo-cartao: 17px;
+  --text-titulo-cartao--line-height: 24px;
+  --text-titulo-cartao--letter-spacing: -0.01em;
+  --text-titulo-cartao--font-weight: 600;
+  --text-numero-destaque: 32px;
+  --text-numero-destaque--line-height: 36px;
+  --text-numero-destaque--letter-spacing: -0.02em;
+  --text-numero-destaque--font-weight: 600;
+  --text-corpo: 17px;
+  --text-corpo--line-height: 26px;
+  --text-corpo-forte: 17px;
+  --text-corpo-forte--line-height: 24px;
+  --text-corpo-forte--letter-spacing: -0.005em;
+  --text-corpo-forte--font-weight: 600;
+  --text-apoio: 15px;
+  --text-apoio--line-height: 22px;
+  --text-rotulo: 13px;
+  --text-rotulo--line-height: 18px;
+  --text-rotulo--letter-spacing: 0.01em;
+  --text-rotulo--font-weight: 600;
+  --text-botao: 17px;
+  --text-botao--line-height: 22px;
+  --text-botao--font-weight: 600;
+  --text-navegacao: 12px;
+  --text-navegacao--line-height: 16px;
+  --text-navegacao--letter-spacing: 0.01em;
+  --text-navegacao--font-weight: 500;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: hsl(var(--border));
+  }
+}
+
+/* Vidro: componentes de superfície. Celular simples, economia de energia ou pedido de menos transparência:
+   cai para superfície sólida (mesmo layout, sem desfoque). */
+
+@layer components {
+.glass,
+.card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    background: hsl(var(--card));
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  /* Ligado pelo app quando o aparelho é fraco (ex.: navigator.hardwareConcurrency <= 4 ou deviceMemory <= 2)
+     ou quando o usuário escolhe "Visual simples" nas preferências. */
+  :root[data-visual='simples'] & {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+}
+
+@layer components {
+.glass-strong {
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--shadow-glass);
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur));
+  @supports not (
+    (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))
+  ) {
+    background: hsl(var(--card));
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  :root[data-visual='simples'] & {
+    background: hsl(var(--card));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+}
+
+@layer components {
+.bg-aurora {
+  background-color: hsl(var(--background));
+  background-image: var(--aurora);
+  background-attachment: fixed;
+  @media (prefers-reduced-transparency: reduce) {
+    background-image: none;
+  }
+  :root[data-visual='simples'] & {
+    background-image: none;
+  }
+}
+}
+
+/* Classes das telas existentes, na nova identidade. Componentes novos usam
+   as primitivas de components/ui. */
+
+@layer components {
+.card {
+  @apply text-card-foreground rounded-card p-5;
+}
+}
+
+@layer components {
+.btn-primary {
+  @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60;
+}
+}
+
+@layer components {
+.btn-secondary {
+  @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted active:bg-secondary active:scale-[.98] transition min-h-[44px];
+}
+}
+
+@layer components {
+.btn-alerta {
+  /* Acao que pede atencao (ex.: registrar intercorrencia): preenchida, AA. */
+  @apply bg-alerta-forte text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-alerta-forte/90 active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60;
+}
+}
+
+@layer components {
+.input {
+  @apply w-full rounded-lg border border-input bg-card px-4 py-3 text-[16px] placeholder:text-muted-foreground focus:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-brand-strong;
+}
+}
+
+@layer components {
+.badge-success {
+  @apply bg-accent text-primary border border-brand/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1;
+}
+}
+
+@layer components {
+.badge-warning {
+  @apply bg-alerta-soft text-alerta-forte border border-alerta/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1;
+}
+}
+
+@layer components {
+.badge-danger {
+  @apply bg-critico-soft text-critico-texto border border-critico/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1;
+}
+}
 
 /*
  * Onda 5 (#213) — identidade "futurista": petróleo/verde-água, vidro fosco
@@ -159,27 +411,6 @@
   }
 }
 
-/* Vidro: componentes de superfície. Celular simples, economia de energia ou pedido de menos transparência:
-   cai para superfície sólida (mesmo layout, sem desfoque). */
-@layer components {
-  .glass { background: var(--glass-bg); border: 1px solid var(--glass-edge); box-shadow: var(--shadow-glass);
-           -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
-  .glass-strong { background: var(--glass-bg-strong); border: 1px solid var(--glass-edge); box-shadow: var(--shadow-glass);
-           -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
-  .bg-aurora { background-color: hsl(var(--background)); background-image: var(--aurora); background-attachment: fixed; }
-  @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .glass, .glass-strong { background: hsl(var(--card)); }
-  }
-  @media (prefers-reduced-transparency: reduce) {
-    .glass, .glass-strong { background: hsl(var(--card)); -webkit-backdrop-filter: none; backdrop-filter: none; }
-    .bg-aurora { background-image: none; }
-  }
-  /* Ligado pelo app quando o aparelho é fraco (ex.: navigator.hardwareConcurrency <= 4 ou deviceMemory <= 2)
-     ou quando o usuário escolhe "Visual simples" nas preferências. */
-  :root[data-visual="simples"] .glass, :root[data-visual="simples"] .glass-strong { background: hsl(var(--card)); -webkit-backdrop-filter: none; backdrop-filter: none; }
-  :root[data-visual="simples"] .bg-aurora { background-image: none; }
-}
-
 @layer base {
   body {
     @apply bg-background text-foreground antialiased;
@@ -194,18 +425,4 @@
     outline: 2px solid hsl(var(--ring));
     outline-offset: 2px;
   }
-}
-
-/* Classes das telas existentes, na nova identidade. Componentes novos usam
-   as primitivas de components/ui. */
-@layer components {
-  .card { @apply glass text-card-foreground rounded-card p-5; }
-  .btn-primary { @apply bg-primary text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-brand-ink active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60; }
-  .btn-secondary { @apply bg-card text-foreground border border-input rounded-lg px-5 py-3 font-medium hover:bg-muted active:bg-secondary active:scale-[.98] transition min-h-[44px]; }
-  /* Acao que pede atencao (ex.: registrar intercorrencia): preenchida, AA. */
-  .btn-alerta { @apply bg-alerta-forte text-primary-foreground rounded-lg px-5 py-3 font-semibold hover:bg-alerta-forte/90 active:scale-[.98] transition min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 disabled:pointer-events-none disabled:opacity-60; }
-  .input { @apply w-full rounded-lg border border-input bg-card px-4 py-3 text-[16px] placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 focus-visible:border-brand-strong; }
-  .badge-success { @apply bg-accent text-primary border border-brand/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
-  .badge-warning { @apply bg-alerta-soft text-alerta-forte border border-alerta/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
-  .badge-danger { @apply bg-critico-soft text-critico-texto border border-critico/30 px-2.5 py-1 rounded-full text-xs font-semibold inline-flex items-center gap-1; }
 }

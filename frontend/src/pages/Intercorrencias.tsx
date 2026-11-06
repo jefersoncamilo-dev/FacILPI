@@ -242,18 +242,18 @@ export function Intercorrencias() {
                 )}
               </div>
 
-              <p className="mt-3 font-medium break-words">{rotuloTipo(registro.tipo)}</p>
+              <p className="mt-3 font-medium wrap-break-word">{rotuloTipo(registro.tipo)}</p>
 
               {registro.sbar_situacao && (
-                <p className="mt-2 text-sm text-textMuted break-words">{registro.sbar_situacao}</p>
+                <p className="mt-2 text-sm text-textMuted wrap-break-word">{registro.sbar_situacao}</p>
               )}
               {registro.providencia && (
-                <p className="mt-2 text-sm text-textMuted break-words">
+                <p className="mt-2 text-sm text-textMuted wrap-break-word">
                   <span className="font-medium text-textMain">Providência:</span> {registro.providencia}
                 </p>
               )}
               {registro.desfecho && (
-                <p className="mt-2 text-sm text-textMuted break-words">
+                <p className="mt-2 text-sm text-textMuted wrap-break-word">
                   <span className="font-medium text-textMain">Desfecho:</span> {registro.desfecho}
                 </p>
               )}

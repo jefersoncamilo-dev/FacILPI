@@ -57,7 +57,7 @@ export function SinoAlertas({ permitido, central }: EstadoSino) {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" aria-label={rotulo} className="relative shrink-0 text-muted-foreground">
-          <Bell className="!size-5" aria-hidden="true" />
+          <Bell className="size-5!" aria-hidden="true" />
           {total ? (
             <span
               aria-hidden="true"

@@ -62,11 +62,11 @@ export function ValidarDocumentoModal({
         {documento && (
           <div className="space-y-1 text-sm text-textMuted">
             <p>
-              Documento: <span className="font-medium text-textMain break-words">{documento.tipo}</span>
+              Documento: <span className="font-medium text-textMain wrap-break-word">{documento.tipo}</span>
             </p>
             {residenteNome && (
               <p>
-                Residente: <span className="font-medium text-textMain break-words">{residenteNome}</span>
+                Residente: <span className="font-medium text-textMain wrap-break-word">{residenteNome}</span>
               </p>
             )}
           </div>

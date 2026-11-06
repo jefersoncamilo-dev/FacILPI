@@ -116,7 +116,7 @@ export function Alertas() {
                 onClick={() => setAba(x.id)}
                 className={cn(
                   'min-h-[44px] flex-1 rounded-md px-3 text-sm font-medium transition-colors sm:flex-none',
-                  aba === x.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                  aba === x.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
                 )}
               >
                 {x.rotulo} <span className="text-xs text-muted-foreground">({todos.filter(x.filtro).length})</span>

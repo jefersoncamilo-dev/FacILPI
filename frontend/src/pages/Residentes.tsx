@@ -187,7 +187,7 @@ export function Residentes() {
                 o texto do card deixa de ser selecionável. */}
             <Link
               to={`/residentes/${r.id}`}
-              className="flex gap-3 after:absolute after:inset-0 after:rounded-card focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-ring/50"
+              className="flex gap-3 after:absolute after:inset-0 after:rounded-card focus-visible:outline-hidden focus-visible:after:ring-2 focus-visible:after:ring-ring/50"
             >
               {/* Decorativa: sem aria-hidden, o nome acessível começa com a inicial duplicada. */}
               <div aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-lg font-bold text-primary">{r.nome[0]}</div>
@@ -246,7 +246,7 @@ export function Residentes() {
                 <Label htmlFor="res-sexo">Sexo</Label>
                 <select
                   id="res-sexo"
-                  className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  className="flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground focus-visible:border-brand-strong focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/40"
                   value={form.sexo}
                   onChange={e => setForm({ ...form, sexo: e.target.value })}
                 >

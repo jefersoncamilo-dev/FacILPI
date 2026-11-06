@@ -71,7 +71,7 @@ function Shell({ children }: { children: ReactNode }) {
         {/* Mobile/tablet */}
         <header className="superficie-escura sticky top-0 z-30 flex h-16 items-center gap-2 bg-side px-3 text-foreground sm:px-5 xl:hidden">
           <Button variant="ghost" size="icon" aria-label="Abrir menu" onClick={() => setMenuAberto(true)}>
-            <Menu className="!size-5" aria-hidden="true" />
+            <Menu className="size-5!" aria-hidden="true" />
           </Button>
           <Logo />
           <span className="ml-auto hidden max-w-[45%] truncate rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground sm:block">
@@ -161,7 +161,7 @@ function PainelNavegacao({ mobile = false, onAlterarSenha, onAparencia }: { mobi
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Menu da conta" className="shrink-0 text-muted-foreground">
-              <Settings className="!size-5" aria-hidden="true" />
+              <Settings className="size-5!" aria-hidden="true" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="top" align="end">
