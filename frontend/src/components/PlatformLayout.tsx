@@ -15,8 +15,8 @@ export function PlatformLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
+    <div className="bg-aurora min-h-screen">
+      <header className="superficie-escura sticky top-0 z-30 bg-side text-foreground">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4 sm:px-6">
           <Link to="/platform/instituicoes" aria-label="Ir para a Central FacILPI" className="rounded-lg">
             <Logo />

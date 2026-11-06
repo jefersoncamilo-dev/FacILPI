@@ -145,7 +145,7 @@ export function PlatformInstituicaoDetalhe() {
     <div className="space-y-6 max-w-3xl">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground truncate">
+          <h1 className="truncate font-display text-titulo-tela text-brand-ink">
             {instituicao.nome_fantasia?.trim() || instituicao.razao_social}
           </h1>
           <p className="text-sm text-textMuted">Situação: {rotuloSituacao(instituicao.situacao)}</p>
@@ -167,7 +167,7 @@ export function PlatformInstituicaoDetalhe() {
       )}
 
       <section className="space-y-2">
-        <h2 className="font-semibold">Dados da instituição</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Dados da instituição</h2>
         <InstituicaoForm
           instituicao={instituicao}
           onSubmit={salvar}
@@ -177,7 +177,7 @@ export function PlatformInstituicaoDetalhe() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold">Primeiro gestor</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Primeiro gestor</h2>
         <div className="card space-y-3">
           {ativa ? (
             <p className="text-sm text-textMuted">
@@ -208,7 +208,7 @@ export function PlatformInstituicaoDetalhe() {
       </section>
 
       <section className="space-y-2">
-        <h2 className="font-semibold">Ativação</h2>
+        <h2 className="font-display text-titulo-secao text-brand-ink">Ativação</h2>
         <div className="card space-y-3">
           {ativa ? (
             <>
