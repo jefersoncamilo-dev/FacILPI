@@ -11,10 +11,10 @@ afterEach(() => {
 })
 
 describe('aparência', () => {
-  it('sem preferência: tema automático, sem atributo', () => {
-    expect(lerTema()).toBe('automatico')
+  it('sem preferência: tema claro, mesmo com o aparelho no modo escuro', () => {
+    expect(lerTema()).toBe('claro')
     aplicarAparencia(document.documentElement, nav(8, 8))
-    expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
     expect(document.documentElement.hasAttribute('data-visual')).toBe(false)
   })
 
@@ -28,10 +28,15 @@ describe('aparência', () => {
     expect(document.documentElement.hasAttribute('data-theme')).toBe(false)
   })
 
-  it('valor desconhecido guardado cai para automático', () => {
+  it('automático guardado continua automático', () => {
+    definirTema('automatico')
+    expect(lerTema()).toBe('automatico')
+  })
+
+  it('valor desconhecido guardado cai para o padrão', () => {
     localStorage.setItem('facilpi.tema', 'roxo')
     localStorage.setItem('facilpi.visual', 'x')
-    expect(lerTema()).toBe('automatico')
+    expect(lerTema()).toBe('claro')
     expect(lerVisual()).toBe('automatico')
   })
 

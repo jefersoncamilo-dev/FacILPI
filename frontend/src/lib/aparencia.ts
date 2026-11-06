@@ -1,8 +1,9 @@
 /**
  * Onda 5 (#213): preferências de aparência guardadas no aparelho.
  *
- * - Tema: "claro" | "escuro" | "automatico". Automático não grava atributo e
- *   deixa o `prefers-color-scheme` decidir (ver index.css).
+ * - Tema: "claro" | "escuro" | "automatico". Sem escolha guardada, vale claro.
+ *   Automático não grava atributo e deixa o `prefers-color-scheme` decidir
+ *   (ver index.css).
  * - Visual: "completo" | "simples" | "automatico". Simples liga
  *   `data-visual="simples"` no <html>: vidro vira superfície sólida e a aurora
  *   some. Automático liga o simples em aparelho fraco.
@@ -33,7 +34,7 @@ function gravar(key: string, valor: string) {
 
 export function lerTema(): Tema {
   const v = ler(TEMA_KEY)
-  return v === 'claro' || v === 'escuro' ? v : 'automatico'
+  return v === 'escuro' || v === 'automatico' ? v : 'claro'
 }
 
 export function lerVisual(): Visual {
