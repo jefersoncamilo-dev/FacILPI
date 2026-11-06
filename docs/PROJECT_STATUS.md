@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até `030_saida_residente` (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até a 034 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -40,6 +40,12 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Cuidados programados criados e editados pela tela (M12, #185).
 - Aba Resumo do residente (M4, #186) com os familiares do residente, filtrados no servidor (M13, #194).
 - Medicação (migration 031, D1): Enfermagem e RT cadastram medicamento e transcrevem receita; o Médico mantém prescrever (M10, #188). Tela de medicação substitui o placeholder (M9, #192); a grade de doses ainda mostra o horário no fuso do navegador.
+- Onda 3: N5 (PR #201), G5 aba Feitos/Expirados (PR #202), UX do Início e da fila (PR #203), G7 cuidado em outro horário até 24 h (PR #205).
+- Onda 4: N6+N7 e CSP `img-src` (PR #209), N3 auditoria de acesso (PR #210), guard de 1 worker para o rate limit (PR #212), cookie HttpOnly + CSRF (#207, PR #216).
+- Onda 5: tokens de tema (PR #215), cores fixas em tokens (PRs #221, #224, #229), React Router 7 (PR #218), E2E Playwright (PR #223).
+- Percentual de refeição opcional 0/25/50/75/100 (D6, PR #220, migration 032).
+- Estorno de dose pela tela só por Enfermagem e RT, com motivo (D2, #11, PR #226, migration 033).
+- Escritas clínicas fora do `ilpi_admin` (D3 opção B, #15, PR #228, migration 034): relatório por ILPI, transição de 30 dias, bloqueio só da escrita clínica sem perfil clínico.
 - CI mais rápido (#184): o job SQLite caiu de cerca de 29 para cerca de 4 min.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
 
@@ -60,14 +66,14 @@ As migrations 021–028 precisam ser aplicadas em ordem em qualquer ambiente per
 ### Meu Plantão — UX-01
 Integrado (#139–#145): G1, G3, registro rápido (Realizado / Recusado / Não realizado, motivo obrigatório nas exceções), três visões e filtros, fila padrão a partir de 24 h atrás (atrasados visíveis), seleção múltipla, registro em lote (uma execução e uma auditoria por cuidado; "Marcar até 1 h" no atalho de grupo), cards compactos com foto/iniciais, Emergência (abre o prontuário), título com o nome do funcionário e grau ativo na fila para quem tem `plantao:ler` (o histórico do grau continua exigindo `grau_dependencia:ler`). Regras em `docs/DOMAIN_RULES.md`.
 
-Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de registros (UX-01F, decisão A): Enfermagem, RT e administrador corrigem via estorno com `execucoes:corrigir` no próprio Meu Plantão; cuidador registra mas não corrige; sem exclusão; só cuidados — confirme no GitHub se o PR já foi integrado. G4 (percentual de refeição), G5 (concluídos/expirados) e G7 ("outro horário") seguem adiados.
+Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de registros (UX-01F, decisão A): Enfermagem, RT e administrador corrigem via estorno com `execucoes:corrigir` no próprio Meu Plantão; cuidador registra mas não corrige; sem exclusão; só cuidados — confirme no GitHub se o PR já foi integrado. G4 (PR #220), G5 (PR #202) e G7 (PR #205) foram integrados.
 
 ### Auditoria geral (11/10/2026) — decisões e riscos conhecidos
 - **Situação do residente:** fora do contrato de escrita desde o M14 (#172): o cadastro nasce "Em admissao", só a Admissão ativa e só a saída (N2, #171) tira de "Ativo"; `situacao`/`data_admissao` enviados no cadastro ou na edição genéricos são ignorados.
 - **Autoria por FK:** integrada em avaliações, sinais vitais e intercorrências (029, PR #158); o nome em texto segue como foto. A exibição legível no prontuário é o N1.
-- **Adiado (exige migration/RBAC):** retirada das permissões clínicas de escrita do template `ilpi_admin` (herança das migrations 006–014).
+- **`ilpi_admin`:** escritas clínicas retiradas com transição de 30 dias (D3, PR #228, migration 034).
 - **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. Desde o #207 o access token vai em cookie HttpOnly `SameSite=Strict` (mesma origem: Caddy na VPS, rewrite de `/api/*` no Render), com CSRF double-submit (`csrf_token` + `X-CSRF-Token`) e logout que revoga a família e apaga os cookies; o `localStorage` guarda só as claims, sem assinatura. O Bearer continua aceito na transição.
-- **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 e React Router 7 (upgrades maiores, sem decisão).
+- **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 (React Router 7 integrado no PR #218).
 - **Branches:** a `main` foi promovida a partir da linha integrada pelo PR #160 (20/10/2026, v0.6.0), com conteúdo igual ao da `fase-3b`. A `fase-3b` continua sendo a linha integrada; a `main` só avança por promoção.
 
 - **Alerta de quem saiu:** o estado aberto de um alerta de residente que saiu fecha como "resolvido pela fonte"; o encerramento próprio `saida` é o #173 (exige migration 031).
@@ -78,6 +84,12 @@ Uma promoção da `fase-3b` para a `main` exige:
 2. homologação com contas sintéticas;
 3. migrations aplicadas em ordem no ambiente de homologação, por decisão humana;
 4. aprovação explícita do responsável no PR de promoção.
+
+### Pendências registradas (03/11/2026)
+- Neon: aplicar as migrations 029 a 034 em ordem, só por decisão humana.
+- Render: configurar o rewrite de `/api/*` e o `VITE_API_BASE_URL` (necessário para o cookie do #207).
+- Follow-ups: #163, #164, #165, #166, #173, tela de estorno da saída, fuso horário da grade de doses (M9), UUID em `Documentos.tsx`, validação visual do M1 e do M5.
+- Ordem dos complementares (D5) em `docs/ROADMAP.md` §20.
 
 ### Passagem de Plantão
 Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. Não integra o Prontuário longitudinal (decisão do M20).
