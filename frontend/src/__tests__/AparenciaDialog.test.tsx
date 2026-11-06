@@ -12,7 +12,7 @@ afterEach(() => {
 describe('Aparência (Onda 5)', () => {
   it('tema escolhido vale na hora e fica guardado no aparelho', async () => {
     render(<AparenciaDialog open onOpenChange={() => {}} />)
-    expect(screen.getByRole('radio', { name: 'Automático' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('radio', { name: 'Claro' })).toHaveAttribute('aria-checked', 'true')
     await userEvent.click(screen.getByRole('radio', { name: 'Escuro' }))
     expect(screen.getByRole('radio', { name: 'Escuro' })).toHaveAttribute('aria-checked', 'true')
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')
