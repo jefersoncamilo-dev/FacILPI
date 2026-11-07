@@ -12,15 +12,16 @@ e a situacao do residente (nao governada, #76) nao e usada — so o total.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
+from .alertas import _fuso
 from .security import SecurityContext, allowed_permission_keys, require_ilpi_context
 
 dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
@@ -94,3 +95,46 @@ async def resumo(
         resposta["equipe"] = {"ativos": equipe.get("ativo", 0), "afastados": equipe.get("afastado", 0)}
 
     return resposta
+
+
+@dashboard_router.get("/intercorrencias-semanais", response_model=s.DashboardIntercorrenciasSemanaisResponse)
+async def intercorrencias_semanais(
+    semanas: int = Query(default=12),
+    db: AsyncSession = Depends(get_db),
+    context: SecurityContext = Depends(require_ilpi_context),
+):
+    """#275: ocorrencias por semana (segunda a domingo, no fuso da ILPI), incluindo a atual.
+
+    Conta pelo momento do evento (`ocorrido_em`), em qualquer situacao: abrir ou
+    encerrar nao muda quando a intercorrencia aconteceu. Agrupa em Python para o
+    limite da semana seguir o fuso igualmente em SQLite e PostgreSQL.
+    """
+    if "intercorrencias:ler" not in await allowed_permission_keys(db, context):
+        raise HTTPException(status_code=403, detail="Permissao insuficiente")
+
+    if semanas not in (8, 12):
+        raise HTTPException(status_code=422, detail="Periodo deve ser de 8 ou 12 semanas")
+
+    fuso = await _fuso(db, context.ilpi_id)
+    hoje = datetime.now(fuso).date()
+    semana_atual = hoje - timedelta(days=hoje.weekday())
+    inicios: list[date] = [semana_atual - timedelta(weeks=i) for i in range(semanas - 1, -1, -1)]
+    de = datetime.combine(inicios[0], time.min, fuso)
+    ate = datetime.combine(semana_atual + timedelta(weeks=1), time.min, fuso)
+
+    totais = dict.fromkeys(inicios, 0)
+    ocorridos = await db.execute(
+        select(m.Intercorrencia.ocorrido_em).where(
+            m.Intercorrencia.ilpi_id == context.ilpi_id,
+            m.Intercorrencia.ocorrido_em >= de,
+            m.Intercorrencia.ocorrido_em < ate,
+        )
+    )
+    for ocorrido in ocorridos.scalars():
+        dia = ocorrido.astimezone(fuso).date()
+        totais[dia - timedelta(days=dia.weekday())] += 1
+
+    return {
+        "fuso": fuso.key,
+        "semanas": [{"inicio": inicio, "total": total} for inicio, total in totais.items()],
+    }

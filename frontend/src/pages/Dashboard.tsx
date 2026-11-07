@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import { api } from '../services/api'
 import { getPlantao, PLANTAO_LIMIT_PADRAO, rotuloDoItem, type PlantaoItem } from '../services/plantao'
-import { getResumoDashboard, type DashboardResumo } from '../services/dashboard'
+import { getIntercorrenciasSemanais, getResumoDashboard, type DashboardResumo, type SemanaIntercorrencias } from '../services/dashboard'
 import { GRAVIDADES as GRAVIDADES_ALERTA, ROTULO_GRAVIDADE as ROTULO_ALERTA, type CentralAlertas } from '../services/alertas'
 import { recarregarCentralAlertas, useCentralAlertas, type EstadoCentral } from '../hooks/useCentralAlertas'
 import { ItemAlerta } from '../components/alertas/ItemAlerta'
@@ -30,7 +30,7 @@ import { usePermissoes } from '../context/PermissoesContext'
 import { MetricCard } from '../components/ui/metric-card'
 import { Badge, Skeleton } from '../components/ui/feedback'
 import { Button } from '../components/ui/button'
-import { BarraSegmentada, Legenda, MiniBarras, percentual, Rosca, type Segmento } from '../components/ui/charts'
+import { BarraSegmentada, BarrasVerticais, Legenda, MiniBarras, percentual, Rosca, type Segmento } from '../components/ui/charts'
 import { acoesDoPerfil, type AcaoRapida } from '../components/shell/acoesRapidas'
 import { rotuloSituacaoResidente } from '../lib/rotulos'
 import { cn } from '../lib/utils'
@@ -98,6 +98,105 @@ export function pendenciasPorHora(itens: PlantaoItem[], agora = Date.now()): { v
     if (indice < 12) valores[indice] += 1
   }
   return { valores, rotulos }
+}
+
+const SERIES_PENDENCIAS: { origem: PlantaoItem['origem']; rotulo: string; fundo: string; traco: string }[] = [
+  { origem: 'medicacao', rotulo: 'Medicação', fundo: 'bg-info', traco: 'stroke-info' },
+  { origem: 'cuidado', rotulo: 'Cuidado', fundo: 'bg-brand', traco: 'stroke-brand' },
+  { origem: 'intercorrencia', rotulo: 'Intercorrência', fundo: 'bg-alerta', traco: 'stroke-alerta' },
+]
+
+/** #275: as mesmas 12 horas de `pendenciasPorHora`, separadas por origem. */
+function PendenciasPorHora({ itens }: { itens: PlantaoItem[] }) {
+  const agora = Date.now()
+  const { valores, rotulos } = pendenciasPorHora(itens, agora)
+  if (!valores.some(v => v > 0)) return null
+  const series = SERIES_PENDENCIAS.map(s => ({
+    ...s,
+    porHora: pendenciasPorHora(itens.filter(i => i.origem === s.origem), agora).valores,
+  })).filter(s => s.porHora.some(v => v > 0))
+  const colunas = rotulos.map((rotulo, h) => ({
+    marca: rotulo,
+    descricao: `${rotulo}: ${series.map(s => `${s.rotulo} ${s.porHora[h]}`).join(', ')}`,
+    partes: series.map(s => ({ valor: s.porHora[h], fundo: s.fundo })),
+  }))
+  return (
+    <div className="mb-4 space-y-3 border-b border-border pb-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nas próximas 12 horas</p>
+      <BarrasVerticais titulo="Pendências com horário nas próximas 12 horas" colunas={colunas} />
+      <Legenda className="sm:grid-cols-3" segmentos={series.map(s => ({
+        rotulo: s.rotulo, valor: s.porHora.reduce((n, v) => n + v, 0), fundo: s.fundo, traco: s.traco,
+      }))} />
+      {itens.length >= PLANTAO_LIMIT_PADRAO && (
+        <p className="text-xs text-muted-foreground">Mostrando as primeiras {PLANTAO_LIMIT_PADRAO} pendências; pode haver mais.</p>
+      )}
+    </div>
+  )
+}
+
+const PERIODOS_SEMANAS = [8, 12]
+
+/** #275: histórico oficial do backend; erro nunca aparece como semana zerada. */
+function IntercorrenciasPorSemana() {
+  const [carga, setCarga] = useState<Carga<SemanaIntercorrencias[]>>({ status: 'carregando' })
+  const [periodo, setPeriodo] = useState(8)
+
+  useEffect(() => {
+    let vigente = true
+    getIntercorrenciasSemanais()
+      .then(dados => { if (vigente) setCarga({ status: 'ok', dados }) })
+      .catch(() => { if (vigente) setCarga({ status: 'erro' }) })
+    return () => { vigente = false }
+  }, [])
+
+  const seletor = (
+    <div role="group" aria-label="Período" className="flex gap-1 rounded-lg bg-muted p-0.5">
+      {PERIODOS_SEMANAS.map(n => (
+        <button key={n} type="button" aria-pressed={periodo === n} onClick={() => setPeriodo(n)}
+          className={cn('min-h-[44px] rounded-md px-2.5 text-xs font-semibold', periodo === n ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground')}>
+          {n} semanas
+        </button>
+      ))}
+    </div>
+  )
+
+  let corpo: ReactNode
+  if (carga.status === 'carregando') corpo = <Carregando />
+  else if (carga.status === 'erro') corpo = <Falha titulo="Não foi possível carregar o histórico" texto="Isso não significa que não houve intercorrências." />
+  else {
+    const semanas = carga.dados.slice(-periodo)
+    const total = semanas.reduce((n, s) => n + s.total, 0)
+    if (total === 0) corpo = <Vazio icon={TriangleAlert} titulo={`Nenhuma intercorrência nas últimas ${periodo} semanas`} />
+    else {
+      const colunas = semanas.map((s, i) => {
+        const [, mes, dia] = s.inicio.split('-')
+        const data = `${dia}/${mes}`
+        const atual = i === semanas.length - 1
+        return {
+          // Com 12 semanas, um rótulo sim, um não, contando da atual: cabe em 360 px.
+          marca: periodo > 8 && (semanas.length - 1 - i) % 2 === 1 ? '' : data,
+          descricao: `${atual ? 'Esta semana' : `Semana de ${data}`}: ${s.total}`,
+          partes: [{ valor: s.total, fundo: 'bg-primary' }],
+        }
+      })
+      const media = (total / semanas.length).toLocaleString('pt-BR', { maximumFractionDigits: 1 })
+      corpo = (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">{plural(total, 'registro', 'registros')} no período · média de {media} por semana · a última barra é a semana atual, ainda em curso</p>
+          <BarrasVerticais titulo="Intercorrências por semana" colunas={colunas} />
+        </div>
+      )
+    }
+  }
+  // O seletor fica no corpo: ao lado do título, não caberia em 360 px.
+  return (
+    <Painel titulo="Intercorrências por semana" icone={TriangleAlert}>
+      <div className="space-y-3">
+        <div className="flex justify-end">{seletor}</div>
+        {corpo}
+      </div>
+    </Painel>
+  )
 }
 
 export function Dashboard() {
@@ -185,10 +284,12 @@ export function Dashboard() {
               icone={ClipboardList}
               acao={<Link to="/plantao" className={LINK}>Abrir Meu Plantão</Link>}
             >
+              {pendencias.status === 'ok' && <PendenciasPorHora itens={pendencias.dados} />}
               <LinhaDoTempo carga={pendencias} nomes={nomes} />
             </Painel>
           )}
           {gestao && <VisaoDaInstituicao resumo={resumo} />}
+          {gestao && permissoes === 'ok' && pode('intercorrencias:ler') && <IntercorrenciasPorSemana />}
           {podeResidentes && (
             <Painel
               titulo="Residentes recentes"

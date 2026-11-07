@@ -22,3 +22,14 @@ export async function getResumoDashboard(): Promise<DashboardResumo> {
   const { data } = await api.get<DashboardResumo>('/dashboard/resumo')
   return data
 }
+
+/** #275: da semana mais antiga à atual; `inicio` é a segunda-feira (AAAA-MM-DD). */
+export interface SemanaIntercorrencias {
+  inicio: string
+  total: number
+}
+
+export async function getIntercorrenciasSemanais(): Promise<SemanaIntercorrencias[]> {
+  const { data } = await api.get<{ semanas: SemanaIntercorrencias[] }>('/dashboard/intercorrencias-semanais', { params: { semanas: 12 } })
+  return data.semanas
+}

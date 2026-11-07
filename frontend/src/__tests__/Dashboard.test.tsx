@@ -55,12 +55,15 @@ function resumo(parcial: Partial<DashboardResumo> = {}): DashboardResumo {
 }
 
 type Fonte = unknown[] | DashboardResumo | Error
-function responde({ resumo: r = resumo(), plantao = PENDENCIAS, residentes = RESIDENTES }: { resumo?: Fonte; plantao?: Fonte; residentes?: Fonte } = {}) {
+const SEMANAS = Array.from({ length: 12 }, (_, i) => ({ inicio: `2026-09-${String(i + 1).padStart(2, '0')}`, total: i === 11 ? 3 : i === 0 ? 5 : 0 }))
+
+function responde({ resumo: r = resumo(), plantao = PENDENCIAS, residentes = RESIDENTES, semanais = { fuso: 'America/Sao_Paulo', semanas: SEMANAS } }: { resumo?: Fonte; plantao?: Fonte; residentes?: Fonte; semanais?: any } = {}) {
   const de = (fonte: Fonte) => (fonte instanceof Error ? Promise.reject(fonte) : Promise.resolve({ data: fonte } as any))
   mockGet.mockImplementation((url: string) => {
     if (url === '/dashboard/resumo') return de(r)
     if (url === '/plantao/') return de(plantao)
     if (url === '/residentes/') return de(residentes)
+    if (url === '/dashboard/intercorrencias-semanais') return de(semanais)
     // UX-11: "Atividade recente no turno" lê as listas oficiais.
     if (url === '/sinais-vitais/' || url === '/intercorrencias/') return de([])
     throw new Error(`URL inesperada no Dashboard: ${url}`)
@@ -97,6 +100,51 @@ function titulosDosIndicadores() {
 beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
+})
+
+describe('Dashboard — gráficos da #275', () => {
+  it('mostra semanas e troca o período sem nova consulta', async () => {
+    responde()
+    renderDashboard()
+    const painel = within(await screen.findByRole('region', { name: 'Intercorrências por semana' }))
+    expect(await painel.findByText(/3 registros no período/)).toBeTruthy()
+    await userEvent.click(painel.getByRole('button', { name: '12 semanas' }))
+    expect(painel.getByText(/8 registros no período/)).toBeTruthy()
+    expect(urlsChamadas().filter(u => u === '/dashboard/intercorrencias-semanais')).toHaveLength(1)
+  })
+
+  it('erro no histórico não vira zero', async () => {
+    responde({ semanais: new Error('falha') })
+    renderDashboard()
+    expect(await screen.findByText('Não foi possível carregar o histórico')).toBeTruthy()
+    expect(screen.queryByText(/Nenhuma intercorrência nas últimas/)).toBeNull()
+  })
+
+  it('sem registros mostra estado vazio', async () => {
+    responde({ semanais: { fuso: 'America/Sao_Paulo', semanas: SEMANAS.map(s => ({ ...s, total: 0 })) } })
+    renderDashboard()
+    expect(await screen.findByText('Nenhuma intercorrência nas últimas 8 semanas')).toBeTruthy()
+  })
+
+  it('sem permissão ou fora da gestão não consulta o histórico', async () => {
+    responde()
+    renderDashboard(CUIDADO)
+    await waitFor(() => expect(urlsChamadas()).toContain('/plantao/'))
+    expect(urlsChamadas()).not.toContain('/dashboard/intercorrencias-semanais')
+    expect(screen.queryByRole('region', { name: 'Intercorrências por semana' })).toBeNull()
+  })
+
+  it('separa as pendências por origem', async () => {
+    const hora = (h: number) => new Date(Date.now() + h * 3600_000 + 60_000).toISOString()
+    responde({ plantao: [
+      { ...PENDENCIAS[0], previsto_em: hora(1) },
+      { ...PENDENCIAS[1], previsto_em: hora(1) },
+      { ...PENDENCIAS[1], registro_id: 'dose-2', previsto_em: hora(2) },
+    ] })
+    renderDashboard()
+    const grafico = await screen.findByRole('img', { name: /^Pendências com horário nas próximas 12 horas: .*Medicação 1, Cuidado 1/ })
+    expect(grafico).toBeTruthy()
+  })
 })
 
 describe('Dashboard — fontes oficiais, nunca endpoints fail-closed', () => {
