@@ -115,6 +115,20 @@ describe('UX-11 — Início visual: gráficos com dado real', () => {
     expect(valores.reduce((a, b) => a + b, 0)).toBe(3)
     expect(rotulos[0]).toBe('09h')
   })
+
+  it('pendências por hora: coluna segue a hora cheia mesmo com o relógio no meio da hora (#275)', () => {
+    const agora = Date.parse('2026-09-26T15:24:00Z') // 12:24 em São Paulo
+    const item = (previsto_em: string) => ({ origem: 'cuidado' as const, registro_id: previsto_em, residente_id: 'r', descricao: 'x', previsto_em })
+    const { valores, rotulos } = pendenciasPorHora([
+      item('2026-09-26T23:00:00Z'), // 20:00 local
+      item('2026-09-26T15:50:00Z'), // 12:50 local
+      item('2026-09-27T03:24:00Z'), // 00:24 local: fora das 12h–23h
+    ], agora)
+    expect(rotulos[0]).toBe('12h')
+    expect(valores[rotulos.indexOf('20h')]).toBe(1)
+    expect(valores[0]).toBe(1)
+    expect(valores.reduce((a, b) => a + b, 0)).toBe(2)
+  })
 })
 
 describe('UX-11 — ações rápidas pelo perfil de acesso', () => {

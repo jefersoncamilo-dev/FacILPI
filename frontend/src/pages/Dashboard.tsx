@@ -90,11 +90,14 @@ const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um :
 
 /** Pendências com horário distribuídas nas próximas 12 h (atrasadas contam na 1ª hora). */
 export function pendenciasPorHora(itens: PlantaoItem[], agora = Date.now()): { valores: number[]; rotulos: string[] } {
+  // Colunas na hora cheia: o rótulo "20h" cobre 20:00–20:59 (o fuso de São Paulo
+  // tem deslocamento em horas inteiras, então truncar em UTC dá a mesma hora local).
+  const inicio = agora - (agora % HORA)
   const valores = Array.from({ length: 12 }, () => 0)
-  const rotulos = valores.map((_, i) => `${new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(agora + i * HORA))}h`)
+  const rotulos = valores.map((_, i) => `${new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', timeZone: 'America/Sao_Paulo' }).format(new Date(inicio + i * HORA))}h`)
   for (const item of itens) {
     if (!item.previsto_em) continue
-    const indice = Math.max(0, Math.floor((Date.parse(item.previsto_em) - agora) / HORA))
+    const indice = Math.max(0, Math.floor((Date.parse(item.previsto_em) - inicio) / HORA))
     if (indice < 12) valores[indice] += 1
   }
   return { valores, rotulos }
