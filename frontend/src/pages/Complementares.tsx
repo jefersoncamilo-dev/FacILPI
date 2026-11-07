@@ -6,6 +6,7 @@ import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { Button } from '../components/ui/button'
 import { Input, Label } from '../components/ui/input'
 import { Alert, Badge, Skeleton } from '../components/ui/feedback'
+import { Dialog, DialogContent } from '../components/ui/dialog'
 import { EmptyState } from '../components/ui/states'
 
 const SELECT = 'flex h-12 w-full rounded-lg border border-input bg-card px-3 text-[16px] text-foreground'
@@ -71,6 +72,37 @@ function EscolheResidente({ residentes, valor, onChange }: { residentes: Ref[]; 
   )
 }
 
+type Pedido = { titulo: string; rotulo: string; tipo?: 'texto' | 'data'; inicial?: string; enviar: (valor: string) => void }
+
+/** Pede o texto obrigatório de uma ação (motivo, resultado, data) antes de enviá-la. */
+function PedirValor({ pedido, aoFechar }: { pedido: Pedido | null; aoFechar: () => void }) {
+  const [valor, setValor] = useState('')
+  useEffect(() => { setValor(pedido?.inicial ?? '') }, [pedido])
+  if (!pedido) return null
+  return (
+    <Dialog open onOpenChange={a => { if (!a) aoFechar() }}>
+      <DialogContent title={pedido.titulo}>
+        <form className="space-y-4" onSubmit={e => {
+          e.preventDefault()
+          if (!valor.trim()) return
+          pedido.enviar(valor.trim())
+          aoFechar()
+        }}>
+          <Campo id="pedido-valor" rotulo={pedido.rotulo}>
+            {pedido.tipo === 'data'
+              ? <Input id="pedido-valor" type="date" required value={valor} onChange={e => setValor(e.target.value)} />
+              : <textarea id="pedido-valor" className={AREA_TEXTO} required value={valor} onChange={e => setValor(e.target.value)} />}
+          </Campo>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit">Confirmar</Button>
+            <Button type="button" variant="outline" onClick={aoFechar}>Voltar</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const Cartao = ({ children }: { children: ReactNode }) => <li className="rounded-card border border-border bg-card p-4">{children}</li>
 const Vazio = ({ itens }: { itens: unknown[] | null }) => (itens === null ? <Skeleton className="h-32 w-full rounded-card" /> : itens.length === 0 ? <p className="text-apoio text-muted-foreground">Nenhum registro ainda.</p> : null)
 
@@ -85,9 +117,10 @@ export function Agenda() {
   const [f, setF] = useState({ residente_id: '', motivo: '', especialidade: '', profissional: '', local: '', inicio_em: '' })
   const gerencia = pode('agenda:gerenciar')
 
+  const [pedido, setPedido] = useState<Pedido | null>(null)
   function encerrar(ev: Evento, acao: 'concluir' | 'cancelar', pergunta: string) {
-    const texto = window.prompt(pergunta)?.trim()
-    if (texto) agir(() => api.post(`/agenda/${ev.id}/${acao}`, { texto }))
+    setPedido({ titulo: acao === 'concluir' ? 'Concluir agendamento' : 'Cancelar agendamento', rotulo: pergunta,
+      enviar: texto => { agir(() => api.post(`/agenda/${ev.id}/${acao}`, { texto })) } })
   }
 
   async function criar(e: FormEvent) {
@@ -98,6 +131,7 @@ export function Agenda() {
 
   return (
     <Tela titulo="Agenda" apoio="Consultas e compromissos dos residentes." proibido={proibido} erro={erro}>
+      <PedirValor pedido={pedido} aoFechar={() => setPedido(null)} />
       {gerencia && (
         <form onSubmit={criar} className="grid gap-4 md:grid-cols-2">
           <EscolheResidente residentes={residentes} valor={f.residente_id} onChange={v => setF({ ...f, residente_id: v })} />
@@ -144,6 +178,7 @@ export function Multidisciplinar() {
   const { itens, erro, proibido, agir } = useLista<Atendimento>(AREAS[area] ? `/multidisciplinar/${area}` : null)
   const [f, setF] = useState({ residente_id: '', ocorrido_em: '', evolucao: '' })
   const registra = pode(`multidisciplinar.${area}:registrar`)
+  const [pedido, setPedido] = useState<Pedido | null>(null)
   if (!AREAS[area]) return <EmptyState icon={Lock} title="Área não encontrada" description="Volte ao módulo Multidisciplinar." />
 
   async function criar(e: FormEvent) {
@@ -152,12 +187,13 @@ export function Multidisciplinar() {
     if (ok) setF({ residente_id: '', ocorrido_em: '', evolucao: '' })
   }
   function estornar(a: Atendimento) {
-    const texto = window.prompt('Motivo do estorno')?.trim()
-    if (texto) agir(() => api.post(`/multidisciplinar/${area}/${a.id}/estornar`, { texto }))
+    setPedido({ titulo: 'Estornar atendimento', rotulo: 'Motivo do estorno',
+      enviar: texto => { agir(() => api.post(`/multidisciplinar/${area}/${a.id}/estornar`, { texto })) } })
   }
 
   return (
     <Tela titulo={AREAS[area]} apoio="Atendimentos e evoluções desta área." proibido={proibido} erro={erro}>
+      <PedirValor pedido={pedido} aoFechar={() => setPedido(null)} />
       {registra && (
         <form onSubmit={criar} className="grid gap-4 md:grid-cols-2">
           <EscolheResidente residentes={residentes} valor={f.residente_id} onChange={v => setF({ ...f, residente_id: v })} />
@@ -306,17 +342,19 @@ export function Financeiro() {
     const ok = await agir(() => api.post('/financeiro/mensalidades', { residente_id: f.residente_id, competencia: f.competencia, vencimento: f.vencimento, valor_centavos }))
     if (ok) setF({ residente_id: '', competencia: '', valor: '', vencimento: '' })
   }
+  const [pedido, setPedido] = useState<Pedido | null>(null)
   function pagar(x: Mensalidade) {
-    const pago_em = window.prompt('Data do pagamento (AAAA-MM-DD)', new Date().toISOString().slice(0, 10))?.trim()
-    if (pago_em) agir(() => api.post(`/financeiro/mensalidades/${x.id}/pagar`, { pago_em }))
+    setPedido({ titulo: 'Registrar pagamento', rotulo: 'Data do pagamento', tipo: 'data', inicial: new Date().toLocaleDateString('en-CA'),
+      enviar: pago_em => { agir(() => api.post(`/financeiro/mensalidades/${x.id}/pagar`, { pago_em })) } })
   }
   function cancelar(x: Mensalidade) {
-    const texto = window.prompt('Motivo do cancelamento')?.trim()
-    if (texto) agir(() => api.post(`/financeiro/mensalidades/${x.id}/cancelar`, { texto }))
+    setPedido({ titulo: 'Cancelar mensalidade', rotulo: 'Motivo do cancelamento',
+      enviar: texto => { agir(() => api.post(`/financeiro/mensalidades/${x.id}/cancelar`, { texto })) } })
   }
 
   return (
     <Tela titulo="Mensalidades" apoio="Controle manual por residente. Nenhuma cobrança é enviada." proibido={proibido} erro={erro}>
+      <PedirValor pedido={pedido} aoFechar={() => setPedido(null)} />
       {gerencia && (
         <form onSubmit={lancar} className="grid gap-4 md:grid-cols-2">
           <EscolheResidente residentes={residentes} valor={f.residente_id} onChange={v => setF({ ...f, residente_id: v })} />

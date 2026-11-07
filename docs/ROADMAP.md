@@ -185,3 +185,11 @@ Exceção ao FEATURE_FREEZE dada pelo responsável, só para os itens destas ond
 - **D5 (ordem dos complementares):** Configurações, Auditoria, Relatórios, Agenda, Multidisciplinar, PIA, Farmácia e estoque, Portal da família e Financeiro.
 - **Homologação:** migrations 029 a 034 aplicadas em ordem no Neon só por decisão humana; no Render, rewrite de `/api/*` e `VITE_API_BASE_URL`.
 - **Follow-ups abertos:** #163, #164, #165, #166, #173, tela de estorno da saída, fuso horário da grade de doses (M9), UUID em `Documentos.tsx`, validação visual do M1 e do M5.
+
+## 21. Complementares D5 integrados (06/11/2026)
+
+Autorização escrita do responsável, com exceção ao FEATURE_FREEZE e, para o lote final, PR único.
+
+- **Integrados:** Configurações (PR #260), Auditoria (PR #263), Relatórios (PR #265), Agenda, Multidisciplinar, PIA, Farmácia e estoque e Financeiro básico (PR #272, migration 035).
+- **Definições:** PIA é o plano global da vida do residente, separado do PAIS, que concentra a atenção à saúde. Financeiro é controle manual de mensalidades, sem gateway, dados fiscais ou envio de cobrança. Estoque não baixa com a dose.
+- **Adiado:** Portal da família, para a próxima versão; falta definir quem acessa e como autentica.
