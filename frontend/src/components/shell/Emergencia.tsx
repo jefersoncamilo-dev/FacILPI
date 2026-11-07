@@ -6,6 +6,7 @@ import { usePermissoes } from '../../context/PermissoesContext'
 import { AvatarResidente } from '../residente/AvatarResidente'
 import { getResidentesResumo, type ResidenteResumo } from '../../services/plantao'
 import { cn } from '../../lib/utils'
+import { contem } from '../../lib/texto'
 
 const BOTTOM_SHEET =
   'max-sm:bottom-0 max-sm:left-0 max-sm:top-auto max-sm:max-h-[92vh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]'
@@ -62,11 +63,8 @@ function ConteudoEmergencia({ onFechar }: { onFechar: () => void }) {
   }, [])
 
   const filtrados = useMemo(() => {
-    const termo = busca.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
     const lista = residentes ?? []
-    return termo
-      ? lista.filter(r => r.nome.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().includes(termo))
-      : lista
+    return busca.trim() ? lista.filter(r => contem(r.nome, busca)) : lista
   }, [residentes, busca])
 
   const residente = residentes?.find(r => r.id === escolhido)

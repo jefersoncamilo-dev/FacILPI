@@ -22,6 +22,8 @@ export function ModuleHub() {
   const modulo = moduloPorSlug(slug)
 
   if (!modulo) return <Navigate to="/" replace />
+  // UX-NAV-1: endereço de hub antigo vai para o hub da seção nova.
+  if (slug !== modulo.id) return <Navigate to={`/modulos/${modulo.id}`} replace />
 
   const Icone = modulo.icon
   const itens = itensVisiveis(modulo, pode)
