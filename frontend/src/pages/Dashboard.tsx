@@ -192,7 +192,7 @@ function IntercorrenciasPorSemana() {
   return (
     <Painel titulo="Intercorrências por semana" icone={TriangleAlert}>
       <div className="space-y-3">
-        <div className="flex justify-end">{seletor}</div>
+        {carga.status === 'ok' && <div className="flex justify-end">{seletor}</div>}
         {corpo}
       </div>
     </Painel>

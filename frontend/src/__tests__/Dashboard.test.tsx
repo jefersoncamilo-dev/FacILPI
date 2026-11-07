@@ -118,6 +118,7 @@ describe('Dashboard — gráficos da #275', () => {
     renderDashboard()
     expect(await screen.findByText('Não foi possível carregar o histórico')).toBeTruthy()
     expect(screen.queryByText(/Nenhuma intercorrência nas últimas/)).toBeNull()
+    expect(screen.queryByRole('button', { name: '12 semanas' })).toBeNull()
   })
 
   it('sem registros mostra estado vazio', async () => {

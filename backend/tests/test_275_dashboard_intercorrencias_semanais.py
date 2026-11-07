@@ -9,8 +9,11 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
+
+from src.application.security import ILPI_CONTEXT_REQUIRED, PERMISSION_DENIED
 from src.infrastructure import models as m
-from tests.sessao_teste import token_de
+from tests.sessao_teste import abrir_sessao, token_de
 from tests.test_ux02_dashboard_resumo import _id, _ilpi, _residentes, _usuario, _with_client, ux02_db  # noqa: F401
 
 SP = ZoneInfo("America/Sao_Paulo")
@@ -99,6 +102,28 @@ def test_outra_ilpi_nao_entra(ux02_db):
     asyncio.run(_with_client(ux02_db, scenario))
 
 
+def test_contexto_global_de_superusuario_e_recusado(ux02_db):
+    async def scenario(client, db):
+        user = m.User(id=_id(), nome="Plataforma", email=f"t275-plat-{_id()}@example.com",
+                      password_hash="fixture", ativo=True, is_superuser=True)
+        perfil = (await db.execute(select(m.Perfil).where(
+            m.Perfil.chave == "platform_superuser", m.Perfil.ilpi_id.is_(None)))).scalar_one()
+        db.add(user)
+        await db.flush()
+        db.add(m.UsuarioIlpiPerfil(id=_id(), usuario_id=user.id, perfil_id=perfil.id, ilpi_id=None, situacao="ativo",
+                                   data_inicial=datetime.now(timezone.utc) - timedelta(minutes=1)))
+        await db.flush()
+        await abrir_sessao(db, user)
+        await db.commit()
+
+        resposta = await client.get(URL, headers={"Authorization": f"Bearer {token_de(user)}", "X-Scope": "global"})
+
+        assert resposta.status_code == 403, resposta.text
+        assert resposta.json()["detail"]["code"] == ILPI_CONTEXT_REQUIRED
+
+    asyncio.run(_with_client(ux02_db, scenario))
+
+
 def test_exige_permissao_sessao_e_janela_valida(ux02_db):
     async def scenario(client, db):
         ilpi = await _ilpi(db, "ILPI 275 RBAC")
@@ -106,7 +131,9 @@ def test_exige_permissao_sessao_e_janela_valida(ux02_db):
         com = await _usuario(db, ilpi, {"intercorrencias:ler"})
         await db.commit()
 
-        assert (await _get(client, sem, ilpi)).status_code == 403
+        negado = await _get(client, sem, ilpi)
+        assert negado.status_code == 403
+        assert negado.json()["detail"]["code"] == PERMISSION_DENIED
         assert (await client.get(URL)).status_code == 401
         assert (await _get(client, com, ilpi, semanas=5)).status_code == 422
 

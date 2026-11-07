@@ -22,7 +22,7 @@ from ..infrastructure import models as m
 from ..infrastructure.database import get_db
 from . import schemas as s
 from .alertas import _fuso
-from .security import SecurityContext, allowed_permission_keys, require_ilpi_context
+from .security import SecurityContext, allowed_permission_keys, require_ilpi_context, require_permission
 
 dashboard_router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
@@ -102,6 +102,7 @@ async def intercorrencias_semanais(
     semanas: int = Query(default=12),
     db: AsyncSession = Depends(get_db),
     context: SecurityContext = Depends(require_ilpi_context),
+    _permissao: SecurityContext = Depends(require_permission("intercorrencias:ler")),
 ):
     """#275: ocorrencias por semana (segunda a domingo, no fuso da ILPI), incluindo a atual.
 
@@ -109,9 +110,6 @@ async def intercorrencias_semanais(
     encerrar nao muda quando a intercorrencia aconteceu. Agrupa em Python para o
     limite da semana seguir o fuso igualmente em SQLite e PostgreSQL.
     """
-    if "intercorrencias:ler" not in await allowed_permission_keys(db, context):
-        raise HTTPException(status_code=403, detail="Permissao insuficiente")
-
     if semanas not in (8, 12):
         raise HTTPException(status_code=422, detail="Periodo deve ser de 8 ou 12 semanas")
 
