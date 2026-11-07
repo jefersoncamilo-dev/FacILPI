@@ -23,6 +23,7 @@ import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
 import { Cuidados } from './pages/Cuidados'
 import { ModuleHub } from './pages/ModuleHub'
+import { Auditoria } from './pages/Auditoria'
 import { Configuracoes } from './pages/Configuracoes'
 import { ErrorBoundary } from './components/ui/states'
 import { Equipe } from './pages/Equipe'
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
           <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
           <Route path="/escala" element={<Protected><Escala /></Protected>} />
+          <Route path="/auditoria" element={<Protected><Auditoria /></Protected>} />
           <Route path="/configuracoes" element={<Protected><Configuracoes /></Protected>} />
           {/* UX-00C: página-hub de cada módulo (slug inválido volta ao Início). */}
           <Route path="/modulos/:modulo" element={<Protected><ModuleHub /></Protected>} />

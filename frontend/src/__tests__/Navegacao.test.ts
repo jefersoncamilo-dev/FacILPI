@@ -38,7 +38,7 @@ describe('UX-00A — modelo de navegação', () => {
       m.tipo === 'link' ? [m.to] : m.itens.flatMap(i => (i.status === 'ativo' ? [i.to] : [])),
     )
     expect(destinos.sort()).toEqual([
-      '/', '/admissoes', '/alertas', '/avaliacoes', '/configuracoes', '/cuidados', '/documentos', '/equipe', '/escala',
+      '/', '/admissoes', '/alertas', '/auditoria', '/avaliacoes', '/configuracoes', '/cuidados', '/documentos', '/equipe', '/escala',
       '/intercorrencias', '/passagem', '/plano', '/plantao', '/quartos', '/residentes', '/sinais',
     ])
   })

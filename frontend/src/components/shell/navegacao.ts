@@ -201,6 +201,7 @@ export const MODULOS: ModuloNav[] = [
     descricao: 'Preferências da instituição.',
     itens: [
       { id: 'instituicao', label: 'Instituição', icon: Settings, status: 'ativo', to: '/configuracoes', permissao: 'configuracoes:ler', descricao: 'Dados, contato, licença e fuso.' },
+      { id: 'auditoria', label: 'Auditoria', icon: History, status: 'ativo', to: '/auditoria', permissao: 'auditoria:ler', descricao: 'Quem fez o quê e quando.' },
     ],
   },
 ]
