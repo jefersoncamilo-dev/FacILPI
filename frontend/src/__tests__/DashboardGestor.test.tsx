@@ -180,6 +180,13 @@ describe('UX-DASH-1 — atenção agora, pendências por tipo e frase do dia', (
     expect(screen.queryByText(/dose/)).toBeNull()
   })
 
+  it('só alertas de outros tipos: a frase não diz "nada pedindo ação"', async () => {
+    responde({ alertas: [alerta({ id: 'g1', regra: 'grau_ausente', categoria: 'avaliacao_grau_pais', titulo: 'Sem grau de dependência confirmado' })] })
+    renderDashboard()
+    expect(await screen.findByText('Para acompanhar hoje: 1 alerta na central.')).toBeTruthy()
+    expect(screen.queryByText('Nada pedindo ação agora.')).toBeNull()
+  })
+
   it('central em erro: falha explícita, sem frase de "nada pendente"', async () => {
     responde({ alertas: new Error('rede') })
     renderDashboard()

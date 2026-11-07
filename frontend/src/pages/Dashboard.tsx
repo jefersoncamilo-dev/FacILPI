@@ -109,7 +109,10 @@ function fraseDeHoje(alertas: Carga<CentralAlertas>, podeDoses: boolean): string
   if (docs) partes.push(plural(docs, 'documento vencendo ou vencido', 'documentos vencendo ou vencidos'))
   const criticos = alertas.dados.contagem.critico ?? 0
   if (criticos) partes.push(plural(criticos, 'alerta crítico', 'alertas críticos'))
-  return partes.length ? `Pede ação hoje: ${partes.join(' · ')}.` : 'Nada pedindo ação agora.'
+  if (partes.length) return `Pede ação hoje: ${partes.join(' · ')}.`
+  // Sem dose, documento ou crítico, mas com outros alertas: nunca dizer "nada".
+  const total = alertas.dados.alertas.length
+  return total ? `Para acompanhar hoje: ${plural(total, 'alerta', 'alertas')} na central.` : 'Nada pedindo ação agora.'
 }
 
 type ResidenteResumo = { id: string; nome: string; situacao?: string | null; grau_dependencia?: string | null }
