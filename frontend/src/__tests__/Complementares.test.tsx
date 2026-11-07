@@ -27,6 +27,15 @@ describe('Complementares', () => {
     await waitFor(() => expect(screen.getByText(/· Dona Sintética/)).toBeTruthy())
   })
 
+  it('Agenda cancela pelo diálogo, com motivo obrigatório', async () => {
+    responder({ '/agenda/': [{ id: 'e', residente_id: 'r1', motivo: 'Consulta', especialidade: null, profissional: null, local: null, inicio_em: '2030-01-10T12:00:00Z', situacao: 'agendado', resultado: null, motivo_cancelamento: null }] })
+    render(<MemoryRouter><Agenda /></MemoryRouter>)
+    await userEvent.click(await screen.findByRole('button', { name: 'Cancelar' }))
+    await userEvent.type(await screen.findByLabelText('Por que foi cancelado?'), 'Família remarcou')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirmar' }))
+    await waitFor(() => expect(mockPost).toHaveBeenCalledWith('/agenda/e/cancelar', { texto: 'Família remarcou' }))
+  })
+
   it('Multidisciplinar usa a área da rota; 403 mostra sem acesso', async () => {
     mockGet.mockRejectedValue({ response: { status: 403 } })
     render(<MemoryRouter initialEntries={['/multidisciplinar/nutricao']}><Routes><Route path="/multidisciplinar/:area" element={<Multidisciplinar />} /></Routes></MemoryRouter>)

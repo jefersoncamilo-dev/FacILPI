@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até a 034 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até a 035 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`; 035 dos complementares). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -46,6 +46,7 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Percentual de refeição opcional 0/25/50/75/100 (D6, PR #220, migration 032).
 - Estorno de dose pela tela só por Enfermagem e RT, com motivo (D2, #11, PR #226, migration 033).
 - Escritas clínicas fora do `ilpi_admin` (D3 opção B, #15, PR #228, migration 034): relatório por ILPI, transição de 30 dias, bloqueio só da escrita clínica sem perfil clínico.
+- Complementares D5: Configurações (PR #260), Auditoria (PR #263), Relatórios (PR #265); Agenda, Multidisciplinar por área, PIA, Farmácia e estoque e Financeiro básico de mensalidades (PR #272, migration 035). Portal da família adiado para a próxima versão.
 - CI mais rápido (#184): o job SQLite caiu de cerca de 29 para cerca de 4 min.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
 
