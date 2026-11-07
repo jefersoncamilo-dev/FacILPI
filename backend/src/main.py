@@ -16,6 +16,10 @@ import pathlib
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
+from .application.complementares import agenda_router, estoque_router, financeiro_router, multidisciplinar_router, pia_router
+from .application.relatorios import relatorios_router
+from .application.auditoria import auditoria_router
+from .application.configuracoes import configuracoes_router
 from .application.auth import (
     assert_rate_limit_single_process,
     access_session_identity,
@@ -1512,6 +1516,11 @@ async def close_intercorrencia(
 alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"], fail_closed=True)
 
 # Include routers under /api
+app.include_router(configuracoes_router, prefix="/api")
+app.include_router(auditoria_router, prefix="/api")
+app.include_router(relatorios_router, prefix="/api")
+for _r in (agenda_router, multidisciplinar_router, pia_router, estoque_router, financeiro_router):
+    app.include_router(_r, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(auth_session_router, prefix="/api")

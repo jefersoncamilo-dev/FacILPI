@@ -548,8 +548,6 @@ def test_catalog_admin_routes_were_not_invented_or_mutated(endpoint_db):
     never-invented routes stay 404, and no attempt mutates the catalog.
     """
     still_absent_routes = (
-        "/api/configuracoes/",
-        "/api/auditoria/",
     )
 
     async def scenario(client: httpx.AsyncClient, db: AsyncSession):

@@ -38,19 +38,21 @@ describe('UX-00A — modelo de navegação', () => {
       m.tipo === 'link' ? [m.to] : m.itens.flatMap(i => (i.status === 'ativo' ? [i.to] : [])),
     )
     expect(destinos.sort()).toEqual([
-      '/', '/admissoes', '/alertas', '/avaliacoes', '/cuidados', '/documentos', '/equipe', '/escala',
-      '/intercorrencias', '/passagem', '/plano', '/plantao', '/quartos', '/residentes', '/sinais',
+      '/', '/admissoes', '/agenda', '/alertas', '/auditoria', '/avaliacoes', '/configuracoes', '/cuidados', '/documentos', '/equipe', '/escala', '/estoque', '/financeiro',
+      '/intercorrencias',
+      '/multidisciplinar/enfermagem', '/multidisciplinar/fisioterapia', '/multidisciplinar/nutricao', '/multidisciplinar/psicologia', '/multidisciplinar/servico_social',
+      '/passagem', '/pia', '/plano', '/plantao', '/quartos', '/relatorios', '/residentes', '/sinais',
     ])
   })
 
   it('itens e módulos futuros nunca aparecem, nem com permissões indisponíveis', () => {
-    expect(ids(tudo)).toEqual(['inicio', 'alertas', 'plantao', 'residentes', 'assistencial', 'multidisciplinar', 'equipe'])
+    expect(ids(tudo)).toEqual(['inicio', 'alertas', 'plantao', 'residentes', 'assistencial', 'multidisciplinar', 'farmacia', 'equipe', 'gestao', 'relatorios', 'configuracoes'])
     for (const modulo of modulosVisiveis(tudo)) {
       if (modulo.tipo !== 'grupo') continue
       for (const item of itensVisiveis(modulo, tudo)) expect(item.status).toBe('ativo')
     }
     expect(itensVisiveis(grupo('residentes'), tudo).map(i => i.id)).not.toContain('estoque')
-    expect(itensVisiveis(grupo('farmacia'), tudo)).toEqual([])
+    expect(itensVisiveis(grupo('farmacia'), tudo).map(i => i.id)).toEqual(['estoque'])
   })
 
   it('só mostra o que a sessão pode abrir e esconde grupo sem item permitido', () => {
@@ -68,16 +70,15 @@ describe('UX-00A — modelo de navegação', () => {
   })
 
   it('cada profissão é um domínio próprio, sem chave compartilhada', () => {
-    const areas = grupo('multidisciplinar').itens.filter(i => i.status === 'futuro')
+    const areas = grupo('multidisciplinar').itens.filter(i => i.status === 'ativo' && i.to.startsWith('/multidisciplinar/'))
     expect(areas.map(i => i.id)).toEqual(['fisioterapia', 'nutricao', 'psicologia', 'servico_social', 'enfermagem'])
-    const chaves = areas.map(i => (i.status === 'futuro' ? i.permissaoPlanejada : undefined))
+    const chaves = areas.map(i => (i.status === 'ativo' ? i.permissao : undefined))
     expect(new Set(chaves).size).toBe(areas.length)
     areas.forEach((area, n) => expect(chaves[n]).toBe(`multidisciplinar.${area.id}:ler`))
   })
 
-  it('Farmácia é domínio futuro separado e Estoque do Residente fica em Residentes', () => {
-    expect(grupo('farmacia').status).toBe('futuro')
-    expect(grupo('farmacia').itens).toHaveLength(8)
+  it('Farmácia é domínio separado e Estoque do Residente fica em Residentes', () => {
+    expect(grupo('farmacia').status).toBe('ativo')
     expect(grupo('residentes').itens.find(i => i.id === 'estoque')?.status).toBe('futuro')
   })
 
@@ -105,12 +106,10 @@ describe('UX-00A — rota atual e hubs', () => {
   it('hub de grupo ativo resolve sem item; slug inválido, futuro ou de link não', () => {
     expect(moduloDaRota('/modulos/assistencial')).toMatchObject({ modulo: { id: 'assistencial' }, item: null })
     expect(moduloPorSlug('residentes')?.id).toBe('residentes')
-    expect(moduloPorSlug('farmacia')).toBeNull()
-    expect(moduloPorSlug('plantao')).toBeNull()
+        expect(moduloPorSlug('plantao')).toBeNull()
     expect(moduloPorSlug('nao-existe')).toBeNull()
     expect(moduloPorSlug(undefined)).toBeNull()
-    expect(moduloDaRota('/modulos/farmacia')).toBeNull()
-  })
+      })
 
   it('grupo existente sem permissão continua resolvível (hub mostra "Sem acesso")', () => {
     const modulo = moduloPorSlug('equipe')

@@ -223,7 +223,7 @@ def test_01_templates_e_baseline(s1_db):
         # -> 95 (alertas:ler/022, #107) -> 98 (escala:ler/gerenciar, plantao:registrar/024, #120)
         # -> 99 (alertas:assumir/026, #123) -> 101 (passagem_plantao:ler/registrar/027, #125)
         # -> 103 (residentes:registrar_saida/estornar_saida/030, #171)
-        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 103
+        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 121
         templates = (await db.execute(select(m.Perfil).where(
             m.Perfil.ilpi_id.is_(None), m.Perfil.chave.in_(
                 ["cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"])))).scalars().all()
@@ -256,7 +256,8 @@ def test_02_listar_e_atribuir(s1_db):
         ha = _headers(admin, ilpi_id=ilpi.id)
         r = await client.get("/api/matriz/perfis", headers=ha)
         assert r.status_code == 200 and {p["chave"] for p in r.json()} == {
-            "cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"}
+            "cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo",
+            "fisioterapeuta", "nutricionista", "psicologo", "assistente_social"}
         r = await client.post("/api/matriz/atribuicoes",
                               json={"usuario_id": alvo.id, "perfil_chave": "cuidador"}, headers=ha)
         assert r.status_code == 201, r.text
@@ -328,7 +329,9 @@ def test_04_escalation_bloqueada(s1_db):
                      # 024 (#120): e escala:ler e plantao:registrar; 026 (#123): alertas:assumir.
                      "escala:ler", "plantao:registrar", "alertas:assumir",
                      # 027 (#125): passagem de plantao.
-                     "passagem_plantao:ler", "passagem_plantao:registrar"})
+                     "passagem_plantao:ler", "passagem_plantao:registrar",
+                     # 035: agenda e PIA.
+                     "agenda:ler", "pia:ler"})
         await db.commit()
         hc = _headers(chefe, ilpi_id=ilpi.id)
         r = await client.post("/api/matriz/atribuicoes",
