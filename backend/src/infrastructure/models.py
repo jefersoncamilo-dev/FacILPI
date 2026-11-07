@@ -135,6 +135,9 @@ class Familiar(Base):
     endereco: Mapped[str] = mapped_column(Text, nullable=True)
     tipo_responsabilidade: Mapped[str] = mapped_column(String(50), nullable=True)
     autorizacao_acesso: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 036 (#271): conta do portal da familia, liberada ou bloqueada pela equipe.
+    usuario_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True, unique=True)
+    portal_ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
 
 
@@ -1622,4 +1625,18 @@ class Mensalidade(Base):
     pago_em: Mapped[date] = mapped_column(Date, nullable=True)
     observacao: Mapped[str] = mapped_column(Text, nullable=True)
     autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
+
+
+class PortalRecado(Base):
+    __tablename__ = "portal_recados"
+    __table_args__ = (
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"], name="fk_recado_residente", ondelete="RESTRICT"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    texto: Mapped[str] = mapped_column(Text, nullable=False)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    autor_nome: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
