@@ -16,6 +16,7 @@ import pathlib
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
 from .application import schemas as s
+from .application.portal_familia import familiar_portal_router, portal_router
 from .application.complementares import agenda_router, estoque_router, financeiro_router, multidisciplinar_router, pia_router
 from .application.relatorios import relatorios_router
 from .application.auditoria import auditoria_router
@@ -1521,6 +1522,8 @@ app.include_router(auditoria_router, prefix="/api")
 app.include_router(relatorios_router, prefix="/api")
 for _r in (agenda_router, multidisciplinar_router, pia_router, estoque_router, financeiro_router):
     app.include_router(_r, prefix="/api")
+app.include_router(familiar_portal_router, prefix="/api")
+app.include_router(portal_router, prefix="/api")
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(auth_session_router, prefix="/api")

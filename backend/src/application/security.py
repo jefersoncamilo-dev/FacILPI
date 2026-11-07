@@ -142,6 +142,10 @@ ESCRITAS_CLINICAS_ADMIN = frozenset(
     }
 )
 ILPI_ADMIN_KEY = "ilpi_admin"
+# 036 (#271): papel do familiar. So enxerga o portal (e o proprio login/senha):
+# qualquer outra rota da API recusa a sessao, mesmo que tenha so contexto de ILPI.
+PORTAL_FAMILIA_KEY = "familiar_portal"
+_PORTAL_ROTAS_PERMITIDAS = ("/api/portal/resumo", "/api/auth/")
 _ILPI_ONLY_PERMISSIONS = frozenset(
     {
         # Administrative password reset is an institutional capability.
@@ -240,6 +244,9 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "administracoes:ler",
         "administracoes:criar",
         "administracoes:corrigir",
+        # 036 (#271): portal da familia.
+        "portal_familia:ler",
+        "portal_familia:publicar",
         # 035: complementares D5.
         "agenda:ler",
         "agenda:gerenciar",
@@ -670,6 +677,29 @@ async def load_security_context(
                 message="Instituição inativa",
                 context=context,
             )
+        # 036 (#271): o familiar do portal nao e funcionario. No lugar do
+        # funcionario ativo, exige o vinculo de familiar com o portal liberado;
+        # a sessao continua restrita as rotas do portal (get_security_context).
+        if context.perfil.chave == PORTAL_FAMILIA_KEY:
+            from ..infrastructure.models import Familiar
+
+            liberado = (
+                await db.execute(
+                    select(Familiar.id).where(
+                        Familiar.ilpi_id == context.ilpi_id,
+                        Familiar.usuario_id == context.user.id,
+                        Familiar.portal_ativo.is_(True),
+                    )
+                )
+            ).scalar_one_or_none()
+            if liberado is None:
+                _deny(
+                    code=AUTH_CONTEXT_REQUIRED,
+                    http_status=status.HTTP_403_FORBIDDEN,
+                    message="Contexto de autorização não disponível",
+                    context=context,
+                )
+            return context
         active_employee = (
             await db.execute(
                 select(Funcionario.id).where(
@@ -774,13 +804,22 @@ async def get_security_context(
         ilpi_id = header_ilpi_id
         perfil_id = header_perfil_id
 
-    return await load_security_context(
+    context = await load_security_context(
         db,
         current_user,
         scope=scope,
         ilpi_id=ilpi_id,
         perfil_id=perfil_id,
     )
+    perfil = getattr(context, "perfil", None)
+    if getattr(perfil, "chave", None) == PORTAL_FAMILIA_KEY and not request.url.path.startswith(_PORTAL_ROTAS_PERMITIDAS):
+        _deny(
+            code=PERMISSION_DENIED,
+            http_status=status.HTTP_403_FORBIDDEN,
+            message="Acesso não permitido",
+            context=context,
+        )
+    return context
 
 
 async def require_global_scope(

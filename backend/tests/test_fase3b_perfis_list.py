@@ -357,6 +357,6 @@ def test_fase3b_perfis_list_backend(perfis_db, monkeypatch):
         # (enfermagem ja tinha desde a 015; catalogo da 012, sem permissao nova).
         # 226 - 17: a 034 (#15, D3) retira do template ilpi_admin as 17 escritas clinicas
         # (security.ESCRITAS_CLINICAS_ADMIN); a transicao de 30 dias e por ILPI, fora do template.
-        assert counts == {"permissoes": 121, "template_perfis": 11, "template_permissoes": 263}
+        assert counts == {"permissoes": 123, "template_perfis": 12, "template_permissoes": 267}
 
     asyncio.run(_with_client(perfis_db, monkeypatch, scenario))

@@ -1356,7 +1356,7 @@ def test_48_catalogo_sem_novas_permissoes(sinais_db):
         # 98 com a 024 (#120, escala:ler/gerenciar e plantao:registrar); 99 com a 026 (#123, alertas:assumir);
         # 101 com a 027 (#125, passagem_plantao:ler/registrar); 103 com a 030 (#171, saida do residente).
         # Sinais vitais seguem sem permissoes novas (conferido abaixo).
-        assert total == 121
+        assert total == 123
         novas = (
             await db.execute(
                 select(m.Permissao).where(

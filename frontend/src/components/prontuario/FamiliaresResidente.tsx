@@ -21,6 +21,7 @@ export interface Familiar {
   endereco?: string | null
   tipo_responsabilidade?: string | null
   autorizacao_acesso?: boolean | null
+  portal_ativo?: boolean
 }
 
 type Campos = 'nome' | 'parentesco' | 'tipo_responsabilidade' | 'telefone' | 'email' | 'cpf' | 'endereco'
@@ -118,6 +119,10 @@ export function FamiliaresResidente({ residenteId }: { residenteId: string }) {
   const pronto = status !== 'carregando' && status !== 'sem_provider' && pode('familiares:ler')
   const podeCriar = pode('familiares:criar')
   const podeEditar = pode('familiares:atualizar')
+  // #271: liberar ou bloquear o Portal da família. A senha provisória volta uma vez só.
+  const podePortal = pode('portal_familia:publicar')
+  const [senhaPortal, setSenhaPortal] = useState<{ nome: string; email: string; senha: string } | null>(null)
+  const [erroPortal, setErroPortal] = useState('')
   const [lista, setLista] = useState<Familiar[] | null>(null)
   const [erro, setErro] = useState(false)
   const [editando, setEditando] = useState<Familiar | null>(null)
@@ -179,6 +184,29 @@ export function FamiliaresResidente({ residenteId }: { residenteId: string }) {
                   </p>
                 )}
               </div>
+              {podePortal && (
+                <label className="inline-flex min-h-[44px] items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="size-5"
+                    checked={!!f.portal_ativo}
+                    aria-label={`Portal Família de ${f.nome}`}
+                    onChange={async e => {
+                      setErroPortal('')
+                      const ativo = e.target.checked
+                      try {
+                        const { data } = await api.post<{ senha_provisoria: string | null; email: string | null }>(`/familiares/${f.id}/portal`, { ativo })
+                        if (data.senha_provisoria) setSenhaPortal({ nome: f.nome, email: data.email || '', senha: data.senha_provisoria })
+                        setSucesso(ativo ? 'Portal liberado.' : 'Portal bloqueado. As sessões abertas foram encerradas.')
+                        carregar()
+                      } catch (err) {
+                        setErroPortal(mensagemDeErro(err, 'Não foi possível mudar o acesso ao portal.'))
+                      }
+                    }}
+                  />
+                  Portal Família
+                </label>
+              )}
               {podeEditar && (
                 <button
                   type="button"
@@ -193,6 +221,17 @@ export function FamiliaresResidente({ residenteId }: { residenteId: string }) {
           ))}
         </ul>
       )}
+      {erroPortal && <p role="alert" className="text-sm text-danger">{erroPortal}</p>}
+      <Modal open={!!senhaPortal} onClose={() => setSenhaPortal(null)} title="Acesso ao Portal da família">
+        {senhaPortal && (
+          <div className="space-y-3 text-sm">
+            <p>Entregue estes dados a {senhaPortal.nome}. A senha aparece só agora e precisa ser trocada no primeiro acesso.</p>
+            <p>E-mail: <strong className="wrap-break-word">{senhaPortal.email}</strong></p>
+            <p>Senha provisória: <strong className="font-mono wrap-break-word" data-testid="senha-provisoria">{senhaPortal.senha}</strong></p>
+            <p className="text-muted-foreground">Se ela se perder, desmarque e marque de novo o Portal Família para gerar outra.</p>
+          </div>
+        )}
+      </Modal>
       <FamiliarModal
         residenteId={residenteId}
         familiar={editando}

@@ -33,6 +33,9 @@ const backendEnv = {
   DATABASE_URL: `sqlite+aiosqlite:///${path.join(dir, 'e2e.db').replace(/\\/g, '/')}`,
   JWT_SECRET: process.env.E2E_JWT_SECRET!,
   ENVIRONMENT: 'test',
+  // Todos os testes entram pelo mesmo IP; o limite de 10 logins/min de producao
+  // cortaria a rodada. So este backend descartavel usa o limite maior.
+  RATE_LIMIT_AUTH: '200',
   STORAGE_PATH: path.join(dir, 'storage'),
   UPLOAD_ROOT: path.join(dir, 'uploads'),
 }

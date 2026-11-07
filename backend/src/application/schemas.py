@@ -648,6 +648,8 @@ class FamiliarUpdate(BaseModel):
 
 class FamiliarResponse(FamiliarCreate):
     id: str
+    # 036 (#271): so a rota /familiares/{id}/portal muda este valor.
+    portal_ativo: bool = False
     class Config:
         from_attributes = True
 
