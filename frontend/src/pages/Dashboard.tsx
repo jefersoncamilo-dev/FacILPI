@@ -1,7 +1,11 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import { cloneElement, useEffect, useState, type ReactElement, type ReactNode } from 'react'
 import { Link } from 'react-router'
 import {
   Activity,
+  AlertCircle,
+  FileClock,
+  Info,
+  Package,
   BedDouble,
   BellRing,
   CheckCircle2,
@@ -20,7 +24,11 @@ import {
 import { api } from '../services/api'
 import { getPlantao, PLANTAO_LIMIT_PADRAO, rotuloDoItem, type PlantaoItem } from '../services/plantao'
 import { getIntercorrenciasSemanais, getResumoDashboard, type DashboardResumo, type SemanaIntercorrencias } from '../services/dashboard'
-import { GRAVIDADES as GRAVIDADES_ALERTA, ROTULO_GRAVIDADE as ROTULO_ALERTA, type CentralAlertas } from '../services/alertas'
+import {
+  CATEGORIAS, destinoDoAlerta, GRAVIDADES as GRAVIDADES_ALERTA, quandoDoAlerta, ROTULO_CATEGORIA, ROTULO_GRAVIDADE as ROTULO_ALERTA,
+  type CentralAlertas, type Gravidade,
+} from '../services/alertas'
+import { useAnimarUmaVez } from '../hooks/useAnimarUmaVez'
 import { recarregarCentralAlertas, useCentralAlertas, type EstadoCentral } from '../hooks/useCentralAlertas'
 import { ItemAlerta } from '../components/alertas/ItemAlerta'
 import { getSinaisVitais, type SinalVital } from '../services/sinaisVitais'
@@ -30,7 +38,7 @@ import { usePermissoes } from '../context/PermissoesContext'
 import { MetricCard } from '../components/ui/metric-card'
 import { Badge, Skeleton } from '../components/ui/feedback'
 import { Button } from '../components/ui/button'
-import { BarraSegmentada, BarrasVerticais, Legenda, MiniBarras, percentual, Rosca, type Segmento } from '../components/ui/charts'
+import { BarraSegmentada, BarrasHorizontais, BarrasVerticais, Legenda, MiniBarras, percentual, Rosca, type Segmento } from '../components/ui/charts'
 import { acoesDoPerfil, type AcaoRapida } from '../components/shell/acoesRapidas'
 import { rotuloSituacaoResidente } from '../lib/rotulos'
 import { cn } from '../lib/utils'
@@ -59,6 +67,50 @@ const ACOES_VISIVEIS = 6
 const ALERTAS_NO_INICIO = 5
 
 type Carga<T> = { status: 'carregando' } | { status: 'ok'; dados: T } | { status: 'erro' }
+
+type ItemEstoque = { id: string; abaixo_do_minimo: boolean }
+type TurnoOpcao = { id: string; nome: string; hora_inicio: string; hora_fim: string; situacao?: string }
+
+/** Teto por regra da central (LIMITE_POR_REGRA em backend/src/application/alertas.py). */
+const LIMITE_POR_REGRA = 100
+const numero = (n: number) => n.toLocaleString('pt-BR')
+const minutosDe = (hhmm: string) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+/**
+ * UX-DASH-1: o item do plantão cai no turno pela hora local da ILPI (turno que
+ * vira a noite, ex. 19:00–07:00, também vale). Sem horário — intercorrência
+ * aberta — o item vale para todos os turnos.
+ */
+export function noTurno(item: Pick<PlantaoItem, 'previsto_em'>, turno: Pick<TurnoOpcao, 'hora_inicio' | 'hora_fim'>): boolean {
+  if (!item.previsto_em) return true
+  const partes = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'America/Sao_Paulo' })
+    .formatToParts(new Date(item.previsto_em))
+  const valor = (tipo: string) => Number(partes.find(p => p.type === tipo)?.value || 0)
+  const t = valor('hour') * 60 + valor('minute')
+  const inicio = minutosDe(turno.hora_inicio)
+  const fim = minutosDe(turno.hora_fim)
+  return inicio <= fim ? t >= inicio && t < fim : t >= inicio || t < fim
+}
+
+/**
+ * Frase "o que pede ação hoje" do gestor, só com o que a central devolveu.
+ * Central indisponível: a frase sai (nunca "nada pendente" sem fonte).
+ */
+function fraseDeHoje(alertas: Carga<CentralAlertas>, podeDoses: boolean): string | null {
+  if (alertas.status !== 'ok') return null
+  const conta = (regra: string) => alertas.dados.alertas.filter(a => a.regra === regra).length
+  const partes: string[] = []
+  const doses = podeDoses ? conta('doses_sem_registro') : 0
+  if (doses) partes.push(plural(doses, 'residente com dose sem registro', 'residentes com dose sem registro'))
+  const docs = conta('documento_vencendo') + conta('documento_vencido')
+  if (docs) partes.push(plural(docs, 'documento vencendo ou vencido', 'documentos vencendo ou vencidos'))
+  const criticos = alertas.dados.contagem.critico ?? 0
+  if (criticos) partes.push(plural(criticos, 'alerta crítico', 'alertas críticos'))
+  return partes.length ? `Pede ação hoje: ${partes.join(' · ')}.` : 'Nada pedindo ação agora.'
+}
 
 type ResidenteResumo = { id: string; nome: string; situacao?: string | null; grau_dependencia?: string | null }
 
@@ -110,7 +162,7 @@ const SERIES_PENDENCIAS: { origem: PlantaoItem['origem']; rotulo: string; fundo:
 ]
 
 /** #275: as mesmas 12 horas de `pendenciasPorHora`, separadas por origem. */
-function PendenciasPorHora({ itens }: { itens: PlantaoItem[] }) {
+function PendenciasPorHora({ itens, animar = false }: { itens: PlantaoItem[]; animar?: boolean }) {
   const agora = Date.now()
   const { valores, rotulos } = pendenciasPorHora(itens, agora)
   if (!valores.some(v => v > 0)) return null
@@ -126,7 +178,7 @@ function PendenciasPorHora({ itens }: { itens: PlantaoItem[] }) {
   return (
     <div className="mb-4 space-y-3 border-b border-border pb-4">
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Nas próximas 12 horas</p>
-      <BarrasVerticais titulo="Pendências com horário nas próximas 12 horas" colunas={colunas} />
+      <BarrasVerticais titulo="Pendências com horário nas próximas 12 horas" colunas={colunas} animar={animar} />
       <Legenda className="sm:grid-cols-3" segmentos={series.map(s => ({
         rotulo: s.rotulo, valor: s.porHora.reduce((n, v) => n + v, 0), fundo: s.fundo, traco: s.traco,
       }))} />
@@ -140,7 +192,7 @@ function PendenciasPorHora({ itens }: { itens: PlantaoItem[] }) {
 const PERIODOS_SEMANAS = [8, 12]
 
 /** #275: histórico oficial do backend; erro nunca aparece como semana zerada. */
-function IntercorrenciasPorSemana() {
+function IntercorrenciasPorSemana({ animar = false }: { animar?: boolean }) {
   const [carga, setCarga] = useState<Carga<SemanaIntercorrencias[]>>({ status: 'carregando' })
   const [periodo, setPeriodo] = useState(8)
 
@@ -186,7 +238,7 @@ function IntercorrenciasPorSemana() {
       corpo = (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">{plural(total, 'registro', 'registros')} no período · média de {media} por semana · a última barra é a semana atual, ainda em curso</p>
-          <BarrasVerticais titulo="Intercorrências por semana" colunas={colunas} />
+          <BarrasVerticais titulo="Intercorrências por semana" colunas={colunas} animar={animar} />
         </div>
       )
     }
@@ -209,6 +261,9 @@ export function Dashboard() {
   const [pendencias, setPendencias] = useState<Carga<PlantaoItem[]>>({ status: 'carregando' })
   const [residentes, setResidentes] = useState<Carga<ResidenteResumo[]>>({ status: 'carregando' })
   const central = useCentralAlertas()
+  const [estoque, setEstoque] = useState<Carga<ItemEstoque[]>>({ status: 'carregando' })
+  const [turnos, setTurnos] = useState<TurnoOpcao[]>([])
+  const [turno, setTurno] = useState('todos')
 
   const podePlantao = pode('plantao:ler')
   const podeResidentes = pode('residentes:ler')
@@ -217,6 +272,11 @@ export function Dashboard() {
   // Perfil de experiência: quem responde pela instituição vê o espelho dela
   // primeiro; quem está no turno vê primeiro o que precisa fazer.
   const gestao = pode('funcionarios:ler') || pode('quartos_leitos:ler') || pode('admissoes:ler')
+  // UX-DASH-1: fontes extras do gestor, cada uma só com a própria permissão.
+  const podeEstoque = gestao && permissoes === 'ok' && pode('estoque:ler')
+  const podeTurnos = gestao && podePlantao && permissoes === 'ok' && (pode('escala:ler') || pode('plantao:registrar'))
+  // Doses só com administracoes:ler (o backend também só calcula com ela).
+  const podeDoses = pode('administracoes:ler')
 
   useEffect(() => {
     getResumoDashboard()
@@ -238,6 +298,21 @@ export function Dashboard() {
       .catch(() => setResidentes({ status: 'erro' }))
   }, [permissoes, podeResidentes])
 
+  useEffect(() => {
+    if (!podeEstoque) return
+    api.get<ItemEstoque[]>('/estoque/itens')
+      .then(r => setEstoque({ status: 'ok', dados: r.data || [] }))
+      .catch(() => setEstoque({ status: 'erro' }))
+  }, [podeEstoque])
+
+  // Turnos cadastrados pela ILPI; sem turnos (ou sem leitura) o filtro não aparece.
+  useEffect(() => {
+    if (!podeTurnos) return
+    api.get<TurnoOpcao[]>('/escala/turnos')
+      .then(r => setTurnos((r.data || []).filter(t => t.situacao !== 'inativo')))
+      .catch(() => setTurnos([]))
+  }, [podeTurnos])
+
   // #117: o mesmo retrato do sino e da Central (uma consulta, mesma ordem).
   useEffect(() => {
     if (podeAlertas) void recarregarCentralAlertas()
@@ -245,7 +320,16 @@ export function Dashboard() {
   const alertas = cargaDaCentral(central)
 
   const nomes = new Map((residentes.status === 'ok' ? residentes.dados : []).map(r => [r.id, r.nome]))
-  const cards = montarIndicadores({ resumo, pendencias, gestao, pode, podePlantao })
+  // Movimento só na primeira abertura, quando o resumo responde (ok ou erro).
+  const animar = useAnimarUmaVez(resumo.status !== 'carregando')
+  const turnoAtivo = turnos.find(t => t.id === turno)
+  // O turno filtra só as pendências do plantão; indicadores e alertas valem para a casa toda.
+  const pendenciasDoTurno: Carga<PlantaoItem[]> = pendencias.status === 'ok' && turnoAtivo
+    ? { status: 'ok', dados: pendencias.dados.filter(i => noTurno(i, turnoAtivo)) }
+    : pendencias
+  const cards = montarIndicadores({
+    resumo, pendencias, gestao, pode, podePlantao, alertas, podeAlertas, estoque: podeEstoque ? estoque : null,
+  }).map((c, i) => cloneElement(c as ReactElement<{ animar?: boolean; atraso?: number }>, { animar, atraso: i * 90 }))
   // UX-11: o próprio perfil de acesso define as ações (catálogo por permissão).
   const acoes = permissoes === 'carregando' ? [] : acoesDoPerfil(pode, gestao)
 
@@ -258,11 +342,14 @@ export function Dashboard() {
         pendencias={pendencias}
         gestao={gestao}
         pode={pode}
+        acaoHoje={gestao ? fraseDeHoje(alertas, podeDoses) : null}
         atalhos={gestao ? [] : acoes.filter(a => a.destaque)}
       />
 
       {/* #15 (D3): transição das escritas clínicas do administrador da ILPI. */}
       {activeContext?.scope === 'ilpi' && <AvisoTransicaoClinica podeAtribuir={pode('usuarios:atribuir_perfil')} />}
+
+      {gestao && turnos.length > 0 && <FiltroTurno turnos={turnos} valor={turnoAtivo ? turno : 'todos'} onChange={setTurno} />}
 
       {cards.length > 0 && (
         <section aria-label="Indicadores" className={`grid grid-cols-2 gap-3 sm:gap-4 ${COLUNAS_INDICADORES[cards.length] ?? 'xl:grid-cols-4'}`}>
@@ -270,9 +357,26 @@ export function Dashboard() {
         </section>
       )}
 
+      {gestao && podeAlertas && (
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <Painel
+              titulo="Precisa de atenção agora"
+              icone={BellRing}
+              acao={<Link to="/alertas" className={LINK}>Ver todos os alertas</Link>}
+            >
+              <TabelaAtencao carga={alertas} />
+            </Painel>
+          </div>
+          <Painel titulo="Pendências por tipo" icone={ClipboardList}>
+            <PendenciasPorTipo carga={alertas} animar={animar} />
+          </Painel>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          {podeAlertas && (
+          {!gestao && podeAlertas && (
             <Painel
               titulo="Precisa de atenção"
               icone={BellRing}
@@ -287,12 +391,12 @@ export function Dashboard() {
               icone={ClipboardList}
               acao={<Link to="/plantao" className={LINK}>Abrir Meu Plantão</Link>}
             >
-              {pendencias.status === 'ok' && <PendenciasPorHora itens={pendencias.dados} />}
-              <LinhaDoTempo carga={pendencias} nomes={nomes} />
+              {pendenciasDoTurno.status === 'ok' && <PendenciasPorHora itens={pendenciasDoTurno.dados} animar={animar} />}
+              <LinhaDoTempo carga={pendenciasDoTurno} nomes={nomes} vazio={turnoAtivo ? 'Nada pendente neste turno.' : undefined} />
             </Painel>
           )}
           {gestao && <VisaoDaInstituicao resumo={resumo} />}
-          {gestao && permissoes === 'ok' && pode('intercorrencias:ler') && <IntercorrenciasPorSemana />}
+          {gestao && permissoes === 'ok' && pode('intercorrencias:ler') && <IntercorrenciasPorSemana animar={animar} />}
           {podeResidentes && (
             <Painel
               titulo="Residentes recentes"
@@ -317,9 +421,9 @@ export function Dashboard() {
  * Faixa de boas-vindas: saudação, contexto e o "agora" em fatos curtos, só com
  * fontes que a sessão lê. Fonte indisponível sai da frase — nunca vira zero.
  */
-function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, atalhos }: {
+function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, acaoHoje, atalhos }: {
   ilpi?: string | null; perfil?: string | null; resumo: Carga<DashboardResumo>; pendencias: Carga<PlantaoItem[]>
-  gestao: boolean; pode: (codigo: string) => boolean; atalhos: AcaoRapida[]
+  gestao: boolean; pode: (codigo: string) => boolean; acaoHoje?: string | null; atalhos: AcaoRapida[]
 }) {
   // Cada fato leva à sua origem só quando a sessão lê o módulo; senão fica como texto.
   const fatos: { texto: string; icone: LucideIcon; alerta?: boolean; to?: string }[] = []
@@ -351,6 +455,7 @@ function BoasVindas({ ilpi, perfil, resumo, pendencias, gestao, pode, atalhos }:
           <h1 className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Início</h1>
           <p className="font-display text-titulo-tela text-brand-ink">{saudacao()}!</p>
           <p className="text-apoio text-muted-foreground">{[ilpi, perfil, dataPorExtenso()].filter(Boolean).join(' · ')}</p>
+          {acaoHoje && <p className="text-sm font-medium text-foreground">{acaoHoje}</p>}
           {fatos.length > 0 && (
             <ul aria-label="Agora" className="flex flex-wrap gap-1.5 pt-1">
               {fatos.map(f => {
@@ -393,13 +498,20 @@ function montarIndicadores({
   gestao,
   pode,
   podePlantao,
+  alertas,
+  podeAlertas,
+  estoque,
 }: {
   resumo: Carga<DashboardResumo>
   pendencias: Carga<PlantaoItem[]>
   gestao: boolean
   pode: (chave?: string) => boolean
   podePlantao: boolean
-}): ReactNode[] {
+  alertas: Carga<CentralAlertas>
+  podeAlertas: boolean
+  /** null = a sessão não lê estoque: o cartão não aparece. */
+  estoque: Carga<ItemEstoque[]> | null
+}): ReactElement[] {
   const carregando = resumo.status === 'carregando'
   const dados = resumo.status === 'ok' ? resumo.dados : null
   const indisponivel = <span>Indisponível no momento</span>
@@ -410,7 +522,51 @@ function montarIndicadores({
   const ocupacao = dados?.ocupacao
   const horas = pendencias.status === 'ok' ? pendenciasPorHora(pendencias.dados) : null
 
+  const admissoes = dados?.admissoes_em_andamento
+  const vencendo = alertas.status === 'ok' ? alertas.dados.alertas.filter(a => a.regra === 'documento_vencendo').length : null
+  const abaixo = estoque?.status === 'ok' ? estoque.dados.filter(i => i.abaixo_do_minimo).length : null
+
   const card = {
+    // UX-DASH-1: indicadores do gestor (estado em texto + ícone, cor na borda superior).
+    admissoes: gestao && mostrar('admissoes_em_andamento', 'admissoes:ler') ? (
+      <MetricCard
+        key="admissoes"
+        icon={UserRoundPlus}
+        titulo="Admissões abertas"
+        carregando={carregando}
+        valor={admissoes != null ? numero(admissoes) : INDISPONIVEL}
+        tom={admissoes == null ? 'neutro' : admissoes > 0 ? 'alerta' : 'normal'}
+        estado={admissoes == null ? undefined : admissoes > 0 ? { texto: 'Em andamento', icone: TriangleAlert } : { texto: 'Nenhuma em aberto', icone: CheckCircle2 }}
+        detalhe={admissoes == null ? indisponivel : undefined}
+        acao={<Link to="/admissoes" className={LINK}>Ver admissões</Link>}
+      />
+    ) : null,
+    documentos: gestao && podeAlertas && pode('documentos:ler') ? (
+      <MetricCard
+        key="documentos"
+        icon={FileClock}
+        titulo="Documentos vencendo"
+        carregando={alertas.status === 'carregando'}
+        valor={vencendo == null ? INDISPONIVEL : vencendo >= LIMITE_POR_REGRA ? `${LIMITE_POR_REGRA}+` : numero(vencendo)}
+        tom={vencendo == null ? 'neutro' : vencendo > 0 ? 'alerta' : 'normal'}
+        estado={vencendo == null ? undefined : vencendo > 0 ? { texto: 'Vencem em breve', icone: TriangleAlert } : { texto: 'Nenhum vencendo', icone: CheckCircle2 }}
+        detalhe={vencendo == null ? indisponivel : undefined}
+        acao={<Link to="/documentos" className={LINK}>Ver documentos</Link>}
+      />
+    ) : null,
+    estoque: gestao && estoque ? (
+      <MetricCard
+        key="estoque"
+        icon={Package}
+        titulo="Estoque abaixo do mínimo"
+        carregando={estoque.status === 'carregando'}
+        valor={abaixo == null ? INDISPONIVEL : numero(abaixo)}
+        tom={abaixo == null ? 'neutro' : abaixo > 0 ? 'alerta' : 'normal'}
+        estado={abaixo == null ? undefined : abaixo > 0 ? { texto: 'Repor itens', icone: TriangleAlert } : { texto: 'Estoque em dia', icone: CheckCircle2 }}
+        detalhe={abaixo == null ? indisponivel : undefined}
+        acao={<Link to="/estoque" className={LINK}>Ver estoque</Link>}
+      />
+    ) : null,
     pendencias: podePlantao ? (
       <MetricCard
         key="pendencias"
@@ -491,9 +647,10 @@ function montarIndicadores({
   }
 
   const ordem: (keyof typeof card)[] = gestao
-    ? ['residentes', 'ocupacao', 'ausencias', 'intercorrencias', 'pendencias']
+    // "Escala descoberta" ainda não tem fonte oficial (follow-up): a vaga vai ao próximo indicador.
+    ? ['admissoes', 'documentos', 'estoque', 'residentes', 'ocupacao', 'ausencias', 'intercorrencias', 'pendencias']
     : ['pendencias', 'intercorrencias', 'residentes', 'ausencias', 'ocupacao']
-  return ordem.map(k => card[k]).filter(Boolean).slice(0, 4)
+  return ordem.map(k => card[k]).filter((c): c is ReactElement => c !== null).slice(0, 4)
 }
 
 function segmentosLeitos(o: NonNullable<DashboardResumo['ocupacao']>): Segmento[] {
@@ -635,6 +792,97 @@ function cargaDaCentral(central: EstadoCentral): Carga<CentralAlertas> {
   return { status: 'carregando' }
 }
 
+function FiltroTurno({ turnos, valor, onChange }: { turnos: TurnoOpcao[]; valor: string; onChange: (id: string) => void }) {
+  const opcoes = [{ id: 'todos', nome: 'Todos' }, ...turnos]
+  return (
+    <section aria-label="Filtro de turno" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div role="group" aria-label="Turno" className="flex w-fit max-w-full flex-wrap gap-1 rounded-lg bg-muted p-0.5">
+        {opcoes.map(t => (
+          <button key={t.id} type="button" aria-pressed={valor === t.id} onClick={() => onChange(t.id)}
+            className={cn('min-h-[44px] rounded-md px-3 text-sm font-semibold', valor === t.id ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground')}>
+            {t.nome}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted-foreground sm:max-w-xs sm:text-right">
+        O turno filtra as pendências do plantão. Indicadores, alertas e ocupação valem para a casa toda.
+      </p>
+    </section>
+  )
+}
+
+const GRAVIDADE_VISUAL: Record<Gravidade, { icone: LucideIcon; variante: 'danger' | 'warning' | 'neutral' }> = {
+  critico: { icone: AlertCircle, variante: 'danger' },
+  atencao: { icone: TriangleAlert, variante: 'warning' },
+  aviso: { icone: Info, variante: 'neutral' },
+}
+
+/** UX-DASH-1: "Precisa de atenção agora" do gestor em tabela — gravidade sempre com ícone e texto. */
+function TabelaAtencao({ carga }: { carga: Carga<CentralAlertas> }) {
+  if (carga.status === 'carregando') return <Carregando />
+  if (carga.status === 'erro') {
+    return <Falha titulo="Não foi possível carregar os alertas" texto="Isso não significa que não há pendências." />
+  }
+  const { alertas, fuso } = carga.dados
+  if (alertas.length === 0) {
+    return <Vazio icon={CheckCircle2} titulo="Nada pendente agora." texto="Quando algo ficar pendente, vencer ou sair do combinado, aparece aqui." />
+  }
+  const agora = new Date()
+  const resto = alertas.length - ALERTAS_NO_INICIO
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        {GRAVIDADES_ALERTA.map(g => `${ROTULO_ALERTA[g]}: ${carga.dados.contagem[g]}`).join(' · ')}
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <caption className="sr-only">Alertas que precisam de atenção agora, os mais graves primeiro</caption>
+          <thead className="text-xs uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b border-border">
+              <th scope="col" className="py-2 pr-3 font-semibold">Gravidade</th>
+              <th scope="col" className="py-2 pr-3 font-semibold">O que</th>
+              <th scope="col" className="py-2 font-semibold">Quando</th>
+            </tr>
+          </thead>
+          <tbody>
+            {alertas.slice(0, ALERTAS_NO_INICIO).map(a => {
+              const g = GRAVIDADE_VISUAL[a.gravidade]
+              return (
+                <tr key={a.id} className="border-b border-border last:border-0">
+                  <td className="py-1 pr-3 align-middle">
+                    <Badge variant={g.variante}><g.icone className="size-3.5" aria-hidden="true" />{ROTULO_ALERTA[a.gravidade]}</Badge>
+                  </td>
+                  <td className="py-1 pr-3">
+                    <Link to={destinoDoAlerta(a).to} className="flex min-h-[44px] flex-col justify-center hover:underline">
+                      <span className="font-medium text-foreground">{a.titulo}</span>
+                      {a.residente_nome && <span className="text-xs text-muted-foreground">{a.residente_nome}</span>}
+                    </Link>
+                  </td>
+                  <td className="py-1 text-xs text-muted-foreground">{quandoDoAlerta(a, agora, fuso) ?? '—'}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      {resto > 0 && <p className="text-xs text-muted-foreground">E mais {plural(resto, 'alerta', 'alertas')} na central.</p>}
+    </div>
+  )
+}
+
+/** UX-DASH-1: alertas da central por categoria (casa toda; o turno não filtra). */
+function PendenciasPorTipo({ carga, animar }: { carga: Carga<CentralAlertas>; animar: boolean }) {
+  if (carga.status === 'carregando') return <Carregando />
+  if (carga.status === 'erro') {
+    return <Falha titulo="Não foi possível carregar as pendências" texto="Isso não significa que não há pendências." />
+  }
+  const linhas = CATEGORIAS.map(c => ({
+    rotulo: ROTULO_CATEGORIA[c], valor: carga.dados.alertas.filter(a => a.categoria === c).length, fundo: 'bg-primary',
+  }))
+  if (linhas.every(l => l.valor === 0)) return <Vazio icon={CheckCircle2} titulo="Nada pendente agora." />
+  return <BarrasHorizontais titulo="Pendências por tipo" linhas={linhas} animar={animar} />
+}
+
 /** #107: os primeiros alertas da central (críticos antes), da mesma fonte oficial. */
 function PrecisaDeAtencao({ carga }: { carga: Carga<CentralAlertas> }) {
   if (carga.status === 'carregando') return <Carregando />
@@ -712,13 +960,15 @@ function Carregando() {
 }
 
 /** Próximas pendências como linha do tempo: hora, origem colorida e o "agora". */
-function LinhaDoTempo({ carga, nomes }: { carga: Carga<PlantaoItem[]>; nomes: Map<string, string> }) {
+function LinhaDoTempo({ carga, nomes, vazio }: { carga: Carga<PlantaoItem[]>; nomes: Map<string, string>; vazio?: string }) {
   if (carga.status === 'carregando') return <Carregando />
   if (carga.status === 'erro') {
     return <Falha titulo="Não foi possível carregar as pendências" texto="Isso não significa que não há pendências." />
   }
   if (carga.dados.length === 0) {
-    return <Vazio icon={ClipboardList} titulo="Nenhuma pendência no período" texto="Cuidados, doses e intercorrências abertas aparecem aqui." />
+    return vazio
+      ? <Vazio icon={CheckCircle2} titulo={vazio} texto="Troque o turno para ver as outras pendências." />
+      : <Vazio icon={ClipboardList} titulo="Nenhuma pendência no período" texto="Cuidados, doses e intercorrências abertas aparecem aqui." />
   }
   const agora = Date.now()
   const itens = carga.dados.slice(0, 6)

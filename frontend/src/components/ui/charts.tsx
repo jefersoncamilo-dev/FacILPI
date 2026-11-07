@@ -90,7 +90,7 @@ export type ColunaBarras = {
 }
 
 /** Barras verticais (#275), empilhadas quando a coluna tem mais de uma parte, com o total sobre cada uma. */
-export function BarrasVerticais({ colunas, titulo }: { colunas: ColunaBarras[]; titulo: string }) {
+export function BarrasVerticais({ colunas, titulo, animar = false }: { colunas: ColunaBarras[]; titulo: string; animar?: boolean }) {
   const totalDe = (c: ColunaBarras) => c.partes.reduce((n, p) => n + p.valor, 0)
   const max = Math.max(1, ...colunas.map(totalDe))
   return (
@@ -102,7 +102,7 @@ export function BarrasVerticais({ colunas, titulo }: { colunas: ColunaBarras[]; 
             <span className="text-[11px] font-semibold tabular-nums text-foreground">{total > 0 ? total : ''}</span>
             <div className="flex h-28 w-full flex-col justify-end gap-0.5 border-b border-border">
               {c.partes.filter(p => p.valor > 0).map(p => (
-                <span key={p.fundo} className={cn('block w-full first:rounded-t', p.fundo)} style={{ height: `${(p.valor / max) * 100}%` }} />
+                <span key={p.fundo} className={cn('block w-full first:rounded-t', p.fundo, animar && 'animar-crescer-y')} style={{ height: `${(p.valor / max) * 100}%` }} />
               ))}
             </div>
             <span className="h-4 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">{c.marca}</span>
@@ -110,6 +110,34 @@ export function BarrasVerticais({ colunas, titulo }: { colunas: ColunaBarras[]; 
         )
       })}
     </div>
+  )
+}
+
+export type LinhaBarra = { rotulo: string; valor: number; fundo: string }
+
+/**
+ * Barras horizontais (UX-DASH-1): rótulo, barra e valor visível em cada linha —
+ * a cor nunca é a única leitura. `title` dá a dica ao passar o mouse.
+ */
+export function BarrasHorizontais({ linhas, titulo, animar = false }: { linhas: LinhaBarra[]; titulo: string; animar?: boolean }) {
+  const max = Math.max(1, ...linhas.map(l => l.valor))
+  const numero = (n: number) => n.toLocaleString('pt-BR')
+  return (
+    <ul role="img" aria-label={`${titulo}: ${linhas.map(l => `${l.rotulo} ${numero(l.valor)}`).join(', ')}`} className="space-y-3">
+      {linhas.map(l => (
+        <li key={l.rotulo} title={`${l.rotulo}: ${numero(l.valor)}`} className="space-y-1">
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate text-muted-foreground">{l.rotulo}</span>
+            <span className="font-semibold tabular-nums text-foreground">{numero(l.valor)}</span>
+          </div>
+          <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
+            {l.valor > 0 && (
+              <span className={cn('block h-full rounded-full', l.fundo, animar && 'animar-crescer-x')} style={{ width: `${(l.valor / max) * 100}%` }} />
+            )}
+          </div>
+        </li>
+      ))}
+    </ul>
   )
 }
 
