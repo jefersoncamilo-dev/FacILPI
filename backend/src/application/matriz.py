@@ -26,7 +26,8 @@ from .security import ILPI_SCOPE, RESOURCE_NOT_FOUND, SecurityContext, require_i
 
 matriz_router = APIRouter(prefix="/matriz", tags=["matriz"], dependencies=[Depends(require_ilpi_context)])
 
-INSTITUCIONAL_CHAVES = ("cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo")
+INSTITUCIONAL_CHAVES = ("cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo",
+                        "fisioterapeuta", "nutricionista", "psicologo", "assistente_social")
 
 
 def _now():

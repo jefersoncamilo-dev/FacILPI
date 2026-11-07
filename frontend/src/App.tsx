@@ -23,6 +23,7 @@ import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
 import { Cuidados } from './pages/Cuidados'
 import { ModuleHub } from './pages/ModuleHub'
+import { Agenda, Estoque, Financeiro, Multidisciplinar, Pia } from './pages/Complementares'
 import { Relatorios } from './pages/Relatorios'
 import { Auditoria } from './pages/Auditoria'
 import { Configuracoes } from './pages/Configuracoes'
@@ -75,6 +76,11 @@ export default function App() {
           <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
           <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
           <Route path="/escala" element={<Protected><Escala /></Protected>} />
+          <Route path="/agenda" element={<Protected><Agenda /></Protected>} />
+          <Route path="/multidisciplinar/:area" element={<Protected><Multidisciplinar /></Protected>} />
+          <Route path="/pia" element={<Protected><Pia /></Protected>} />
+          <Route path="/estoque" element={<Protected><Estoque /></Protected>} />
+          <Route path="/financeiro" element={<Protected><Financeiro /></Protected>} />
           <Route path="/relatorios" element={<Protected><Relatorios /></Protected>} />
           <Route path="/auditoria" element={<Protected><Auditoria /></Protected>} />
           <Route path="/configuracoes" element={<Protected><Configuracoes /></Protected>} />

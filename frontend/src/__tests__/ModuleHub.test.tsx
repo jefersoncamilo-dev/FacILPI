@@ -127,7 +127,7 @@ describe('UX-00C — hub do módulo', () => {
     expect(menu().queryByRole('button', { name: 'Submenu de Equipe' })).toBeNull()
   })
 
-  it.each(['/modulos/nao-existe', '/modulos/farmacia', '/modulos/gestao', '/modulos/plantao'])(
+  it.each(['/modulos/nao-existe', '/modulos/plantao'])(
     'slug inválido, futuro ou sem hub (%s) volta ao Início',
     async rota => {
       comPermissoes(TODAS)

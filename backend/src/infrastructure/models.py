@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, date, timezone
 from decimal import Decimal
 import sqlalchemy as sa
-from sqlalchemy import String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint, CheckConstraint, Index, ForeignKeyConstraint
+from sqlalchemy import text, String, Boolean, DateTime, Date, Text, Integer, Float, ForeignKey, func, UniqueConstraint, CheckConstraint, Index, ForeignKeyConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy import Uuid
@@ -1500,3 +1500,126 @@ class PassagemItem(Base):
     categoria: Mapped[str] = mapped_column(String(30), nullable=True)
     texto: Mapped[str] = mapped_column(String(280), nullable=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now())
+
+
+class AgendaEvento(Base):
+    __tablename__ = "agenda_eventos"
+    __table_args__ = (
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"], name="fk_agenda_residente", ondelete="RESTRICT"),
+        CheckConstraint("situacao IN ('agendado','realizado','cancelado')", name="ck_agenda_situacao"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    motivo: Mapped[str] = mapped_column(String(255), nullable=False)
+    especialidade: Mapped[str] = mapped_column(String(100), nullable=True)
+    profissional: Mapped[str] = mapped_column(String(255), nullable=True)
+    local: Mapped[str] = mapped_column(String(255), nullable=True)
+    inicio_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="agendado", server_default="agendado")
+    resultado: Mapped[str] = mapped_column(Text, nullable=True)
+    motivo_cancelamento: Mapped[str] = mapped_column(Text, nullable=True)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
+
+
+class AtendimentoMultidisciplinar(Base):
+    __tablename__ = "atendimentos_multidisciplinares"
+    __table_args__ = (
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"], name="fk_atendimento_residente", ondelete="RESTRICT"),
+        CheckConstraint("area IN ('fisioterapia','nutricao','psicologia','servico_social','enfermagem')", name="ck_atendimento_area"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    area: Mapped[str] = mapped_column(String(30), nullable=False)
+    ocorrido_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=False)
+    evolucao: Mapped[str] = mapped_column(Text, nullable=False)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    autor_nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    estornado_em: Mapped[datetime] = mapped_column(UtcDateTime(), nullable=True)
+    estornado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    motivo_estorno: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
+
+
+class PiaVersao(Base):
+    __tablename__ = "pia_versoes"
+    __table_args__ = (
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"], name="fk_pia_residente", ondelete="RESTRICT"),
+        UniqueConstraint("residente_id", "versao", name="uq_pia_residente_versao"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    versao: Mapped[int] = mapped_column(Integer, nullable=False)
+    informacoes_gerais: Mapped[str] = mapped_column(Text, nullable=True)
+    institucionalizacao: Mapped[str] = mapped_column(Text, nullable=True)
+    habitos_interesses: Mapped[str] = mapped_column(Text, nullable=True)
+    apoio_social: Mapped[str] = mapped_column(Text, nullable=True)
+    financas: Mapped[str] = mapped_column(Text, nullable=True)
+    historico_saude: Mapped[str] = mapped_column(Text, nullable=True)
+    planejamento_individual: Mapped[str] = mapped_column(Text, nullable=True)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    autor_nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
+
+
+class EstoqueItem(Base):
+    __tablename__ = "estoque_itens"
+    __table_args__ = (
+        UniqueConstraint("id", "ilpi_id", name="uq_estoque_itens_id_ilpi"),
+        UniqueConstraint("ilpi_id", "nome", name="uq_estoque_itens_nome"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    nome: Mapped[str] = mapped_column(String(255), nullable=False)
+    categoria: Mapped[str] = mapped_column(String(100), nullable=True)
+    unidade: Mapped[str] = mapped_column(String(50), nullable=False)
+    estoque_minimo: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    localizacao: Mapped[str] = mapped_column(String(255), nullable=True)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
+
+
+class EstoqueMovimento(Base):
+    __tablename__ = "estoque_movimentos"
+    __table_args__ = (
+        ForeignKeyConstraint(["item_id", "ilpi_id"], ["estoque_itens.id", "estoque_itens.ilpi_id"], name="fk_movimento_item", ondelete="RESTRICT"),
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"], name="fk_movimento_residente", ondelete="RESTRICT"),
+        CheckConstraint("tipo IN ('entrada','saida')", name="ck_movimento_tipo"),
+        CheckConstraint("quantidade > 0", name="ck_movimento_quantidade"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(10), nullable=False)
+    quantidade: Mapped[int] = mapped_column(Integer, nullable=False)
+    lote: Mapped[str] = mapped_column(String(50), nullable=True)
+    validade: Mapped[date] = mapped_column(Date, nullable=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=True)
+    motivo: Mapped[str] = mapped_column(Text, nullable=True)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
+
+
+class Mensalidade(Base):
+    __tablename__ = "mensalidades"
+    __table_args__ = (
+        ForeignKeyConstraint(["residente_id", "ilpi_id"], ["residentes.id", "residentes.instituicao_id"], name="fk_mensalidade_residente", ondelete="RESTRICT"),
+        CheckConstraint("situacao IN ('aberta','paga','cancelada')", name="ck_mensalidade_situacao"),
+        CheckConstraint("valor_centavos > 0", name="ck_mensalidade_valor"),
+        Index("uq_mensalidade_vigente", "residente_id", "competencia", unique=True,
+              sqlite_where=text("situacao <> 'cancelada'"), postgresql_where=text("situacao <> 'cancelada'")),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=gen_uuid)
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    residente_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    competencia: Mapped[str] = mapped_column(String(7), nullable=False)
+    valor_centavos: Mapped[int] = mapped_column(Integer, nullable=False)
+    vencimento: Mapped[date] = mapped_column(Date, nullable=False)
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="aberta", server_default="aberta")
+    pago_em: Mapped[date] = mapped_column(Date, nullable=True)
+    observacao: Mapped[str] = mapped_column(Text, nullable=True)
+    autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
