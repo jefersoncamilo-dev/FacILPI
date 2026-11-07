@@ -89,6 +89,14 @@ class DashboardEquipe(BaseModel):
     ativos: int
     afastados: int
 
+class DashboardSemanaIntercorrencias(BaseModel):
+    inicio: date
+    total: int
+
+class DashboardIntercorrenciasSemanaisResponse(BaseModel):
+    fuso: str
+    semanas: list[DashboardSemanaIntercorrencias]
+
 class DashboardResumoResponse(BaseModel):
     gerado_em: datetime
     residentes_total: Optional[int] = None

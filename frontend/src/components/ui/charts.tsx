@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils'
  * tokens do design system. Regras:
  *  - todo gráfico tem `role="img"` e `aria-label` com os números;
  *  - a legenda visível sempre traz os valores — a cor nunca é a única leitura;
- *  - só dado de fonte oficial; nada de tendência sem histórico.
+ *  - só dado de fonte oficial; tendência só com histórico vindo do backend.
  */
 export type Segmento = {
   rotulo: string
@@ -78,6 +78,38 @@ export function Legenda({ segmentos, className }: { segmentos: Segmento[]; class
         </div>
       ))}
     </dl>
+  )
+}
+
+export type ColunaBarras = {
+  /** Texto completo para leitores de tela e dica ao passar o mouse. */
+  descricao: string
+  /** Rótulo no eixo; vazio para aliviar eixos estreitos. */
+  marca: string
+  partes: { valor: number; fundo: string }[]
+}
+
+/** Barras verticais (#275), empilhadas quando a coluna tem mais de uma parte, com o total sobre cada uma. */
+export function BarrasVerticais({ colunas, titulo }: { colunas: ColunaBarras[]; titulo: string }) {
+  const totalDe = (c: ColunaBarras) => c.partes.reduce((n, p) => n + p.valor, 0)
+  const max = Math.max(1, ...colunas.map(totalDe))
+  return (
+    <div role="img" aria-label={`${titulo}: ${colunas.map(c => c.descricao).join('; ')}`} className="flex items-end gap-1">
+      {colunas.map(c => {
+        const total = totalDe(c)
+        return (
+          <div key={c.descricao} title={c.descricao} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+            <span className="text-[11px] font-semibold tabular-nums text-foreground">{total > 0 ? total : ''}</span>
+            <div className="flex h-28 w-full flex-col justify-end gap-0.5 border-b border-border">
+              {c.partes.filter(p => p.valor > 0).map(p => (
+                <span key={p.fundo} className={cn('block w-full first:rounded-t', p.fundo)} style={{ height: `${(p.valor / max) * 100}%` }} />
+              ))}
+            </div>
+            <span className="h-4 whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">{c.marca}</span>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

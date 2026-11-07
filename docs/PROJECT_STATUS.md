@@ -47,6 +47,7 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Estorno de dose pela tela só por Enfermagem e RT, com motivo (D2, #11, PR #226, migration 033).
 - Escritas clínicas fora do `ilpi_admin` (D3 opção B, #15, PR #228, migration 034): relatório por ILPI, transição de 30 dias, bloqueio só da escrita clínica sem perfil clínico.
 - Complementares D5: Configurações (PR #260), Auditoria (PR #263), Relatórios (PR #265); Agenda, Multidisciplinar por área, PIA, Farmácia e estoque e Financeiro básico de mensalidades (PR #272, migration 035). Portal da família adiado para a próxima versão.
+- Gráficos do Início (#275, PR #276, sem migration): pendências das próximas 12 horas por origem (colunas na hora cheia) e intercorrências por semana (8 ou 12 semanas, no fuso da ILPI) via `GET /api/dashboard/intercorrencias-semanais`, que exige `intercorrencias:ler` e conta pela data do evento em qualquer situação.
 - CI mais rápido (#184): o job SQLite caiu de cerca de 29 para cerca de 4 min.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
 
