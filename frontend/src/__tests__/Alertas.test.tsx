@@ -315,7 +315,8 @@ describe('Sino, navegação inferior e Início (#107, #117)', () => {
   it('o Início mostra "Precisa de atenção" com os primeiros alertas', async () => {
     responde()
     renderInicio(['alertas:ler', 'residentes:ler', 'funcionarios:ler'])
-    const painel = await screen.findByRole('region', { name: 'Precisa de atenção' })
+    // UX-DASH-1: na gestão o painel vira "Precisa de atenção agora", em tabela.
+    const painel = await screen.findByRole('region', { name: 'Precisa de atenção agora' })
     await waitFor(() => expect(within(painel).getByText('2 doses de medicação sem registro')).toBeTruthy())
     expect(within(painel).getByText('Crítico: 1 · Atenção: 2 · Aviso: 1')).toBeTruthy()
     expect(within(painel).getByRole('link', { name: 'Ver todos os alertas' }).getAttribute('href')).toBe('/alertas')
@@ -325,7 +326,7 @@ describe('Sino, navegação inferior e Início (#107, #117)', () => {
     responde()
     renderInicio(['residentes:ler', 'funcionarios:ler'])
     await screen.findByText('Residentes cadastrados')
-    expect(screen.queryByRole('region', { name: 'Precisa de atenção' })).toBeNull()
+    expect(screen.queryByRole('region', { name: /^Precisa de atenção/ })).toBeNull()
     expect(chamouAlertas()).toBe(0)
   })
 })

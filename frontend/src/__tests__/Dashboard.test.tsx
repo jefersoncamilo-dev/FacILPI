@@ -191,7 +191,8 @@ describe('Dashboard — indisponibilidade nunca vira zero', () => {
   it('5. resumo indisponível vira traço nos indicadores que a sessão lê — nunca 0', async () => {
     responde({ resumo: new Error('rede') })
     renderDashboard()
-    for (const titulo of ['Residentes cadastrados', 'Intercorrências abertas', 'Ocupação de leitos']) {
+    // UX-DASH-1: na gestão, "Admissões abertas" abre a fila; intercorrências saem do top 4.
+    for (const titulo of ['Admissões abertas', 'Residentes cadastrados', 'Ocupação de leitos']) {
       const card = await cartao(titulo)
       await waitFor(() => expect(card.textContent).toContain('—'))
       expect(card.textContent).toContain('Indisponível no momento')
@@ -268,7 +269,8 @@ describe('Dashboard — experiência por perfil (UX-02 / #85)', () => {
     })
     renderDashboard(GESTAO)
     await screen.findByText('Ocupação de leitos')
-    await waitFor(() => expect(titulosDosIndicadores()[0]).toBe('Residentes cadastrados'))
+    // UX-DASH-1: os indicadores do gestor vêm antes do espelho da instituição.
+    await waitFor(() => expect(titulosDosIndicadores().slice(0, 2)).toEqual(['Admissões abertas', 'Residentes cadastrados']))
     const processos = within(await screen.findByRole('region', { name: 'Processos em andamento' }))
     expect(processos.getByText('Em andamento').nextElementSibling?.textContent).toBe('2')
     expect(processos.getByText('Vigentes').nextElementSibling?.textContent).toBe('5')
