@@ -223,7 +223,7 @@ def test_01_templates_e_baseline(s1_db):
         # -> 95 (alertas:ler/022, #107) -> 98 (escala:ler/gerenciar, plantao:registrar/024, #120)
         # -> 99 (alertas:assumir/026, #123) -> 101 (passagem_plantao:ler/registrar/027, #125)
         # -> 103 (residentes:registrar_saida/estornar_saida/030, #171)
-        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 121
+        assert (await db.execute(select(m.Permissao.id))).scalars().all().__len__() == 123
         templates = (await db.execute(select(m.Perfil).where(
             m.Perfil.ilpi_id.is_(None), m.Perfil.chave.in_(
                 ["cuidador", "enfermagem", "medico", "responsavel_tecnico", "administrativo"])))).scalars().all()

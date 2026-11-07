@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, NavLink, useLocation } from 'react-router'
+import { Link, Navigate, NavLink, useLocation } from 'react-router'
 import { Bell, ChevronRight, ClipboardList, KeyRound, Ellipsis, LayoutDashboard, Loader2, LogOut, Menu, Palette, Settings, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'
@@ -34,9 +34,18 @@ import { ErrorBoundary } from './ui/states'
 export function Layout({ children }: { children: ReactNode }) {
   return (
     <PermissoesProvider>
-      <Shell>{children}</Shell>
+      <SoPortal>
+        <Shell>{children}</Shell>
+      </SoPortal>
     </PermissoesProvider>
   )
+}
+
+/** #271: a conta do familiar só tem o portal; o resto da API a recusa. */
+function SoPortal({ children }: { children: ReactNode }) {
+  const { status, pode } = usePermissoes()
+  if (status === 'ok' && pode('portal_familia:ler') && !pode('residentes:ler')) return <Navigate to="/portal" replace />
+  return <>{children}</>
 }
 
 function Shell({ children }: { children: ReactNode }) {

@@ -23,6 +23,7 @@ import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
 import { Cuidados } from './pages/Cuidados'
 import { ModuleHub } from './pages/ModuleHub'
+import { PortalFamilia } from './pages/PortalFamilia'
 import { Agenda, Estoque, Financeiro, Multidisciplinar, Pia } from './pages/Complementares'
 import { Relatorios } from './pages/Relatorios'
 import { Auditoria } from './pages/Auditoria'
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/platform/instituicoes" element={<Platform><PlatformInstituicoes /></Platform>} />
           <Route path="/platform/instituicoes/nova" element={<Platform><PlatformInstituicaoNova /></Platform>} />
           <Route path="/platform/instituicoes/:id" element={<Platform><PlatformInstituicaoDetalhe /></Platform>} />
+          <Route path="/portal" element={<PrivateRoute><PortalFamilia /></PrivateRoute>} />
           <Route path="/" element={<Protected><Dashboard /></Protected>} />
           <Route path="/plantao" element={<Protected><MeuPlantao /></Protected>} />
           <Route path="/residentes" element={<Protected><Residentes /></Protected>} />
