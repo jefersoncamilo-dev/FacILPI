@@ -39,12 +39,12 @@ describe('UX-00A — modelo de navegação', () => {
     )
     expect(destinos.sort()).toEqual([
       '/', '/admissoes', '/alertas', '/auditoria', '/avaliacoes', '/configuracoes', '/cuidados', '/documentos', '/equipe', '/escala',
-      '/intercorrencias', '/passagem', '/plano', '/plantao', '/quartos', '/residentes', '/sinais',
+      '/intercorrencias', '/passagem', '/plano', '/plantao', '/quartos', '/relatorios', '/residentes', '/sinais',
     ])
   })
 
   it('itens e módulos futuros nunca aparecem, nem com permissões indisponíveis', () => {
-    expect(ids(tudo)).toEqual(['inicio', 'alertas', 'plantao', 'residentes', 'assistencial', 'multidisciplinar', 'equipe', 'configuracoes'])
+    expect(ids(tudo)).toEqual(['inicio', 'alertas', 'plantao', 'residentes', 'assistencial', 'multidisciplinar', 'equipe', 'relatorios', 'configuracoes'])
     for (const modulo of modulosVisiveis(tudo)) {
       if (modulo.tipo !== 'grupo') continue
       for (const item of itensVisiveis(modulo, tudo)) expect(item.status).toBe('ativo')

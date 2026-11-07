@@ -191,7 +191,17 @@ export const MODULOS: ModuloNav[] = [
     ],
   },
   { tipo: 'grupo', id: 'gestao', label: 'Gestão', icon: Briefcase, status: 'futuro', descricao: 'Indicadores e processos da instituição.', itens: [] },
-  { tipo: 'grupo', id: 'relatorios', label: 'Relatórios', icon: BarChart3, status: 'futuro', descricao: 'Relatórios operacionais e assistenciais.', itens: [] },
+  {
+    tipo: 'grupo',
+    id: 'relatorios',
+    label: 'Relatórios',
+    icon: BarChart3,
+    status: 'ativo',
+    descricao: 'Relatórios operacionais e assistenciais.',
+    itens: [
+      { id: 'resumo', label: 'Resumo da instituição', icon: BarChart3, status: 'ativo', to: '/relatorios', permissao: 'residentes:ler', descricao: 'Residentes, intercorrências e medicação no período.' },
+    ],
+  },
   {
     tipo: 'grupo',
     id: 'configuracoes',
