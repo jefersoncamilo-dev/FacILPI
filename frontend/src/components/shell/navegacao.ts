@@ -1,5 +1,4 @@
 import {
-  ArrowDownToLine,
   ArrowLeftRight,
   BarChart3,
   BedDouble,
@@ -8,7 +7,6 @@ import {
   Brain,
   Briefcase,
   CalendarClock,
-  CalendarX2,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -17,16 +15,13 @@ import {
   HeartPulse,
   History,
   LayoutDashboard,
-  LayoutGrid,
   NotebookPen,
   Package,
-  PackageCheck,
   Pill,
   Settings,
   Stethoscope,
   Syringe,
   TriangleAlert,
-  Truck,
   Activity,
   Apple,
   UserPlus,
@@ -100,12 +95,8 @@ export interface ModuloGrupo extends ModuloBase {
 export type ModuloNav = ModuloLink | ModuloGrupo
 
 /** Domínio multidisciplinar futuro: cada profissão com chave própria, sem acesso cruzado. */
-function dominioMultidisciplinar(id: string, label: string, icon: LucideIcon, descricao: string): ItemFuturo {
-  return { id, label, icon, descricao, status: 'futuro', permissaoPlanejada: `multidisciplinar.${id}:ler` }
-}
-
-function futuroFarmacia(id: string, label: string, icon: LucideIcon, descricao: string): ItemFuturo {
-  return { id, label, icon, descricao, status: 'futuro', permissaoPlanejada: `farmacia.${id}:ler` }
+function dominioMultidisciplinar(id: string, label: string, icon: LucideIcon, descricao: string): ItemAtivo {
+  return { id, label, icon, descricao, status: 'ativo', to: `/multidisciplinar/${id}`, permissao: `multidisciplinar.${id}:ler` }
 }
 
 export const MODULOS: ModuloNav[] = [
@@ -135,6 +126,7 @@ export const MODULOS: ModuloNav[] = [
     status: 'ativo',
     descricao: 'Rotina do cuidado: registros, ocorrências e troca de turno.',
     itens: [
+      { id: 'agenda', label: 'Agenda', icon: CalendarClock, status: 'ativo', to: '/agenda', permissao: 'agenda:ler', descricao: 'Consultas e compromissos dos residentes.' },
       { id: 'cuidados', label: 'Cuidados', icon: HandHeart, status: 'ativo', to: '/cuidados', permissao: 'programacoes:ler', descricao: 'Cuidados diários programados.' },
       { id: 'sinais', label: 'Sinais Vitais', icon: HeartPulse, status: 'ativo', to: '/sinais', permissao: 'sinais_vitais:ler', descricao: 'Aferições e histórico por residente.' },
       { id: 'intercorrencias', label: 'Intercorrências', icon: TriangleAlert, status: 'ativo', to: '/intercorrencias', permissao: 'intercorrencias:ler', descricao: 'Ocorrências registradas e acompanhamento.' },
@@ -151,6 +143,7 @@ export const MODULOS: ModuloNav[] = [
     descricao: 'Avaliações e plano de cuidados compartilhados entre as áreas.',
     itens: [
       { id: 'avaliacoes', label: 'Avaliações', icon: ClipboardCheck, status: 'ativo', to: '/avaliacoes', permissao: 'avaliacoes:ler', descricao: 'Avaliações e grau de dependência.' },
+      { id: 'pia', label: 'PIA', icon: FileText, status: 'ativo', to: '/pia', permissao: 'pia:ler', descricao: 'Plano Individual de Atendimento do residente.' },
       { id: 'plano', label: 'Plano de Cuidados', icon: NotebookPen, status: 'ativo', to: '/plano', permissao: 'planos_cuidados:ler', descricao: 'PAIS: objetivos, ações e revisões.' },
       dominioMultidisciplinar('fisioterapia', 'Fisioterapia', Activity, 'Agenda, atendimentos e evoluções da fisioterapia.'),
       dominioMultidisciplinar('nutricao', 'Nutrição', Apple, 'Avaliações nutricionais e plano alimentar.'),
@@ -164,17 +157,10 @@ export const MODULOS: ModuloNav[] = [
     id: 'farmacia',
     label: 'Farmácia',
     icon: Pill,
-    status: 'futuro',
-    descricao: 'Logística de medicamentos: estoque, lotes, dispensação e entrega.',
+    status: 'ativo',
+    descricao: 'Estoque, lotes e validades com histórico de movimentos.',
     itens: [
-      futuroFarmacia('visao_geral', 'Visão Geral', LayoutGrid, 'Situação da farmácia.'),
-      futuroFarmacia('medicamentos', 'Medicamentos', Pill, 'Catálogo de medicamentos.'),
-      futuroFarmacia('estoque', 'Estoque por Residente', Boxes, 'Saldo farmacêutico de cada residente.'),
-      futuroFarmacia('entradas', 'Entradas', ArrowDownToLine, 'Recebimento com origem rastreável.'),
-      futuroFarmacia('lotes', 'Lotes e Validades', CalendarX2, 'Controle por lote e vencimento.'),
-      futuroFarmacia('dispensacoes', 'Dispensações', PackageCheck, 'Separação por residente.'),
-      futuroFarmacia('entregas', 'Entregas ao Cuidador', Truck, 'Cadeia de custódia até a administração.'),
-      futuroFarmacia('movimentacoes', 'Movimentações', History, 'Histórico auditável do estoque.'),
+      { id: 'estoque', label: 'Estoque', icon: Boxes, status: 'ativo', to: '/estoque', permissao: 'estoque:ler', descricao: 'Saldo por lote, validade e movimentos.' },
     ],
   },
   {
@@ -190,7 +176,17 @@ export const MODULOS: ModuloNav[] = [
       { id: 'escala', label: 'Escala', icon: CalendarClock, status: 'ativo', to: '/escala', permissao: 'escala:ler', descricao: 'Áreas, turnos e responsáveis.' },
     ],
   },
-  { tipo: 'grupo', id: 'gestao', label: 'Gestão', icon: Briefcase, status: 'futuro', descricao: 'Indicadores e processos da instituição.', itens: [] },
+  {
+    tipo: 'grupo',
+    id: 'gestao',
+    label: 'Gestão',
+    icon: Briefcase,
+    status: 'ativo',
+    descricao: 'Indicadores e processos da instituição.',
+    itens: [
+      { id: 'mensalidades', label: 'Mensalidades', icon: FileText, status: 'ativo', to: '/financeiro', permissao: 'financeiro:ler', descricao: 'Controle manual de mensalidades por residente.' },
+    ],
+  },
   {
     tipo: 'grupo',
     id: 'relatorios',

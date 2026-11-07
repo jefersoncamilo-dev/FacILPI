@@ -240,6 +240,25 @@ _ILPI_ONLY_PERMISSIONS = frozenset(
         "administracoes:ler",
         "administracoes:criar",
         "administracoes:corrigir",
+        # 035: complementares D5.
+        "agenda:ler",
+        "agenda:gerenciar",
+        "pia:ler",
+        "pia:registrar",
+        "estoque:ler",
+        "estoque:movimentar",
+        "financeiro:ler",
+        "financeiro:gerenciar",
+        "multidisciplinar.fisioterapia:ler",
+        "multidisciplinar.fisioterapia:registrar",
+        "multidisciplinar.nutricao:ler",
+        "multidisciplinar.nutricao:registrar",
+        "multidisciplinar.psicologia:ler",
+        "multidisciplinar.psicologia:registrar",
+        "multidisciplinar.servico_social:ler",
+        "multidisciplinar.servico_social:registrar",
+        "multidisciplinar.enfermagem:ler",
+        "multidisciplinar.enfermagem:registrar",
     }
 )
 _CLINICAL_MODULES = frozenset(
@@ -277,6 +296,8 @@ _CLINICAL_MODULES = frozenset(
         # N6 (#206): ausencia e escala revelam afastamento/saude da equipe.
         "ausencias",
         "escala",
+        "multidisciplinar",
+        "pia",
     }
 )
 

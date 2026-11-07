@@ -249,7 +249,7 @@ def test_019_concede_ao_template_cuidador_sem_atualizar(c4_db):
         # HEAD: 94 + 1 da 022 (#107, alertas:ler) + 3 da 024 (#120, escala e plantao:registrar)
         # + 1 da 026 (#123, alertas:assumir) + 2 da 027 (#125, passagem_plantao)
         # + 2 da 030 (#171, residentes:registrar_saida/estornar_saida).
-        assert (await db.execute(select(func.count()).select_from(m.Permissao))).scalar_one() == 103
+        assert (await db.execute(select(func.count()).select_from(m.Permissao))).scalar_one() == 121
     asyncio.run(_with_client(c4_db, scenario))
 
 
@@ -279,7 +279,8 @@ def test_019_alcanca_clone_local_preexistente(c4_db):
         ), {"p": perfil_id})).all()}
         # Em head a 023 (#117), a 024 (#120) e a 026 (#123) tambem alcancam o clone preexistente.
         assert chaves == CUIDADOR_KEYS | {"alertas:ler", "escala:ler", "plantao:registrar", "alertas:assumir",
-                                          "passagem_plantao:ler", "passagem_plantao:registrar"}
+                                          "passagem_plantao:ler", "passagem_plantao:registrar",
+                                          "agenda:ler", "pia:ler"}
     asyncio.run(_with_client(c4_db, conferir))
 
 

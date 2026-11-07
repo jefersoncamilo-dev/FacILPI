@@ -153,7 +153,7 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     renderShell()
 
     await menu().findAllByRole('link', { name: /Residentes/, hidden: true })
-    for (const nome of ['Financeiro', 'Estoque', 'Compliance e Fiscalização', 'Farmácia', 'Fisioterapia']) {
+    for (const nome of ['Compliance e Fiscalização']) {
       expect(menu().queryByRole('link', { name: nome, hidden: true })).toBeNull()
       expect(menu().queryByRole('button', { name: `Submenu de ${nome}` })).toBeNull()
     }
