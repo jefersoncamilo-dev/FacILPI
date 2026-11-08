@@ -12,6 +12,10 @@ import { Dialog, DialogContent } from '../components/ui/dialog'
 import { LoadingState } from '../components/ui/states'
 import { cn } from '../lib/utils'
 import { rotuloSituacaoResidente } from '../lib/rotulos'
+import { AvatarResidente } from '../components/residente/AvatarResidente'
+import { SeloGrau } from '../components/residente/SeloGrau'
+import { useGrausAtivos } from '../hooks/useGrausAtivos'
+import { SELO_GRAU, compararPorGrau, ehGrau, type GrauNaTela } from '../lib/grau'
 
 const FORM_VAZIO = { nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M' }
 // UX-NAV-3b: o grau de dependência entra logo no cadastro, como grau OFICIAL
@@ -34,6 +38,10 @@ export function Residentes() {
   const [salvando, setSalvando] = useState(false)
   const [q, setQ] = useState('')
   const [situacao, setSituacao] = useState<string | null>(null)
+  // UX-GRAU: grau OFICIAL ativo (nunca o campo legado), só com grau_dependencia:ler.
+  const { grauDe, status: statusGraus } = useGrausAtivos()
+  const comGrau = statusGraus === 'ok'
+  const [filtroGrau, setFiltroGrau] = useState<'todos' | 'sem' | 'Grau III' | 'Grau II' | 'Grau I'>('todos')
   // PH-01: antes `load()` não tinha catch. Um 403 (perfil sem `residentes:ler`,
   // ou ILPI ainda em configuração) virava promise rejeitada em silêncio, a lista
   // ficava vazia e a tela dizia "0 residentes" — afirmando como fato algo que
@@ -120,6 +128,17 @@ export function Residentes() {
   const filtered = items
     .filter(i => !situacao || (i.situacao || 'Sem situação') === situacao)
     .filter(i => !termo || i.nome.toLowerCase().includes(termo) || (i.cpf || '').includes(q.trim()))
+    .filter(i => !comGrau || filtroGrau === 'todos' || (filtroGrau === 'sem' ? grauDe(i.id) === null : grauDe(i.id) === filtroGrau))
+    // UX-GRAU: prioridade de atenção — sem grau, Grau III, II, I (sort estável:
+    // dentro do mesmo grau vale a ordem do backend). Sem consulta, nada muda.
+    .sort((a, b) => (comGrau ? compararPorGrau(grauDe(a.id), grauDe(b.id)) : 0))
+
+  // Contagem por grau para o filtro (sobre a lista sem o recorte de grau).
+  const contagemGrau = useMemo(() => {
+    const c = { sem: 0, 'Grau III': 0, 'Grau II': 0, 'Grau I': 0 } as Record<string, number>
+    if (comGrau) for (const r of items) { const g: GrauNaTela = grauDe(r.id); c[g === null || g === undefined ? 'sem' : g] += 1 }
+    return c
+  }, [items, comGrau, grauDe])
 
   return (
     <div className="space-y-6">
@@ -176,6 +195,29 @@ export function Residentes() {
             })}
           </div>
         )}
+        {!carregando && !erro && comGrau && items.length > 0 && (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por grau de dependência">
+            {([['todos', 'Todos os graus', items.length], ['sem', 'Sem grau', contagemGrau.sem], ['Grau III', 'Grau III', contagemGrau['Grau III']], ['Grau II', 'Grau II', contagemGrau['Grau II']], ['Grau I', 'Grau I', contagemGrau['Grau I']]] as const).map(([valor, rotulo, total]) => {
+              const ativo = filtroGrau === valor
+              return (
+                <button
+                  key={valor}
+                  type="button"
+                  aria-pressed={ativo}
+                  onClick={() => setFiltroGrau(valor)}
+                  className={cn(
+                    'min-h-[44px] rounded-full border px-3 text-sm font-semibold transition-colors',
+                    ativo
+                      ? (ehGrau(valor) ? SELO_GRAU[valor] : 'border-brand bg-accent text-accent-foreground')
+                      : 'border-border bg-card text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {rotulo} <span className="text-xs font-medium">({total})</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {carregando ? (
@@ -219,7 +261,8 @@ export function Residentes() {
               className="flex gap-3 after:absolute after:inset-0 after:rounded-card focus-visible:outline-hidden focus-visible:after:ring-2 focus-visible:after:ring-ring/50"
             >
               {/* Decorativa: sem aria-hidden, o nome acessível começa com a inicial duplicada. */}
-              <div aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-full bg-brand-soft text-lg font-bold text-primary">{r.nome[0]}</div>
+              {/* UX-GRAU: círculo na cor do grau oficial (sem permissão, sem círculo). */}
+              <AvatarResidente nome={r.nome} foto={r.foto} grau={grauDe(r.id)} className="m-1 size-12 text-lg" />
               <div className="min-w-0 flex-1">
                 <div className="truncate font-semibold text-foreground">{r.nome}</div>
                 <div className="truncate text-xs text-muted-foreground">
@@ -236,9 +279,9 @@ export function Residentes() {
               </div>
             )}
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              {/* Campo legado do cadastro (a fonte oficial do grau é GrauDependencia,
-                  exibida no prontuário). Mantido aqui por compatibilidade (Issue #34). */}
-              <span className="badge-success">{r.grau_dependencia || 'Sem grau'}</span>
+              {/* UX-GRAU: grau OFICIAL ativo (GrauDependencia). O campo legado do
+                  cadastro deixou de aparecer: podia divergir da ficha (DOMAIN_RULES). */}
+              <SeloGrau classificacao={grauDe(r.id)} semGrau tamanho="medio" />
               {leito && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-1 text-muted-foreground">
                   <BedDouble className="size-3.5" aria-hidden="true" /> {leito}
@@ -277,7 +320,9 @@ export function Residentes() {
                         key={valor || 'depois'}
                         className={cn(
                           'flex min-h-[44px] cursor-pointer items-center justify-center rounded-lg border px-2 text-center text-sm font-semibold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
-                          marcado ? 'border-brand bg-accent text-accent-foreground' : 'border-input bg-card text-muted-foreground',
+                          marcado
+                            ? (ehGrau(valor) ? SELO_GRAU[valor] : 'border-brand bg-accent text-accent-foreground')
+                            : 'border-input bg-card text-muted-foreground',
                         )}
                       >
                         <input type="radio" name="res-grau" value={valor} checked={marcado} className="sr-only"

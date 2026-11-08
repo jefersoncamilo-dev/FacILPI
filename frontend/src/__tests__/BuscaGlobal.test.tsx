@@ -10,9 +10,11 @@ import { normalizar } from '../lib/texto'
 vi.mock('../services/plantao', () => ({ getResidentesResumo: vi.fn() }))
 
 let permissoes: string[] = []
-vi.mock('../context/PermissoesContext', () => ({
-  usePermissoes: () => ({ status: 'ok', pode: (chave?: string) => !chave || permissoes.includes(chave) }),
-}))
+vi.mock('../context/PermissoesContext', () => {
+  const valor = () => ({ status: 'ok', pode: (chave?: string) => !chave || permissoes.includes(chave) })
+  // UX-GRAU: o grau oficial usa usePermissoesOuPadrao; sem grau_dependencia:ler, não consulta.
+  return { usePermissoes: valor, usePermissoesOuPadrao: valor }
+})
 
 const mockResidentes = vi.mocked(getResidentesResumo)
 

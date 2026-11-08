@@ -7,6 +7,9 @@ import { AvatarResidente } from '../residente/AvatarResidente'
 import { getResidentesResumo, type ResidenteResumo } from '../../services/plantao'
 import { cn } from '../../lib/utils'
 import { contem } from '../../lib/texto'
+import { SeloGrau } from '../residente/SeloGrau'
+import { useGrausAtivos } from '../../hooks/useGrausAtivos'
+import { compararPorGrau } from '../../lib/grau'
 
 const BOTTOM_SHEET =
   'max-sm:bottom-0 max-sm:left-0 max-sm:top-auto max-sm:max-h-[92vh] max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-b-none max-sm:pb-[max(1.5rem,env(safe-area-inset-bottom))]'
@@ -57,6 +60,8 @@ function ConteudoEmergencia({ onFechar }: { onFechar: () => void }) {
   const [erro, setErro] = useState(false)
   const [escolhido, setEscolhido] = useState<string | null>(doProntuario)
   const [busca, setBusca] = useState('')
+  // UX-GRAU: na emergência, quem mais depende de cuidado aparece primeiro.
+  const { grauDe } = useGrausAtivos()
 
   useEffect(() => {
     getResidentesResumo().then(setResidentes).catch(() => setErro(true))
@@ -64,8 +69,9 @@ function ConteudoEmergencia({ onFechar }: { onFechar: () => void }) {
 
   const filtrados = useMemo(() => {
     const lista = residentes ?? []
-    return busca.trim() ? lista.filter(r => contem(r.nome, busca)) : lista
-  }, [residentes, busca])
+    const achados = busca.trim() ? lista.filter(r => contem(r.nome, busca)) : lista
+    return [...achados].sort((a, b) => compararPorGrau(grauDe(a.id), grauDe(b.id)))
+  }, [residentes, busca, grauDe])
 
   const residente = residentes?.find(r => r.id === escolhido)
   if (escolhido) {
@@ -73,9 +79,12 @@ function ConteudoEmergencia({ onFechar }: { onFechar: () => void }) {
     return (
       <div className="space-y-4">
         <div className="flex items-center gap-3 rounded-lg bg-muted p-3">
-          <AvatarResidente nome={nome} foto={residente?.foto} className="size-12" />
+          <AvatarResidente nome={nome} foto={residente?.foto} grau={grauDe(escolhido)} className="m-1 size-12" />
           <div className="min-w-0 flex-1">
-            <div className="truncate font-semibold">{nome}</div>
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-semibold">{nome}</span>
+              <SeloGrau classificacao={grauDe(escolhido)} semGrau tamanho="medio" />
+            </div>
             <button type="button" onClick={() => setEscolhido(null)} className="min-h-[44px] text-sm font-medium text-primary hover:underline">
               Trocar residente
             </button>
@@ -123,8 +132,9 @@ function ConteudoEmergencia({ onFechar }: { onFechar: () => void }) {
                 onClick={() => setEscolhido(r.id)}
                 className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-muted"
               >
-                <AvatarResidente nome={r.nome} foto={r.foto} />
+                <AvatarResidente nome={r.nome} foto={r.foto} grau={grauDe(r.id)} className="m-1" />
                 <span className="flex-1 truncate font-medium">{r.nome}</span>
+                <SeloGrau classificacao={grauDe(r.id)} semGrau tamanho="medio" />
                 <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
               </button>
             </li>
