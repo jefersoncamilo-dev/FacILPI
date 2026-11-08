@@ -105,14 +105,14 @@ describe('UX-00C — hub do módulo', () => {
   it('item futuro nunca aparece, nem com permissões indisponíveis', async () => {
     mockPermissoes.mockRejectedValue({ response: { status: 404, data: { detail: 'Not Found' } } })
     renderEm('/modulos/residentes')
-    expect(await cardsDoHub('Residentes')).toEqual(['/residentes', '/admissoes', '/documentos', '/quartos'])
+    expect(await cardsDoHub('Residentes')).toEqual(['/residentes', '/admissoes', '/quartos', '/documentos'])
     expect(principal().queryByText('Estoque do Residente')).toBeNull()
   })
 
-  it('Multidisciplinar mostra só Avaliações e Plano, sem as áreas futuras', async () => {
+  it('hub antigo de Multidisciplinar abre Cuidado, sem áreas sem permissão', async () => {
     comPermissoes(TODAS)
     renderEm('/modulos/multidisciplinar')
-    expect(await cardsDoHub('Multidisciplinar')).toEqual(['/avaliacoes', '/plano'])
+    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais', '/intercorrencias', '/passagem', '/avaliacoes', '/plano'])
     for (const area of ['Fisioterapia', 'Nutrição', 'Psicologia', 'Serviço Social', 'Enfermagem']) {
       expect(screen.queryByText(area)).toBeNull()
     }
@@ -143,10 +143,10 @@ describe('UX-00C — sidebar híbrida', () => {
     comPermissoes(TODAS)
     renderEm('/')
 
-    await user.click(await menu().findByRole('link', { name: 'Assistencial' }))
-    expect(await cardsDoHub('Assistencial')).toEqual(['/sinais', '/intercorrencias', '/passagem'])
-    expect(menu().getByRole('button', { name: 'Submenu de Assistencial' }).getAttribute('aria-expanded')).toBe('true')
-    expect(menu().getByRole('link', { name: 'Assistencial' }).getAttribute('aria-current')).toBe('page')
+    await user.click(await menu().findByRole('link', { name: 'Cuidado' }))
+    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais', '/intercorrencias', '/passagem', '/avaliacoes', '/plano'])
+    expect(menu().getByRole('button', { name: 'Submenu de Cuidado' }).getAttribute('aria-expanded')).toBe('true')
+    expect(menu().getByRole('link', { name: 'Cuidado' }).getAttribute('aria-current')).toBe('page')
   })
 
   it('chevron só expande/recolhe, sem navegar', async () => {
@@ -173,11 +173,11 @@ describe('UX-00C — sidebar híbrida', () => {
     expect(item?.getAttribute('aria-current')).toBe('page')
   })
 
-  it('deep link de item relocado (/sinais) abre o grupo Assistencial', async () => {
+  it('deep link de item relocado (/sinais) abre o grupo Cuidado', async () => {
     comPermissoes(TODAS)
     renderEm('/sinais')
     expect(await principal().findByText('tela sinais')).toBeTruthy()
-    expect((await menu().findByRole('button', { name: 'Submenu de Assistencial' })).getAttribute('aria-expanded')).toBe('true')
+    expect((await menu().findByRole('button', { name: 'Submenu de Cuidado' })).getAttribute('aria-expanded')).toBe('true')
   })
 })
 
@@ -203,21 +203,21 @@ describe('UX-00D — navegação inferior e sessão restrita', () => {
     await user.click(mais)
     const sheet = within(await screen.findByRole('dialog', { name: 'Menu de navegação' }))
     expect(mais.getAttribute('aria-expanded')).toBe('true')
-    expect(sheet.getAllByRole('link').map(l => l.getAttribute('href')).filter(h => h?.startsWith('/modulos/'))).toEqual(['/modulos/assistencial'])
+    expect(sheet.getAllByRole('link').map(l => l.getAttribute('href')).filter(h => h?.startsWith('/modulos/'))).toEqual(['/modulos/cuidado'])
 
-    await user.click(sheet.getByRole('link', { name: 'Assistencial' }))
-    expect(await cardsDoHub('Assistencial')).toEqual(['/sinais'])
+    await user.click(sheet.getByRole('link', { name: 'Cuidado' }))
+    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais'])
     expect(screen.queryByRole('dialog', { name: 'Menu de navegação' })).toBeNull()
   })
 
-  it('só sinais_vitais:ler: Assistencial com Sinais Vitais e nada mais', async () => {
+  it('só sinais_vitais:ler: Cuidado com Sinais Vitais e nada mais', async () => {
     comPermissoes(['sinais_vitais:ler'])
-    renderEm('/modulos/assistencial')
+    renderEm('/modulos/cuidado')
 
-    expect(await cardsDoHub('Assistencial')).toEqual(['/sinais'])
+    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais'])
     const hrefs = menu().getAllByRole('link', { hidden: true }).map(l => l.getAttribute('href'))
-    expect(hrefs).toEqual(['/', '/modulos/assistencial', '/sinais'])
-    expect(menu().getAllByRole('button', { name: /^Submenu de/ }).map(b => b.getAttribute('aria-label'))).toEqual(['Submenu de Assistencial'])
+    expect(hrefs).toEqual(['/', '/modulos/cuidado', '/sinais'])
+    expect(menu().getAllByRole('button', { name: /^Submenu de/ }).map(b => b.getAttribute('aria-label'))).toEqual(['Submenu de Cuidado'])
     expect(rapida().queryByRole('link', { name: /Plantão|Residentes|Alertas/ })).toBeNull()
   })
 
@@ -225,5 +225,22 @@ describe('UX-00D — navegação inferior e sessão restrita', () => {
     comPermissoes(['sinais_vitais:ler'])
     renderEm('/modulos/residentes')
     expect(await principal().findByText('Sem acesso a este módulo')).toBeTruthy()
+  })
+})
+
+describe('UX-NAV-1 — atalho da busca', () => {
+  it('Ctrl+K abre a busca em qualquer tela; o botão também', async () => {
+    const user = userEvent.setup()
+    comPermissoes(['sinais_vitais:ler'])
+    renderEm('/sinais')
+    await principal().findByText('tela sinais')
+
+    await user.keyboard('{Control>}k{/Control}')
+    expect(await screen.findByRole('dialog', { name: 'Buscar' })).toBeTruthy()
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Buscar' })).toBeNull()
+
+    await user.click(screen.getAllByRole('button', { name: /Buscar residente ou tela/ })[0])
+    expect(await screen.findByRole('dialog', { name: 'Buscar' })).toBeTruthy()
   })
 })

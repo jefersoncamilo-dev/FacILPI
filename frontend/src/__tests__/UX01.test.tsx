@@ -115,7 +115,7 @@ describe('UX-01 — navegação reflete as permissões do contexto', () => {
     // UX-00B: grupos recolhidos; `hidden: true` alcança itens de grupo fechado.
     expect(await menu().findByRole('button', { name: 'Submenu de Residentes' })).toBeTruthy()
     expect(menu().getByRole('link', { name: /Início/ })).toBeTruthy()
-    expect(menu().getByRole('button', { name: 'Submenu de Assistencial' })).toBeTruthy()
+    expect(menu().getByRole('button', { name: 'Submenu de Cuidado' })).toBeTruthy()
     // UX-00C: "Residentes" é o hub do módulo e também a lista.
     expect(menu().getAllByRole('link', { name: 'Residentes', hidden: true }).map(l => l.getAttribute('href'))).toEqual(['/modulos/residentes', '/residentes'])
     expect(menu().getByRole('link', { name: /Sinais Vitais/, hidden: true })).toBeTruthy()
@@ -189,10 +189,10 @@ describe('UX-00B — sidebar em accordion', () => {
     renderShell()
 
     await user.click(await menu().findByRole('button', { name: 'Submenu de Residentes' }))
-    await user.click(menu().getByRole('button', { name: 'Submenu de Assistencial' }))
+    await user.click(menu().getByRole('button', { name: 'Submenu de Cuidado' }))
     expect(menu().getByRole('button', { name: 'Submenu de Residentes' }).getAttribute('aria-expanded')).toBe('false')
-    expect(menu().getByRole('button', { name: 'Submenu de Assistencial' }).getAttribute('aria-expanded')).toBe('true')
-    expect(sessionStorage.getItem('facilpi:nav:grupo')).toBe('assistencial')
+    expect(menu().getByRole('button', { name: 'Submenu de Cuidado' }).getAttribute('aria-expanded')).toBe('true')
+    expect(sessionStorage.getItem('facilpi:nav:grupo')).toBe('cuidado')
   })
 
   it('o grupo da rota ativa abre sozinho e destaca módulo e item', async () => {
@@ -201,8 +201,8 @@ describe('UX-00B — sidebar em accordion', () => {
     mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: todas } } as any)
     renderShell(<div>conteúdo</div>, '/sinais')
 
-    const assistencial = await menu().findByRole('button', { name: 'Submenu de Assistencial' })
-    expect(assistencial.getAttribute('aria-expanded')).toBe('true')
+    const cuidado = await menu().findByRole('button', { name: 'Submenu de Cuidado' })
+    expect(cuidado.getAttribute('aria-expanded')).toBe('true')
     expect(menu().getByRole('button', { name: 'Submenu de Residentes' }).getAttribute('aria-expanded')).toBe('false')
     expect(menu().getByRole('link', { name: 'Sinais Vitais' }).getAttribute('aria-current')).toBe('page')
   })

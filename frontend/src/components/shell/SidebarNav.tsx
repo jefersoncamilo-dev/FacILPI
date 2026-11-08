@@ -79,8 +79,11 @@ export function SecoesNavegacao({ pode }: { pode: Pode }) {
   const grupoAtivo = atual?.modulo.tipo === 'grupo' ? atual.modulo.id : null
   const { aberto, alternar } = useGrupoAberto(grupos, grupoAtivo)
 
+  const temLink = modulos.some(m => m.tipo === 'link')
   return (
     <ul className="space-y-0.5">
+      {/* UX-NAV-1: os destinos do dia formam a seção "Hoje". */}
+      {temLink && <li aria-hidden="true" className={rotuloSecao}>Hoje</li>}
       {modulos.map(modulo =>
         modulo.tipo === 'link' ? (
           <li key={modulo.id}><ItemRaiz modulo={modulo} /></li>
@@ -102,6 +105,7 @@ export function SecoesNavegacao({ pode }: { pode: Pode }) {
 }
 
 const linha = 'flex min-h-[44px] items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors'
+const rotuloSecao = 'px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground'
 
 function ItemRaiz({ modulo }: { modulo: ModuloLink }) {
   const Icone = modulo.icon
@@ -189,8 +193,12 @@ export function SidebarGrupo({
       )}
 
       <ul id={idLista} hidden={!aberto} className="ml-[21px] mt-0.5 space-y-0.5 border-l border-border pl-2">
-        {itens.map(item => (
+        {itens.map((item, n) => (
           <li key={item.id}>
+            {/* Subtítulo quando a seção do item muda (Cuidado: No turno / Planejamento). */}
+            {item.secao && item.secao !== itens[n - 1]?.secao && (
+              <p aria-hidden="true" className="px-3 pb-0.5 pt-2 text-xs font-semibold text-muted-foreground">{item.secao}</p>
+            )}
             <NavLink
               to={item.to}
               className={({ isActive }) =>

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, Navigate, NavLink, useLocation } from 'react-router'
-import { Bell, ChevronRight, ClipboardList, KeyRound, Ellipsis, LayoutDashboard, Loader2, LogOut, Menu, Palette, Settings, Users } from 'lucide-react'
+import { Bell, ChevronRight, ClipboardList, KeyRound, Ellipsis, LayoutDashboard, Loader2, LogOut, Menu, Palette, Search, Settings, Users } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { PermissoesProvider, usePermissoes } from '../context/PermissoesContext'
 import { mensagemDeErro } from '../services/api'
@@ -12,6 +12,7 @@ import { SecoesNavegacao } from './shell/SidebarNav'
 import { SinoAlertas, totalDoSino, useSinoAlertas, type EstadoSino } from './shell/SinoAlertas'
 import { Emergencia } from './shell/Emergencia'
 import { AparenciaDialog } from './shell/AparenciaDialog'
+import { BuscaGlobal } from './shell/BuscaGlobal'
 import { PasswordInput } from './auth/PasswordInput'
 import { Button } from './ui/button'
 import { Label } from './ui/input'
@@ -52,12 +53,26 @@ function Shell({ children }: { children: ReactNode }) {
   const [menuAberto, setMenuAberto] = useState(false)
   const [senhaAberta, setSenhaAberta] = useState(false)
   const [aparenciaAberta, setAparenciaAberta] = useState(false)
+  const [buscaAberta, setBuscaAberta] = useState(false)
   const { activeContext } = useAuth()
   const { pathname } = useLocation()
   const sino = useSinoAlertas()
 
   // Navegar fecha o menu mobile (inclusive pelo botão voltar do navegador).
   useEffect(() => setMenuAberto(false), [pathname])
+
+  // UX-NAV-1: Ctrl+K (ou ⌘K) abre a busca de qualquer tela.
+  useEffect(() => {
+    function atalho(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setMenuAberto(false)
+        setBuscaAberta(true)
+      }
+    }
+    window.addEventListener('keydown', atalho)
+    return () => window.removeEventListener('keydown', atalho)
+  }, [])
 
   function abrirSenha() {
     setMenuAberto(false)
@@ -87,6 +102,9 @@ function Shell({ children }: { children: ReactNode }) {
             {contextTitle(activeContext)}
           </span>
           <div className="ml-auto flex items-center gap-1.5 sm:ml-0">
+            <Button variant="ghost" size="icon" aria-label="Buscar residente ou tela" onClick={() => setBuscaAberta(true)}>
+              <Search className="size-5!" aria-hidden="true" />
+            </Button>
             <Emergencia compacto />
             <SinoAlertas {...sino} />
           </div>
@@ -96,6 +114,16 @@ function Shell({ children }: { children: ReactNode }) {
         <header className="glass sticky top-3 z-30 mx-5 mt-3 hidden h-16 items-center gap-4 rounded-card px-6 xl:flex">
           <Trilha pathname={pathname} />
           <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setBuscaAberta(true)}
+              aria-keyshortcuts="Control+K"
+              className="flex min-h-[44px] items-center gap-2 rounded-full border border-border bg-card px-4 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <Search className="size-4" aria-hidden="true" />
+              Buscar residente ou tela
+              <kbd className="rounded bg-muted px-1.5 text-xs font-medium" aria-hidden="true">Ctrl K</kbd>
+            </button>
             <Emergencia />
             <SinoAlertas {...sino} />
             <ContextSwitcher compact />
@@ -115,6 +143,7 @@ function Shell({ children }: { children: ReactNode }) {
         </SheetContent>
       </Sheet>
 
+      <BuscaGlobal open={buscaAberta} onOpenChange={setBuscaAberta} />
       <AparenciaDialog open={aparenciaAberta} onOpenChange={setAparenciaAberta} />
       <AlterarSenhaDialog open={senhaAberta} onOpenChange={setSenhaAberta} />
     </div>

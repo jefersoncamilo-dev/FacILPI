@@ -19,7 +19,6 @@ import {
   Package,
   Pill,
   Settings,
-  Stethoscope,
   Syringe,
   TriangleAlert,
   Activity,
@@ -57,6 +56,8 @@ interface ItemBase {
   icon: LucideIcon
   /** Uma linha para o card do hub. */
   descricao: string
+  /** Subtítulo dentro do grupo (ex.: Cuidado › "No turno" / "Planejamento"). */
+  secao?: string
 }
 
 export interface ItemAtivo extends ItemBase {
@@ -100,6 +101,7 @@ function dominioMultidisciplinar(id: string, label: string, icon: LucideIcon, de
 }
 
 export const MODULOS: ModuloNav[] = [
+  // UX-NAV-1: seção "Hoje" — destinos do dia, na raiz.
   { tipo: 'link', id: 'inicio', label: 'Início', icon: LayoutDashboard, status: 'ativo', to: '/' },
   { tipo: 'link', id: 'alertas', label: 'Central de Alertas', icon: BellRing, status: 'ativo', to: '/alertas', permissao: 'alertas:ler' },
   { tipo: 'link', id: 'plantao', label: 'Meu Plantão', icon: ClipboardList, status: 'ativo', to: '/plantao', permissao: 'plantao:ler' },
@@ -109,42 +111,32 @@ export const MODULOS: ModuloNav[] = [
     label: 'Residentes',
     icon: Users,
     status: 'ativo',
-    descricao: 'Cadastro, entrada e acomodação dos residentes.',
+    descricao: 'Cadastro, entrada, acomodação e documentos dos residentes.',
     itens: [
       { id: 'residentes', label: 'Residentes', icon: Users, status: 'ativo', to: '/residentes', permissao: 'residentes:ler', descricao: 'Lista e prontuário de cada residente.' },
       { id: 'admissoes', label: 'Admissões', icon: UserPlus, status: 'ativo', to: '/admissoes', permissao: 'admissoes:ler', descricao: 'Entradas em andamento e concluídas.' },
-      { id: 'documentos', label: 'Documentos', icon: FileText, status: 'ativo', to: '/documentos', permissao: 'documentos:ler', descricao: 'Documentos dos residentes e validação.' },
       { id: 'quartos', label: 'Quartos e Leitos', icon: BedDouble, status: 'ativo', to: '/quartos', permissao: 'quartos_leitos:ler', descricao: 'Ocupação, leitos livres e ausências.' },
+      { id: 'documentos', label: 'Documentos', icon: FileText, status: 'ativo', to: '/documentos', permissao: 'documentos:ler', descricao: 'Documentos dos residentes e validação.' },
       { id: 'estoque', label: 'Estoque do Residente', icon: Package, status: 'futuro', permissaoPlanejada: 'estoque_residente:ler', descricao: 'Itens pessoais e de consumo de cada residente.' },
     ],
   },
   {
     tipo: 'grupo',
-    id: 'assistencial',
-    label: 'Assistencial',
+    id: 'cuidado',
+    label: 'Cuidado',
     icon: HeartPulse,
     status: 'ativo',
-    descricao: 'Rotina do cuidado: registros, ocorrências e troca de turno.',
+    descricao: 'O que se faz no turno e o planejamento do cuidado.',
     itens: [
-      { id: 'agenda', label: 'Agenda', icon: CalendarClock, status: 'ativo', to: '/agenda', permissao: 'agenda:ler', descricao: 'Consultas e compromissos dos residentes.' },
-      { id: 'cuidados', label: 'Cuidados', icon: HandHeart, status: 'ativo', to: '/cuidados', permissao: 'programacoes:ler', descricao: 'Cuidados diários programados.' },
-      { id: 'sinais', label: 'Sinais Vitais', icon: HeartPulse, status: 'ativo', to: '/sinais', permissao: 'sinais_vitais:ler', descricao: 'Aferições e histórico por residente.' },
-      { id: 'intercorrencias', label: 'Intercorrências', icon: TriangleAlert, status: 'ativo', to: '/intercorrencias', permissao: 'intercorrencias:ler', descricao: 'Ocorrências registradas e acompanhamento.' },
+      { id: 'cuidados', secao: 'No turno', label: 'Cuidados', icon: HandHeart, status: 'ativo', to: '/cuidados', permissao: 'programacoes:ler', descricao: 'Cuidados diários programados.' },
+      { id: 'sinais', secao: 'No turno', label: 'Sinais Vitais', icon: HeartPulse, status: 'ativo', to: '/sinais', permissao: 'sinais_vitais:ler', descricao: 'Aferições e histórico por residente.' },
+      { id: 'intercorrencias', secao: 'No turno', label: 'Intercorrências', icon: TriangleAlert, status: 'ativo', to: '/intercorrencias', permissao: 'intercorrencias:ler', descricao: 'Ocorrências registradas e acompanhamento.' },
       // G8: mesma chave do backend (#125); todo template com plantao:ler também tem esta.
-      { id: 'passagem', label: 'Passagem de Plantão', icon: ArrowLeftRight, status: 'ativo', to: '/passagem', permissao: 'passagem_plantao:ler', descricao: 'Resumo do turno para quem assume.' },
-    ],
-  },
-  {
-    tipo: 'grupo',
-    id: 'multidisciplinar',
-    label: 'Multidisciplinar',
-    icon: Stethoscope,
-    status: 'ativo',
-    descricao: 'Avaliações e plano de cuidados compartilhados entre as áreas.',
-    itens: [
-      { id: 'avaliacoes', label: 'Avaliações', icon: ClipboardCheck, status: 'ativo', to: '/avaliacoes', permissao: 'avaliacoes:ler', descricao: 'Avaliações e grau de dependência.' },
-      { id: 'pia', label: 'PIA', icon: FileText, status: 'ativo', to: '/pia', permissao: 'pia:ler', descricao: 'Plano Individual de Atendimento do residente.' },
-      { id: 'plano', label: 'Plano de Cuidados', icon: NotebookPen, status: 'ativo', to: '/plano', permissao: 'planos_cuidados:ler', descricao: 'PAIS: objetivos, ações e revisões.' },
+      { id: 'passagem', secao: 'No turno', label: 'Passagem de Plantão', icon: ArrowLeftRight, status: 'ativo', to: '/passagem', permissao: 'passagem_plantao:ler', descricao: 'Resumo do turno para quem assume.' },
+      { id: 'agenda', secao: 'No turno', label: 'Agenda', icon: CalendarClock, status: 'ativo', to: '/agenda', permissao: 'agenda:ler', descricao: 'Consultas e compromissos dos residentes.' },
+      { id: 'avaliacoes', secao: 'Planejamento', label: 'Avaliações', icon: ClipboardCheck, status: 'ativo', to: '/avaliacoes', permissao: 'avaliacoes:ler', descricao: 'Avaliações e grau de dependência.' },
+      { id: 'pia', secao: 'Planejamento', label: 'PIA', icon: FileText, status: 'ativo', to: '/pia', permissao: 'pia:ler', descricao: 'Plano Individual de Atendimento do residente.' },
+      { id: 'plano', secao: 'Planejamento', label: 'Plano de Cuidados', icon: NotebookPen, status: 'ativo', to: '/plano', permissao: 'planos_cuidados:ler', descricao: 'PAIS: objetivos, ações e revisões.' },
       dominioMultidisciplinar('fisioterapia', 'Fisioterapia', Activity, 'Agenda, atendimentos e evoluções da fisioterapia.'),
       dominioMultidisciplinar('nutricao', 'Nutrição', Apple, 'Avaliações nutricionais e plano alimentar.'),
       dominioMultidisciplinar('psicologia', 'Psicologia', Brain, 'Atendimentos e acompanhamentos psicológicos.'),
@@ -154,12 +146,13 @@ export const MODULOS: ModuloNav[] = [
   },
   {
     tipo: 'grupo',
-    id: 'farmacia',
-    label: 'Farmácia',
+    id: 'medicamentos',
+    label: 'Medicamentos e estoque',
     icon: Pill,
     status: 'ativo',
-    descricao: 'Estoque, lotes e validades com histórico de movimentos.',
+    descricao: 'Prescrições, estoque, lotes e validades.',
     itens: [
+      { id: 'medicacao', label: 'Medicação', icon: Pill, status: 'ativo', to: '/medicacao', permissao: 'prescricoes:ler', descricao: 'Prescrições de cada residente.' },
       { id: 'estoque', label: 'Estoque', icon: Boxes, status: 'ativo', to: '/estoque', permissao: 'estoque:ler', descricao: 'Saldo por lote, validade e movimentos.' },
     ],
   },
@@ -178,39 +171,32 @@ export const MODULOS: ModuloNav[] = [
   },
   {
     tipo: 'grupo',
-    id: 'gestao',
-    label: 'Gestão',
+    id: 'instituicao',
+    label: 'Instituição',
     icon: Briefcase,
     status: 'ativo',
-    descricao: 'Indicadores e processos da instituição.',
+    descricao: 'Relatórios, mensalidades, auditoria e dados da instituição.',
     itens: [
+      { id: 'resumo', label: 'Relatórios', icon: BarChart3, status: 'ativo', to: '/relatorios', permissao: 'residentes:ler', descricao: 'Residentes, intercorrências e medicação no período.' },
       { id: 'mensalidades', label: 'Mensalidades', icon: FileText, status: 'ativo', to: '/financeiro', permissao: 'financeiro:ler', descricao: 'Controle manual de mensalidades por residente.' },
-    ],
-  },
-  {
-    tipo: 'grupo',
-    id: 'relatorios',
-    label: 'Relatórios',
-    icon: BarChart3,
-    status: 'ativo',
-    descricao: 'Relatórios operacionais e assistenciais.',
-    itens: [
-      { id: 'resumo', label: 'Resumo da instituição', icon: BarChart3, status: 'ativo', to: '/relatorios', permissao: 'residentes:ler', descricao: 'Residentes, intercorrências e medicação no período.' },
-    ],
-  },
-  {
-    tipo: 'grupo',
-    id: 'configuracoes',
-    label: 'Configurações',
-    icon: Settings,
-    status: 'ativo',
-    descricao: 'Preferências da instituição.',
-    itens: [
-      { id: 'instituicao', label: 'Instituição', icon: Settings, status: 'ativo', to: '/configuracoes', permissao: 'configuracoes:ler', descricao: 'Dados, contato, licença e fuso.' },
       { id: 'auditoria', label: 'Auditoria', icon: History, status: 'ativo', to: '/auditoria', permissao: 'auditoria:ler', descricao: 'Quem fez o quê e quando.' },
+      { id: 'configuracoes', label: 'Configurações', icon: Settings, status: 'ativo', to: '/configuracoes', permissao: 'configuracoes:ler', descricao: 'Dados, contato, licença e fuso.' },
     ],
   },
 ]
+
+/**
+ * UX-NAV-1: hubs antigos (links salvos, favoritos) continuam abrindo e
+ * levam ao hub da seção nova. Nenhuma URL de tela mudou.
+ */
+export const SLUGS_ANTIGOS: Record<string, string> = {
+  assistencial: 'cuidado',
+  multidisciplinar: 'cuidado',
+  farmacia: 'medicamentos',
+  gestao: 'instituicao',
+  relatorios: 'instituicao',
+  configuracoes: 'instituicao',
+}
 
 /** Endereço do hub de um módulo-grupo. */
 export function rotaDoHub(modulo: ModuloGrupo): string {
@@ -239,7 +225,8 @@ export function modulosVisiveis(pode: Pode): ModuloNav[] {
  * permitido NÃO vira `null` — o hub mostra "Sem acesso a este módulo".
  */
 export function moduloPorSlug(slug: string | undefined): ModuloGrupo | null {
-  const modulo = MODULOS.find(m => m.id === slug)
+  const id = slug ? SLUGS_ANTIGOS[slug] ?? slug : slug
+  const modulo = MODULOS.find(m => m.id === id)
   return modulo && modulo.tipo === 'grupo' && modulo.status === 'ativo' ? modulo : null
 }
 

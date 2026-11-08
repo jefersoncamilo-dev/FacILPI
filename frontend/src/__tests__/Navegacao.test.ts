@@ -19,8 +19,7 @@ const ids = (pode: Pode) => modulosVisiveis(pode).map(m => m.id)
 describe('UX-00A — modelo de navegação', () => {
   it('raiz: Início, Central de Alertas e Meu Plantão; grupos na ordem da arquitetura', () => {
     expect(MODULOS.map(m => m.id)).toEqual([
-      'inicio', 'alertas', 'plantao', 'residentes', 'assistencial', 'multidisciplinar',
-      'farmacia', 'equipe', 'gestao', 'relatorios', 'configuracoes',
+      'inicio', 'alertas', 'plantao', 'residentes', 'cuidado', 'medicamentos', 'equipe', 'instituicao',
     ])
   })
 
@@ -39,30 +38,30 @@ describe('UX-00A — modelo de navegação', () => {
     )
     expect(destinos.sort()).toEqual([
       '/', '/admissoes', '/agenda', '/alertas', '/auditoria', '/avaliacoes', '/configuracoes', '/cuidados', '/documentos', '/equipe', '/escala', '/estoque', '/financeiro',
-      '/intercorrencias',
+      '/intercorrencias', '/medicacao',
       '/multidisciplinar/enfermagem', '/multidisciplinar/fisioterapia', '/multidisciplinar/nutricao', '/multidisciplinar/psicologia', '/multidisciplinar/servico_social',
       '/passagem', '/pia', '/plano', '/plantao', '/quartos', '/relatorios', '/residentes', '/sinais',
     ])
   })
 
   it('itens e módulos futuros nunca aparecem, nem com permissões indisponíveis', () => {
-    expect(ids(tudo)).toEqual(['inicio', 'alertas', 'plantao', 'residentes', 'assistencial', 'multidisciplinar', 'farmacia', 'equipe', 'gestao', 'relatorios', 'configuracoes'])
+    expect(ids(tudo)).toEqual(['inicio', 'alertas', 'plantao', 'residentes', 'cuidado', 'medicamentos', 'equipe', 'instituicao'])
     for (const modulo of modulosVisiveis(tudo)) {
       if (modulo.tipo !== 'grupo') continue
       for (const item of itensVisiveis(modulo, tudo)) expect(item.status).toBe('ativo')
     }
     expect(itensVisiveis(grupo('residentes'), tudo).map(i => i.id)).not.toContain('estoque')
-    expect(itensVisiveis(grupo('farmacia'), tudo).map(i => i.id)).toEqual(['estoque'])
+    expect(itensVisiveis(grupo('medicamentos'), tudo).map(i => i.id)).toEqual(['medicacao', 'estoque'])
   })
 
   it('só mostra o que a sessão pode abrir e esconde grupo sem item permitido', () => {
     const pode = com('sinais_vitais:ler')
-    expect(ids(pode)).toEqual(['inicio', 'assistencial'])
-    expect(itensVisiveis(grupo('assistencial'), pode).map(i => i.id)).toEqual(['sinais'])
+    expect(ids(pode)).toEqual(['inicio', 'cuidado'])
+    expect(itensVisiveis(grupo('cuidado'), pode).map(i => i.id)).toEqual(['sinais'])
   })
 
-  it('Avaliações e Plano de Cuidados ficam em Multidisciplinar com as mesmas permissões', () => {
-    const itens = itensVisiveis(grupo('multidisciplinar'), com('avaliacoes:ler', 'planos_cuidados:ler'))
+  it('Avaliações e Plano de Cuidados ficam em Cuidado › Planejamento com as mesmas permissões', () => {
+    const itens = itensVisiveis(grupo('cuidado'), com('avaliacoes:ler', 'planos_cuidados:ler'))
     expect(itens.map(i => [i.to, i.permissao])).toEqual([
       ['/avaliacoes', 'avaliacoes:ler'],
       ['/plano', 'planos_cuidados:ler'],
@@ -70,20 +69,21 @@ describe('UX-00A — modelo de navegação', () => {
   })
 
   it('cada profissão é um domínio próprio, sem chave compartilhada', () => {
-    const areas = grupo('multidisciplinar').itens.filter(i => i.status === 'ativo' && i.to.startsWith('/multidisciplinar/'))
+    const areas = grupo('cuidado').itens.filter(i => i.status === 'ativo' && i.to.startsWith('/multidisciplinar/'))
     expect(areas.map(i => i.id)).toEqual(['fisioterapia', 'nutricao', 'psicologia', 'servico_social', 'enfermagem'])
     const chaves = areas.map(i => (i.status === 'ativo' ? i.permissao : undefined))
     expect(new Set(chaves).size).toBe(areas.length)
     areas.forEach((area, n) => expect(chaves[n]).toBe(`multidisciplinar.${area.id}:ler`))
   })
 
-  it('Farmácia é domínio separado e Estoque do Residente fica em Residentes', () => {
-    expect(grupo('farmacia').status).toBe('ativo')
+  it('Medicamentos e estoque é seção própria e Estoque do Residente fica em Residentes', () => {
+    expect(grupo('medicamentos').status).toBe('ativo')
+    expect(itensVisiveis(grupo('medicamentos'), com('prescricoes:ler')).map(i => i.to)).toEqual(['/medicacao'])
     expect(grupo('residentes').itens.find(i => i.id === 'estoque')?.status).toBe('futuro')
   })
 
   it('G8: Passagem de Plantão usa passagem_plantao:ler, a chave do backend', () => {
-    const passagem = itensVisiveis(grupo('assistencial'), tudo).find(i => i.id === 'passagem')
+    const passagem = itensVisiveis(grupo('cuidado'), tudo).find(i => i.id === 'passagem')
     expect(passagem?.permissao).toBe('passagem_plantao:ler')
   })
 })
@@ -93,7 +93,7 @@ describe('UX-00A — rota atual e hubs', () => {
     const atual = moduloDaRota('/residentes/abc')
     expect(atual?.modulo.id).toBe('residentes')
     expect(atual?.item?.to).toBe('/residentes')
-    expect(moduloDaRota('/plano/xyz')?.modulo.id).toBe('multidisciplinar')
+    expect(moduloDaRota('/plano/xyz')?.modulo.id).toBe('cuidado')
     expect(moduloDaRota('/escala')?.modulo.id).toBe('equipe')
   })
 
@@ -104,7 +104,7 @@ describe('UX-00A — rota atual e hubs', () => {
   })
 
   it('hub de grupo ativo resolve sem item; slug inválido, futuro ou de link não', () => {
-    expect(moduloDaRota('/modulos/assistencial')).toMatchObject({ modulo: { id: 'assistencial' }, item: null })
+    expect(moduloDaRota('/modulos/cuidado')).toMatchObject({ modulo: { id: 'cuidado' }, item: null })
     expect(moduloPorSlug('residentes')?.id).toBe('residentes')
         expect(moduloPorSlug('plantao')).toBeNull()
     expect(moduloPorSlug('nao-existe')).toBeNull()
@@ -115,5 +115,23 @@ describe('UX-00A — rota atual e hubs', () => {
     const modulo = moduloPorSlug('equipe')
     expect(modulo).not.toBeNull()
     expect(itensVisiveis(modulo!, com())).toEqual([])
+  })
+})
+
+describe('UX-NAV-1 — seções da rotina', () => {
+  it('Cuidado separa "No turno" de "Planejamento", nessa ordem', () => {
+    const secoes = grupo('cuidado').itens.filter(i => i.status === 'ativo').map(i => i.secao ?? 'Planejamento')
+    const primeiroPlanejamento = secoes.indexOf('Planejamento')
+    expect(secoes.slice(0, primeiroPlanejamento).every(s => s === 'No turno')).toBe(true)
+    expect(secoes.slice(primeiroPlanejamento).every(s => s === 'Planejamento')).toBe(true)
+  })
+
+  it('hubs antigos resolvem para a seção nova', () => {
+    expect(moduloPorSlug('assistencial')?.id).toBe('cuidado')
+    expect(moduloPorSlug('multidisciplinar')?.id).toBe('cuidado')
+    expect(moduloPorSlug('farmacia')?.id).toBe('medicamentos')
+    expect(moduloPorSlug('gestao')?.id).toBe('instituicao')
+    expect(moduloPorSlug('relatorios')?.id).toBe('instituicao')
+    expect(moduloPorSlug('configuracoes')?.id).toBe('instituicao')
   })
 })
