@@ -428,13 +428,19 @@ describe('Prontuário — entrada preferencial no contexto do residente', () => 
     )
   }
 
+  /** UX-NAV-3: o registro na ficha é um menu "+ Registrar" com o residente fixo. */
+  async function abrirRegistro(user: ReturnType<typeof userEvent.setup>, opcao: 'Sinais vitais' | 'Intercorrência') {
+    await user.click(await screen.findByRole('button', { name: '+ Registrar' }))
+    await user.click(await screen.findByRole('menuitem', { name: opcao }))
+  }
+
   it('24. registra com o residente da rota, sem deixar trocá-lo', async () => {
     const user = userEvent.setup()
     respondeProntuario()
     mockPost.mockResolvedValueOnce({ data: { id: 'sv-novo' } } as any)
     renderProntuario()
 
-    await user.click(await screen.findByRole('button', { name: '+ Registrar sinais vitais' }))
+    await abrirRegistro(user, 'Sinais vitais')
     const dialog = screen.getByRole('dialog', { name: 'Registrar sinais vitais' })
 
     expect(within(dialog).getByText('Maria da Silva')).toBeTruthy()
@@ -454,7 +460,7 @@ describe('Prontuário — entrada preferencial no contexto do residente', () => 
     mockPost.mockResolvedValueOnce({ data: { id: 'sv-novo' } } as any)
     renderProntuario()
 
-    await user.click(await screen.findByRole('button', { name: '+ Registrar sinais vitais' }))
+    await abrirRegistro(user, 'Sinais vitais')
     const dialog = screen.getByRole('dialog', { name: 'Registrar sinais vitais' })
     await user.type(within(dialog).getByLabelText(/Temperatura/), '36,9')
     await user.click(within(dialog).getByRole('button', { name: 'Registrar' }))
@@ -473,7 +479,7 @@ describe('Prontuário — entrada preferencial no contexto do residente', () => 
     )
     renderProntuario()
 
-    await user.click(await screen.findByRole('button', { name: '+ Registrar sinais vitais' }))
+    await abrirRegistro(user, 'Sinais vitais')
     const dialog = screen.getByRole('dialog', { name: 'Registrar sinais vitais' })
     await user.type(within(dialog).getByLabelText(/Temperatura/), '36,9')
     await user.click(within(dialog).getByRole('button', { name: 'Registrar' }))
@@ -482,7 +488,10 @@ describe('Prontuário — entrada preferencial no contexto do residente', () => 
     await user.click(within(dialog).getByRole('button', { name: 'Fechar' }))
 
     expect(await screen.findByText('Seu perfil não permite registrar sinais vitais. A consulta continua disponível.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '+ Registrar sinais vitais' })).toBeNull()
+    // A opção some do menu; a intercorrência continua oferecida.
+    await user.click(screen.getByRole('button', { name: '+ Registrar' }))
+    expect(screen.queryByRole('menuitem', { name: 'Sinais vitais' })).toBeNull()
+    expect(screen.getByRole('menuitem', { name: 'Intercorrência' })).toBeTruthy()
   })
 })
 

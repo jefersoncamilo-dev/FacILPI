@@ -566,18 +566,23 @@ describe('Prontuário — registro no contexto do residente', () => {
     )
   }
 
-  it('27. as duas ações convivem com hierarquia e empilham no celular', async () => {
+  /** UX-NAV-3: o registro na ficha é um menu "+ Registrar" com o residente fixo. */
+  async function abrirRegistro(user: ReturnType<typeof userEvent.setup>, opcao: 'Sinais vitais' | 'Intercorrência') {
+    await user.click(await screen.findByRole('button', { name: '+ Registrar' }))
+    await user.click(await screen.findByRole('menuitem', { name: opcao }))
+  }
+
+  it('27. UX-NAV-3: uma ação primária "Registrar" reúne as duas opções e empilha no celular', async () => {
+    const user = userEvent.setup()
     respondeProntuario()
     renderProntuario()
 
-    const sinais = await screen.findByRole('button', { name: '+ Registrar sinais vitais' })
-    const intercorrencia = screen.getByRole('button', { name: '+ Registrar intercorrência' })
-    expect(sinais.className).toContain('btn-primary')
-    // UX-11 (#101): as duas são ações frequentes e ficam preenchidas; a
-    // hierarquia agora é de cor — rotina em verde, atenção em laranja.
-    expect(intercorrencia.className).toContain('btn-alerta')
-    expect(sinais.parentElement?.className).toContain('flex-col')
-    expect(sinais.parentElement?.className).toContain('sm:flex-row')
+    const registrar = await screen.findByRole('button', { name: '+ Registrar' })
+    expect(registrar.className).toContain('btn-primary')
+    expect(registrar.parentElement?.className).toContain('flex-col')
+    expect(registrar.parentElement?.className).toContain('sm:flex-row')
+    await user.click(registrar)
+    expect((await screen.findAllByRole('menuitem')).map(i => i.textContent)).toEqual(['Sinais vitais', 'Intercorrência'])
   })
 
   it('28. registra com o residente da rota, sem deixar trocá-lo', async () => {
@@ -586,7 +591,7 @@ describe('Prontuário — registro no contexto do residente', () => {
     mockPost.mockResolvedValueOnce({ data: { id: 'int-novo' } } as any)
     renderProntuario()
 
-    await user.click(await screen.findByRole('button', { name: '+ Registrar intercorrência' }))
+    await abrirRegistro(user, 'Intercorrência')
     const dialog = screen.getByRole('dialog', { name: 'Registrar intercorrência' })
 
     expect(within(dialog).getByText('Maria da Silva')).toBeTruthy()
@@ -606,7 +611,7 @@ describe('Prontuário — registro no contexto do residente', () => {
     mockPost.mockResolvedValueOnce({ data: { id: 'int-novo' } } as any)
     renderProntuario()
 
-    await user.click(await screen.findByRole('button', { name: '+ Registrar intercorrência' }))
+    await abrirRegistro(user, 'Intercorrência')
     const dialog = screen.getByRole('dialog', { name: 'Registrar intercorrência' })
     await user.type(within(dialog).getByLabelText('Tipo'), 'Queda')
     await user.click(within(dialog).getByRole('button', { name: 'Registrar' }))
@@ -623,7 +628,7 @@ describe('Prontuário — registro no contexto do residente', () => {
     mockPost.mockRejectedValueOnce(erroHttp(403, { code: 'PERMISSION_DENIED', message: 'Permissão não autorizada' }))
     renderProntuario()
 
-    await user.click(await screen.findByRole('button', { name: '+ Registrar intercorrência' }))
+    await abrirRegistro(user, 'Intercorrência')
     const dialog = screen.getByRole('dialog', { name: 'Registrar intercorrência' })
     await user.type(within(dialog).getByLabelText('Tipo'), 'Queda')
     await user.click(within(dialog).getByRole('button', { name: 'Registrar' }))
@@ -632,8 +637,9 @@ describe('Prontuário — registro no contexto do residente', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Fechar' }))
 
     expect(await screen.findByText('Seu perfil não permite registrar intercorrências. A consulta continua disponível.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '+ Registrar intercorrência' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: '+ Registrar' }))
+    expect(screen.queryByRole('menuitem', { name: 'Intercorrência' })).toBeNull()
     // A capacidade de sinais vitais é independente e continua oferecida.
-    expect(screen.getByRole('button', { name: '+ Registrar sinais vitais' })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: 'Sinais vitais' })).toBeTruthy()
   })
 })
