@@ -7,6 +7,9 @@ import { AvatarResidente } from '../residente/AvatarResidente'
 import { getResidentesResumo, type ResidenteResumo } from '../../services/plantao'
 import { contem, normalizar } from '../../lib/texto'
 import { cn } from '../../lib/utils'
+import { SeloGrau } from '../residente/SeloGrau'
+import { useGrausAtivos } from '../../hooks/useGrausAtivos'
+import { compararPorGrau } from '../../lib/grau'
 import { itensVisiveis, modulosVisiveis, type Pode } from './navegacao'
 
 /**
@@ -58,6 +61,8 @@ function ConteudoBusca({ onFechar }: { onFechar: () => void }) {
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
   const [ativo, setAtivo] = useState(0)
+  // UX-GRAU: grau oficial (só com grau_dependencia:ler) para círculo, selo e ordem.
+  const { grauDe } = useGrausAtivos()
 
   useEffect(() => {
     if (!podeResidentes) return
@@ -71,6 +76,8 @@ function ConteudoBusca({ onFechar }: { onFechar: () => void }) {
     if (vazio) return []
     const r: Resultado[] = residentes
       .filter(x => contem(x.nome, termo))
+      // Entre os que casam, prioridade de atenção: sem grau, III, II, I (estável).
+      .sort((a, b) => compararPorGrau(grauDe(a.id), grauDe(b.id)))
       .slice(0, LIMITE)
       .map(x => ({ tipo: 'residente', id: `r-${x.id}`, to: `/residentes/${x.id}`, residente: x }))
     const t: Resultado[] = telas
@@ -78,7 +85,7 @@ function ConteudoBusca({ onFechar }: { onFechar: () => void }) {
       .slice(0, LIMITE)
       .map(x => ({ tipo: 'tela', id: `t-${x.to}`, to: x.to, tela: x }))
     return [...r, ...t]
-  }, [vazio, residentes, telas, termo])
+  }, [vazio, residentes, telas, termo, grauDe])
 
   useEffect(() => setAtivo(0), [termo])
 
@@ -134,8 +141,9 @@ function ConteudoBusca({ onFechar }: { onFechar: () => void }) {
               <Grupo titulo="Residentes">
                 {deResidente.map(r => r.tipo === 'residente' && (
                   <Opcao key={r.id} id={idDe(r)} ativa={resultados[ativo] === r} onEscolher={() => abrir(r)}>
-                    <AvatarResidente nome={r.residente.nome} foto={r.residente.foto} className="size-9" />
+                    <AvatarResidente nome={r.residente.nome} foto={r.residente.foto} grau={grauDe(r.residente.id)} className="m-1 size-9" />
                     <span className="min-w-0 flex-1 truncate font-medium">{r.residente.nome}</span>
+                    <SeloGrau classificacao={grauDe(r.residente.id)} semGrau tamanho="medio" />
                   </Opcao>
                 ))}
               </Grupo>

@@ -6,6 +6,7 @@ import { Badge } from '../ui/feedback'
 import { AvatarResidente } from '../residente/AvatarResidente'
 import { rotuloSituacaoResidente } from '../../lib/rotulos'
 import { cn } from '../../lib/utils'
+import { SELO_GRAU, SELO_SEM_GRAU, ehGrau, grauDaApi } from '../../lib/grau'
 
 // GET /api/residentes/{id} não traz leito, ausência nem grau oficial: esses vêm
 // de useContextoResidente (cada um da sua fonte, só com permissão). O campo
@@ -25,14 +26,6 @@ export interface ResidenteResumo {
 }
 
 const SEM_CONTEXTO: ContextoResidente = { leito: undefined, ausencia: undefined, grau: undefined }
-
-// Grau de dependência = prioridade de atenção (mesma escala do SeloGrau):
-// I verde, II amarelo, III vermelho; o texto vai sempre junto da cor.
-const TOM_GRAU: Record<string, string> = {
-  'Grau I': 'border-brand/40 bg-accent text-brand-ink',
-  'Grau II': 'border-alerta/40 bg-alerta-soft text-alerta-forte',
-  'Grau III': 'border-critico/40 bg-critico-soft text-critico-texto',
-}
 
 /**
  * UX-NAV-3: cabeçalho da ficha em faixa no topo (protótipo, board 3).
@@ -59,12 +52,14 @@ export function ResidenteCabecalho({
     ['Necessidades especiais', residente.necessidades_especiais],
   ].filter(([, valor]) => valor && String(valor).trim()) as [string, string][]
   const grau = contexto.grau
+  // UX-GRAU: undefined = sem permissão/consulta (sem círculo); null = sem grau ativo.
+  const grauTela = grau === undefined ? undefined : grauDaApi(grau?.classificacao ?? null)
 
   return (
     <section aria-label="Identificação do residente" className="card min-w-0 space-y-4 p-4 lg:p-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
         {/* Foto (ou iniciais) grande: ajuda a reconhecer a pessoa. Decorativa, o nome está ao lado. */}
-        <AvatarResidente nome={residente.nome} foto={residente.foto} className="size-24 text-3xl sm:size-28" />
+        <AvatarResidente nome={residente.nome} foto={residente.foto} grau={grauTela} className="size-24 text-3xl sm:size-28" />
 
         <div className="min-w-0 flex-1 space-y-3">
           <div className="min-w-0">
@@ -73,7 +68,7 @@ export function ResidenteCabecalho({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {/* Grau de dependência em destaque: é a prioridade de atenção da equipe. */}
               {grau !== undefined && (
-                <span className={cn('inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3 text-sm font-semibold', grau ? TOM_GRAU[grau.classificacao] ?? 'border-border bg-muted text-foreground' : 'border-border bg-muted text-foreground')}>
+                <span className={cn('inline-flex min-h-[36px] items-center gap-2 rounded-full border px-3 text-sm font-semibold', ehGrau(grauTela) ? SELO_GRAU[grauTela] : SELO_SEM_GRAU)}>
                   <Gauge className="size-4" aria-hidden="true" />
                   <span>Grau de dependência: {grau?.classificacao ?? 'Não definido'}</span>
                   {grau?.validade && <span className="font-normal">· válido até {formatDate(grau.validade)}</span>}

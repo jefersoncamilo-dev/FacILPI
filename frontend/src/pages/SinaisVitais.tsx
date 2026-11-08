@@ -18,6 +18,7 @@ import { AbasModulo, idAba, idPainel } from '../components/modulo/AbasModulo'
 import { BarraFiltros } from '../components/modulo/BarraFiltros'
 import { LinkResidente } from '../components/modulo/LinkResidente'
 import { useAbaUrl, useFiltrosUrl } from '../hooks/useFiltrosUrl'
+import { useGrausAtivos } from '../hooks/useGrausAtivos'
 
 const TODOS = ''
 
@@ -51,6 +52,8 @@ export function SinaisVitais() {
   const filtros = useFiltrosUrl(FILTROS)
   const residenteId = filtros.valores.residente || TODOS
   const { ativa: aba, trocar: trocarAba } = useAbaUrl(IDS_ABAS)
+  // UX-GRAU: círculo e selo do grau oficial no nome (a lista segue cronológica).
+  const { grauDe } = useGrausAtivos()
 
   const [modalAberto, setModalAberto] = useState(() => params.get('registrar') === '1')
   // UX-11 (#101): `?registrar=1` (ações rápidas do Início) abre o registro
@@ -213,6 +216,7 @@ export function SinaisVitais() {
                 id={registro.residente_id}
                 nome={nomes[registro.residente_id]}
                 detalhe={formatDateTime(registro.data)}
+                grau={grauDe(registro.residente_id)}
               />
               <ul className="mt-3 flex flex-wrap gap-2">
                 {sinaisMedidos(registro).map(medido => (

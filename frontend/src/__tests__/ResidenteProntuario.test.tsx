@@ -588,7 +588,7 @@ describe('ResidenteProntuario', () => {
     await screen.findByRole('link', { name: /^Maria das Gracas/ })
 
     const decorativos = [...document.querySelectorAll('[aria-hidden="true"]')].map(e => e.textContent?.trim())
-    expect(decorativos).toContain('M')        // avatar
+    expect(decorativos).toContain('MN')       // avatar (iniciais do AvatarResidente, UX-GRAU)
     expect(decorativos).toContain('• F')      // sexo
     // UX-04 (#89): o ícone de alerta deixou de ser emoji e virou SVG — continua decorativo.
     expect(document.querySelector('[data-icone="alerta"]')?.getAttribute('aria-hidden')).toBe('true')
@@ -612,9 +612,11 @@ describe('ResidenteProntuario', () => {
     expect(link.parentElement).toBe(card)
 
     // O conteudo que saiu do link continua dentro do card e, portanto, sob o overlay:
-    // clicar na alergia ou no badge de grau navega, como acontecia antes da Issue #34.
+    // clicar na alergia navega, como acontecia antes da Issue #34.
     expect(card.contains(screen.getByText('Alergia a dipirona'))).toBe(true)
-    expect(card.contains(screen.getByText('Grau II'))).toBe(true)
+    // UX-GRAU: o campo legado `grau_dependencia` do cadastro nao aparece mais na lista;
+    // o grau exibido e o oficial (teste em UXGRAU2.test.tsx), que tambem fica no card.
+    expect(screen.queryByText('Grau II')).toBeNull()
   })
 
   it('36. na lista de Residentes, a sombra de hover acompanha a area navegavel do card', async () => {

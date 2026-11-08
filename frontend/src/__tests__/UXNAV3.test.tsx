@@ -183,7 +183,7 @@ describe('UX-NAV-3 — cabeçalho do residente', () => {
     render(<ResidenteCabecalho residente={RES} contexto={{ leito: 'Quarto 1 · Leito A', ausencia: null, grau: { classificacao: 'Grau II', validade: '2026-12-31' } }} />)
     const grau = screen.getByText('Grau de dependência: Grau II').parentElement!
     expect(grau.textContent).toContain('válido até 31/12/2026')
-    expect(grau.className).toContain('bg-alerta-soft')
+    expect(grau.className).toContain('bg-grau-2-fundo')
     expect(screen.getByText('Quarto 1 · Leito A')).toBeTruthy()
     expect(screen.getByText(/Dipirona/)).toBeTruthy()
   })
