@@ -17,7 +17,8 @@ test('familiar entra no portal e não alcança o resto do sistema', async ({ bro
   })
   expect(criado.ok(), await criado.text()).toBe(true)
 
-  await equipe.goto(`/residentes/${seed.residenteA.id}`)
+  // UX-NAV-3: familiares ficam na aba Resumo da ficha.
+  await equipe.goto(`/residentes/${seed.residenteA.id}?aba=resumo`)
   await equipe.getByLabel('Portal Família de Filha Portal').click()
   await expect(equipe.getByTestId('senha-provisoria')).toBeVisible()
   const senha = (await equipe.getByTestId('senha-provisoria').textContent())!.trim()

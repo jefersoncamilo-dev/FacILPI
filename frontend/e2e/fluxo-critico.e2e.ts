@@ -46,16 +46,21 @@ test('fluxo crítico da gestora até a passagem recebida', async ({ page, browse
 
   await test.step('registrar intercorrência no prontuário', async () => {
     await page.goto(`/residentes/${seed.residenteA.id}`)
-    await page.getByRole('button', { name: '+ Registrar intercorrência' }).click()
+    // UX-NAV-3: o registro na ficha é o menu "+ Registrar", com o residente fixo.
+    await page.getByRole('button', { name: '+ Registrar' }).click()
+    await page.getByRole('menuitem', { name: 'Intercorrência' }).click()
     const dialogo = page.getByRole('dialog', { name: 'Registrar intercorrência' })
     await dialogo.getByRole('textbox', { name: 'Tipo' }).fill(intercorrencia)
     await dialogo.getByRole('combobox', { name: 'Gravidade' }).selectOption({ label: 'Moderada' })
     await dialogo.getByRole('button', { name: 'Registrar' }).click()
     await expect(dialogo).toBeHidden()
     await expect(page.getByRole('status').filter({ hasText: 'Intercorrência registrada.' })).toBeVisible()
+    // UX-NAV-3: a aba Hoje recarrega após o registro e já mostra a intercorrência aberta.
+    await expect(page.getByRole('region', { name: 'O que está previsto' })).toContainText(intercorrencia)
     // O cartão do resumo não se atualiza sozinho após o registro (achado do E2E,
     // fora do escopo): o recarregamento prova a persistência e a repercussão.
     await page.reload()
+    await page.getByRole('tab', { name: 'Resumo' }).click()
     await expect(page.getByRole('region', { name: 'Intercorrências abertas' })).toContainText(intercorrencia)
   })
 

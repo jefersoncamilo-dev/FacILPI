@@ -28,8 +28,12 @@ export function situacaoDoItem(item: PlantaoItem, agora = Date.now()): Situacao 
 
 const ROTULO_ORIGEM: Record<PlantaoItem['origem'], string> = { cuidado: 'Cuidado', medicacao: 'Dose', intercorrencia: 'Intercorrência' }
 
-function hora(iso?: string | null) {
-  return iso ? new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'
+/** Hora do item; fora de hoje, com o dia, para não confundir 23:00 de ontem com 23:00 de hoje. */
+export function hora(iso?: string | null, agora = new Date()) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const hh = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  return d.toDateString() === agora.toDateString() ? hh : `${d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${hh}`
 }
 
 export function PainelHoje({ residenteId, pode, versao = 0 }: { residenteId: string; pode: (chave?: string) => boolean; versao?: number }) {
@@ -124,12 +128,13 @@ export function PainelHoje({ residenteId, pode, versao = 0 }: { residenteId: str
               {lista.map(item => {
                 const s = situacaoDoItem(item)
                 return (
-                  <li key={`${item.origem}-${item.registro_id}`} className="flex min-h-[52px] items-center gap-3 rounded-lg bg-muted px-3">
-                    <span className="w-12 shrink-0 text-sm font-semibold">{hora(item.previsto_em)}</span>
-                    <span className="min-w-0 flex-1 text-sm">
+                  <li key={`${item.origem}-${item.registro_id}`} className="flex min-h-[52px] flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted px-3 py-2">
+                    <span className="shrink-0 text-sm font-semibold sm:w-[5.5rem]">{hora(item.previsto_em)}</span>
+                    {/* Celular: hora e estado na 1ª linha, a descrição embaixo, inteira. */}
+                    <span className="order-last min-w-0 basis-full text-sm sm:order-none sm:flex-1 sm:basis-auto">
                       <span className="text-muted-foreground">{ROTULO_ORIGEM[item.origem]} · </span>{item.descricao}
                     </span>
-                    <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold', s.classe)}>
+                    <span className={cn('ml-auto inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold', s.classe)}>
                       <s.icone className="size-3.5" aria-hidden="true" />{s.texto}
                     </span>
                   </li>

@@ -454,16 +454,15 @@ describe('ResidenteProntuario', () => {
     )
   })
 
-  it('26. nome do residente so trunca a partir de lg e tem o nome completo em title', async () => {
+  it('26. nome do residente nunca e cortado (quebra linha) e tem o nome completo em title', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
     renderTela()
     const titulo = await screen.findByRole('heading', { name: 'Maria da Silva' })
 
-    // Em telas estreitas o nome quebra em vez de cortar; o corte fica restrito a lg.
-    expect(titulo.className).not.toMatch(/(^|\s)truncate(\s|$)/)
-    expect(titulo.className).toContain('lg:truncate')
-    // Alternativa de leitura quando o corte acontece na coluna lateral fixa.
+    // UX-NAV-3: o cabeçalho é uma faixa em largura total; o nome quebra em vez de cortar.
+    expect(titulo.className).not.toMatch(/(^|\s)(lg:)?truncate(\s|$)/)
+    expect(titulo.className).toContain('wrap-break-word')
     expect(titulo.getAttribute('title')).toBe('Maria da Silva')
   })
 
@@ -503,17 +502,18 @@ describe('ResidenteProntuario', () => {
     expect(card.getAttribute('href')).toBe('/residentes/r1')
   })
 
-  it('30. container do nome estica na coluna lateral para o truncate poder atuar', async () => {
+  it('30. container do nome nao deixa o nome estourar o cartao', async () => {
     mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
     mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
     renderTela()
     const titulo = await screen.findByRole('heading', { name: 'Maria da Silva' })
 
-    // Em lg o container e flex-col com items-start: sem self-stretch o filho dimensiona pelo
-    // conteudo, o min-w-0 nao constrange e o h1 transborda o card em vez de truncar.
+    // UX-NAV-3: o nome fica numa coluna flex-1 com min-w-0; sem isso a palavra longa
+    // empurraria a foto e as ações para fora do cartão.
     const containerDoNome = titulo.parentElement!
     expect(containerDoNome.className).toContain('min-w-0')
-    expect(containerDoNome.className).toContain('lg:self-stretch')
+    expect(containerDoNome.parentElement!.className).toContain('min-w-0')
+    expect(containerDoNome.parentElement!.className).toContain('flex-1')
   })
 
   // Issue #34 — lista de residentes

@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router'
 import { PermissoesProvider } from '../context/PermissoesContext'
 import { ResidenteProntuario, abasPermitidas } from '../pages/ResidenteProntuario'
-import { seriesDoGrafico } from '../components/prontuario/EvolucaoSinais'
-import { situacaoDoItem } from '../components/prontuario/PainelHoje'
+import { hora as horaDoItem, situacaoDoItem } from '../components/prontuario/PainelHoje'
+import { ResidenteCabecalho } from '../components/prontuario/ResidenteCabecalho'
 import { api } from '../services/api'
 import { contextApi } from '../services/context'
 import { limparCentralAlertas } from '../hooks/useCentralAlertas'
@@ -141,31 +141,65 @@ describe('UX-NAV-3 — painel do dia (aba Hoje)', () => {
   })
 })
 
-describe('UX-NAV-3 — evolução dos sinais vitais (aba Saúde)', () => {
-  it('séries em ordem de data; pressão tem duas séries, a segunda tracejada', () => {
-    const [sist, diast] = seriesDoGrafico(SINAIS as any, ['pressao_sistolica', 'pressao_diastolica'])
-    expect(sist.rotulo).toBe('sistólica')
-    expect(sist.pontos.map(p => p.valor)).toEqual([120, 130])
-    expect(diast.tracejado).toBe(true)
-    expect(seriesDoGrafico(SINAIS as any, ['glicemia'])).toEqual([])
-  })
-
-  it('gráficos com leitura por texto e tabela; sem faixa "normal"', async () => {
+describe('UX-NAV-3 — aba Saúde', () => {
+  it('mostra o histórico de saúde e nenhum gráfico (a evolução fica para a aba Monitoramento)', async () => {
     renderFicha(['residentes:ler', 'sinais_vitais:ler'], '/residentes/r1?aba=saude')
-    const secao = await screen.findByRole('region', { name: 'Evolução dos sinais vitais' })
-    const graficos = within(secao).getAllByRole('img')
-    expect(graficos.map(g => g.getAttribute('aria-label')?.split('.')[0])).toEqual(['Pressão arterial', 'Temperatura'])
-    expect(graficos[1].getAttribute('aria-label')).toContain('último 36,9 °C')
-    expect(within(secao).getByText('Ver em tabela')).toBeTruthy()
-    expect(within(secao).getAllByRole('row')).toHaveLength(3)
-    expect(secao.textContent).not.toMatch(/normal|alterad/i)
-    expect(mockGet).toHaveBeenCalledWith('/sinais-vitais/', { params: { residente_id: 'r1' } })
-  })
-
-  it('sem sinais_vitais:ler, a aba Saúde não mostra gráficos nem consulta sinais', async () => {
-    renderFicha(['residentes:ler', 'intercorrencias:ler'], '/residentes/r1?aba=saude')
     expect(await screen.findByRole('region', { name: 'Avaliações, sinais e intercorrências' })).toBeTruthy()
-    expect(screen.queryByRole('region', { name: 'Evolução dos sinais vitais' })).toBeNull()
-    expect(mockGet.mock.calls.some(c => c[0] === '/sinais-vitais/')).toBe(false)
+    expect(screen.queryByRole('img')).toBeNull()
   })
 })
+
+describe('UX-NAV-3 — achados da validação', () => {
+  it('escolher aba enquanto as permissões carregam não se perde', async () => {
+    let liberar: (v: unknown) => void = () => {}
+    mockPermissoes.mockReturnValue(new Promise(r => { liberar = r }) as any)
+    mockGet.mockImplementation(((u: string) => Promise.resolve({ data: fontes(u) })) as any)
+    render(
+      <PermissoesProvider>
+        <MemoryRouter initialEntries={['/residentes/r1']}>
+          <Routes><Route path="/residentes/:id" element={<><ResidenteProntuario /><Url /></>} /></Routes>
+        </MemoryRouter>
+      </PermissoesProvider>,
+    )
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('tab', { name: 'Resumo' }))
+    expect(url()).toBe('/residentes/r1?aba=resumo')
+    liberar({ data: { scope: 'ilpi', ilpi_id: 'ilpi1', permissoes: ['residentes:ler', 'plantao:ler'] } })
+    await waitFor(() => expect(nomesDasAbas()).toContain('Hoje'))
+    expect(screen.getByRole('tab', { name: 'Resumo' }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('item de outro dia mostra a data junto da hora', () => {
+    const agora = new Date('2026-11-07T15:00:00')
+    expect(horaDoItem('2026-11-07T08:00:00', agora)).toBe('08:00')
+    expect(horaDoItem('2026-11-06T23:30:00', agora)).toBe('06/11 23:30')
+  })
+})
+
+describe('UX-NAV-3 — cabeçalho do residente', () => {
+  const RES = { id: 'r1', nome: 'Ana Sintética', situacao: 'Ativo', data_nascimento: '1940-05-10', alergias: 'Dipirona' }
+
+  it('grau de dependência em destaque, com texto e validade', () => {
+    render(<ResidenteCabecalho residente={RES} contexto={{ leito: 'Quarto 1 · Leito A', ausencia: null, grau: { classificacao: 'Grau II', validade: '2026-12-31' } }} />)
+    const grau = screen.getByText('Grau de dependência: Grau II').parentElement!
+    expect(grau.textContent).toContain('válido até 31/12/2026')
+    expect(grau.className).toContain('bg-alerta-soft')
+    expect(screen.getByText('Quarto 1 · Leito A')).toBeTruthy()
+    expect(screen.getByText(/Dipirona/)).toBeTruthy()
+  })
+
+  it('sem grau confirmado diz "Não definido"; sem permissão, o bloco nem aparece', () => {
+    const { rerender } = render(<ResidenteCabecalho residente={RES} contexto={{ leito: undefined, ausencia: undefined, grau: null }} />)
+    expect(screen.getByText('Grau de dependência: Não definido')).toBeTruthy()
+    rerender(<ResidenteCabecalho residente={RES} contexto={{ leito: undefined, ausencia: undefined, grau: undefined }} />)
+    expect(screen.queryByText(/Grau de dependência/)).toBeNull()
+  })
+
+  it('foto grande e ações dentro do cabeçalho', () => {
+    render(<ResidenteCabecalho residente={RES} acoes={<button type="button">+ Registrar</button>} />)
+    const regiao = screen.getByRole('region', { name: 'Identificação do residente' })
+    expect(regiao.querySelector('[aria-hidden="true"]')!.className).toMatch(/size-24.*sm:size-28/)
+    expect(within(regiao).getByRole('button', { name: '+ Registrar' })).toBeTruthy()
+  })
+})
+

@@ -24,7 +24,6 @@ import { cn } from '../lib/utils'
 import { AbasModulo, idAba, idPainel } from '../components/modulo/AbasModulo'
 import { useAbaUrl } from '../hooks/useFiltrosUrl'
 import { PainelHoje } from '../components/prontuario/PainelHoje'
-import { EvolucaoSinais } from '../components/prontuario/EvolucaoSinais'
 import { LinhaDoTempoCategoria } from '../components/prontuario/LinhaDoTempoCategoria'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
 
@@ -232,6 +231,45 @@ export function ResidenteProntuario() {
     }
   }
 
+  // UX-NAV-3: uma ação "Registrar" (o residente já vem fixo) em vez de vários
+  // botões. Cada opção só aparece para quem pode registrar; o 403 do backend
+  // continua como defesa (semPermissao*). Saída (N2, rara e irreversível) segue
+  // separada, por último. Fica no cabeçalho da ficha.
+  const acoesFicha = (
+    <div className="flex flex-col gap-2 sm:flex-row">
+      {((pode('sinais_vitais:criar') && !semPermissaoSinais) || (pode('intercorrencias:criar') && !semPermissaoIntercorrencia)) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto">
+              + Registrar <ChevronDown className="size-4" aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            {pode('sinais_vitais:criar') && !semPermissaoSinais && (
+              <DropdownMenuItem onSelect={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}>
+                Sinais vitais
+              </DropdownMenuItem>
+            )}
+            {pode('intercorrencias:criar') && !semPermissaoIntercorrencia && (
+              <DropdownMenuItem onSelect={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}>
+                Intercorrência
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+      {residente?.situacao === 'Ativo' && pode('residentes:registrar_saida') && (
+        <button
+          type="button"
+          onClick={() => { setSucessoSaida(''); setRegistrandoSaida(true) }}
+          className="btn-secondary w-full sm:w-auto"
+        >
+          Registrar saída
+        </button>
+      )}
+    </div>
+  )
+
   return (
     <div className="space-y-4">
       {/* min-h-[44px]: alvo de toque, mesma convenção de ContextPicker e FuncionarioCard. */}
@@ -240,46 +278,10 @@ export function ResidenteProntuario() {
       {residenteErro ? (
         <ProntuarioErro mensagem={residenteErro} onRetry={() => window.location.reload()} />
       ) : (
-        <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-6 lg:items-start space-y-4 lg:space-y-0">
-          <ResidenteCabecalho residente={residente} contexto={contexto} />
+        <div className="space-y-4">
+          <ResidenteCabecalho residente={residente} contexto={contexto} acoes={acoesFicha} />
 
           <div className="space-y-4 min-w-0">
-            {/* UX-NAV-3: uma ação "Registrar" (o residente já vem fixo) em vez de
-                vários botões. Cada opção só aparece para quem pode registrar; o 403
-                do backend continua como defesa (semPermissao*). Saída (N2, rara e
-                irreversível) segue separada, por último. */}
-            <div className="flex flex-col gap-2 sm:flex-row">
-              {((pode('sinais_vitais:criar') && !semPermissaoSinais) || (pode('intercorrencias:criar') && !semPermissaoIntercorrencia)) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button type="button" className="btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto">
-                      + Registrar <ChevronDown className="size-4" aria-hidden="true" />
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start">
-                    {pode('sinais_vitais:criar') && !semPermissaoSinais && (
-                      <DropdownMenuItem onSelect={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}>
-                        Sinais vitais
-                      </DropdownMenuItem>
-                    )}
-                    {pode('intercorrencias:criar') && !semPermissaoIntercorrencia && (
-                      <DropdownMenuItem onSelect={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}>
-                        Intercorrência
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              {residente?.situacao === 'Ativo' && pode('residentes:registrar_saida') && (
-                <button
-                  type="button"
-                  onClick={() => { setSucessoSaida(''); setRegistrandoSaida(true) }}
-                  className="btn-secondary w-full sm:w-auto"
-                >
-                  Registrar saída
-                </button>
-              )}
-            </div>
 
             {sucessoSaida && (
               <div role="status" className="card border-l-4 border-l-success py-3">
@@ -336,7 +338,6 @@ export function ResidenteProntuario() {
               </>
             ) : aba === 'saude' ? (
               <>
-                {pode('sinais_vitais:ler') && <EvolucaoSinais residenteId={id} versao={versaoDados} />}
                 <LinhaDoTempoCategoria residenteId={id} categoria="clinico" titulo="Avaliações, sinais e intercorrências" vazio="Nenhum registro de saúde ainda." versao={versaoDados} />
               </>
             ) : aba === 'cuidados' ? (

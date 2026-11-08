@@ -63,14 +63,16 @@ export function useAbaUrl<T extends string>(abas: readonly T[], param = 'aba', p
       setParams(
         atual => {
           const p = new URLSearchParams(atual)
-          if (nova === padrao) p.delete(param)
+          // Enquanto as permissões carregam, a padrão ainda é provisória: a escolha
+          // vai sempre para a URL, para não se perder quando a lista final chegar.
+          if (nova === padrao && pronto) p.delete(param)
           else p.set(param, nova)
           return p
         },
         { replace: true },
       )
     },
-    [setParams, padrao, param],
+    [setParams, padrao, param, pronto],
   )
 
   // Aba inválida ou não permitida: a URL é corrigida sem nova entrada no histórico.
