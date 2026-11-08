@@ -1,4 +1,5 @@
 import { cn } from '../../lib/utils'
+import { ANEL_GRAU, ANEL_SEM_GRAU, ehGrau, type GrauNaTela } from '../../lib/grau'
 
 /** "Maria da Silva Souza" → "MS". Um nome só → duas primeiras letras. */
 export function iniciais(nome: string): string {
@@ -15,15 +16,22 @@ function fotoSegura(foto?: string | null): string | null {
   return /^data:image\/(png|jpe?g|webp|gif);base64,/i.test(foto) ? foto : null
 }
 
-/** Foto do residente ou, sem foto, as iniciais. Decorativo: o nome está ao lado. */
-export function AvatarResidente({ nome, foto, className }: { nome: string; foto?: string | null; className?: string }) {
+/**
+ * Foto do residente ou, sem foto, as iniciais. Decorativo: o nome está ao lado.
+ * UX-GRAU: com `grau`, um círculo na cor do grau de dependência envolve a foto
+ * (o selo com o texto do grau acompanha na tela; a cor nunca vai sozinha).
+ * Sem `grau` (undefined), nenhum círculo.
+ */
+export function AvatarResidente({ nome, foto, grau, className }: { nome: string; foto?: string | null; grau?: GrauNaTela; className?: string }) {
   const src = fotoSegura(foto)
+  const anel = grau === undefined ? '' : cn(ehGrau(grau) ? ANEL_GRAU[grau] : ANEL_SEM_GRAU, 'ring-offset-2 ring-offset-card')
   return src ? (
-    <img src={src} alt="" aria-hidden="true" className={cn('size-10 shrink-0 rounded-full object-cover', className)} />
+    <img src={src} alt="" aria-hidden="true" data-grau={grau ?? undefined} className={cn('size-10 shrink-0 rounded-full object-cover', anel, className)} />
   ) : (
     <span
       aria-hidden="true"
-      className={cn('flex size-10 shrink-0 items-center justify-center rounded-full bg-avatar text-sm font-semibold text-avatar-foreground', className)}
+      data-grau={grau ?? undefined}
+      className={cn('flex size-10 shrink-0 items-center justify-center rounded-full bg-avatar text-sm font-semibold text-avatar-foreground', anel, className)}
     >
       {iniciais(nome)}
     </span>

@@ -56,6 +56,17 @@
   --color-info: hsl(var(--info));
   --color-info-soft: hsl(var(--info-soft));
 
+  --color-grau-1: hsl(var(--grau-1));
+  --color-grau-1-fundo: hsl(var(--grau-1-fundo));
+  --color-grau-1-texto: hsl(var(--grau-1-texto));
+  --color-grau-2: hsl(var(--grau-2));
+  --color-grau-2-fundo: hsl(var(--grau-2-fundo));
+  --color-grau-2-texto: hsl(var(--grau-2-texto));
+  --color-grau-2-contorno: hsl(var(--grau-2-contorno));
+  --color-grau-3: hsl(var(--grau-3));
+  --color-grau-3-fundo: hsl(var(--grau-3-fundo));
+  --color-grau-3-texto: hsl(var(--grau-3-texto));
+
   --color-brand-light: hsl(var(--brand-light));
   --color-background-desktop: hsl(var(--background-desktop));
 
@@ -296,6 +307,19 @@
     --info-soft: 218 92% 95%; /* (NOVO) */
     --avatar: 170 16% 36%; /* fundo das iniciais (NOVO) */
     --avatar-foreground: 0 0% 100%; /* (NOVO) */
+    /* UX-GRAU: grau de dependência = prioridade de atenção. I verde, II amarelo,
+       III vermelho. Anel (círculo da foto), fundo e texto do selo. O amarelo
+       não contrasta com fundo claro: o anel de Grau II leva contorno escuro. */
+    --grau-1: 142 72% 29%;
+    --grau-1-fundo: 141 79% 93%;
+    --grau-1-texto: 143 61% 20%;
+    --grau-2: 48 96% 53%;
+    --grau-2-fundo: 48 96% 53%;
+    --grau-2-texto: 34 83% 14%;
+    --grau-2-contorno: 28 73% 26%;
+    --grau-3: 0 72% 51%;
+    --grau-3-fundo: 0 72% 51%;
+    --grau-3-texto: 0 0% 100%;
     --radius: 0.75rem;          /* 12 px: botões e campos (mantém o padrão shadcn do projeto) */
     --radius-card: 1.25rem;     /* 20 px: cartões (Figma radius/lg) (NOVO) */
     --radius-icon: 1.125rem;    /* 18 px: blocos das ações rápidas (NOVO) */
@@ -349,6 +373,16 @@
       --info-soft: 219 54% 20%;
       --avatar: 171 22% 29%;
       --avatar-foreground: 0 0% 100%;
+      --grau-1: 142 69% 58%;
+      --grau-1-fundo: 143 61% 20%;
+      --grau-1-texto: 141 79% 93%;
+      --grau-2: 48 96% 53%;
+      --grau-2-fundo: 48 96% 53%;
+      --grau-2-texto: 34 83% 14%;
+      --grau-2-contorno: 48 96% 53%;
+      --grau-3: 0 91% 71%;
+      --grau-3-fundo: 0 72% 51%;
+      --grau-3-texto: 0 0% 100%;
       --shadow-card: 0 10px 25px rgba(0, 0, 0, 0.35);
       --gradient-side: linear-gradient(160deg, #10453D 0%, #061C19 100%);
       --gradient-highlight: linear-gradient(135deg, #154F48 0%, #1F6B61 100%);
@@ -397,6 +431,16 @@
     --info-soft: 219 54% 20%;
     --avatar: 171 22% 29%;
     --avatar-foreground: 0 0% 100%;
+    --grau-1: 142 69% 58%;
+    --grau-1-fundo: 143 61% 20%;
+    --grau-1-texto: 141 79% 93%;
+    --grau-2: 48 96% 53%;
+    --grau-2-fundo: 48 96% 53%;
+    --grau-2-texto: 34 83% 14%;
+    --grau-2-contorno: 48 96% 53%;
+    --grau-3: 0 91% 71%;
+    --grau-3-fundo: 0 72% 51%;
+    --grau-3-texto: 0 0% 100%;
     --shadow-card: 0 10px 25px rgba(0, 0, 0, 0.35);
     --gradient-side: linear-gradient(160deg, #10453D 0%, #061C19 100%);
     --gradient-highlight: linear-gradient(135deg, #154F48 0%, #1F6B61 100%);

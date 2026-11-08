@@ -69,6 +69,13 @@ const PARES: [string, string, number][] = [
   // Laranja e vermelho de faixa/ícone: componente gráfico.
   ['alerta', 'card', 3],
   ['critico', 'card', 3],
+  // UX-GRAU: selo do grau (texto) e anel da foto (componente gráfico).
+  ['grau-1-texto', 'grau-1-fundo', 4.5],
+  ['grau-2-texto', 'grau-2-fundo', 4.5],
+  ['grau-3-texto', 'grau-3-fundo', 4.5],
+  ['grau-1', 'card', 3],
+  ['grau-2-contorno', 'card', 3],
+  ['grau-3', 'card', 3],
 ]
 
 describe.each([

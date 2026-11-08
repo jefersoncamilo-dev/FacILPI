@@ -137,12 +137,14 @@ describe('Grau de dependência no card (UX-01E, decisão C)', () => {
     expect(mockGet.mock.calls.some(c => c[0] === '/graus-dependencia/')).toBe(false)
   })
 
-  it('cores por grau: I verde (brand), II atenção (alerta), III crítico — sempre com o texto', async () => {
+  // UX-GRAU: I verde, II amarelo, III vermelho (tokens --grau-*), sempre com o texto.
+  it('cores por grau: I verde, II amarelo, III vermelho — sempre com o texto', async () => {
     responde([{ ...BANHO_1, grau: 'Grau I' }, { ...BANHO_2, grau: 'Grau II' }, { ...HIDRATACAO, residente_id: 'r2', grau: 'Grau III' }])
     renderCom(['plantao:ler'])
-    const classe = async (g: string) => (await screen.findAllByLabelText(`Grau de dependência ${g}`))[0].className
-    expect(await classe('I')).toMatch(/(^|\s)bg-accent\s.*\btext-brand-ink(\s|$)/)
-    expect(await classe('II')).toMatch(/(^|\s)bg-alerta-soft\s.*\btext-alerta-forte(\s|$)/)
-    expect(await classe('III')).toMatch(/(^|\s)bg-critico-soft\s.*\btext-critico-texto(\s|$)/)
+    const selo = async (g: string) => (await screen.findAllByLabelText(`Grau de dependência ${g}`))[0]
+    expect((await selo('I')).className).toMatch(/(^|\s)bg-grau-1-fundo\s.*\btext-grau-1-texto(\s|$)/)
+    expect((await selo('II')).className).toMatch(/(^|\s)bg-grau-2-fundo\s.*\btext-grau-2-texto(\s|$)/)
+    expect((await selo('III')).className).toMatch(/(^|\s)bg-grau-3-fundo\s.*\btext-grau-3-texto(\s|$)/)
+    expect((await selo('II')).textContent).toBe('Grau II')
   })
 })
