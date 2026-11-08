@@ -182,11 +182,28 @@ describe('UX-NAV-0 — piloto Sinais vitais', () => {
     renderSinais('/sinais?aba=nao-existe')
     expect(await screen.findAllByRole('article')).toHaveLength(2)
     expect(screen.getByRole('tab', { name: 'Todos' }).getAttribute('aria-selected')).toBe('true')
+    await waitFor(() => expect(url()).toBe('/sinais'))
   })
 
   it('"Ver também" oferece a ficha do residente filtrado', async () => {
     renderSinais('/sinais?residente=res-1')
     const ver = within(await screen.findByRole('navigation', { name: 'Ver também' }))
     expect(ver.getByRole('link', { name: 'Abrir prontuário' }).getAttribute('href')).toBe('/residentes/res-1')
+  })
+})
+
+describe('UX-NAV-0 — chip do residente sem a lista', () => {
+  it('enquanto a lista carrega, o chip não mostra o identificador', async () => {
+    mockGet.mockImplementation((u: string) => {
+      if (u === '/sinais-vitais/') return Promise.resolve({ data: [] } as any)
+      return new Promise(() => {}) as any
+    })
+    renderSinais('/sinais?residente=res-2')
+    expect(await screen.findByRole('button', { name: 'Remover filtro Residente: carregando…' })).toBeTruthy()
+  })
+
+  it('residente fora da lista vira "não encontrado"', async () => {
+    renderSinais('/sinais?residente=outro')
+    expect(await screen.findByRole('button', { name: 'Remover filtro Residente: não encontrado' })).toBeTruthy()
   })
 })

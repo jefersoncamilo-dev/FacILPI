@@ -46,6 +46,7 @@ export function SinaisVitais() {
   const [params, setParams] = useSearchParams()
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
+  const [residentesCarregados, setResidentesCarregados] = useState(false)
   // UX-NAV-0: residente filtrado e aba ficam na URL (recarregar mantém).
   const filtros = useFiltrosUrl(FILTROS)
   const residenteId = filtros.valores.residente || TODOS
@@ -89,6 +90,7 @@ export function SinaisVitais() {
     getResidentesResumo()
       .then(lista => { setResidentes(lista); setErroResidentes(false) })
       .catch(() => { setResidentes([]); setErroResidentes(true) })
+      .finally(() => setResidentesCarregados(true))
   }, [])
 
   const nomes = useMemo(
@@ -140,7 +142,8 @@ export function SinaisVitais() {
         onLimpar={() => { setSucesso(''); filtros.limpar() }}
         chips={residenteId !== TODOS ? [{
           chave: 'residente',
-          rotulo: `Residente: ${nomes[residenteId] || residenteId}`,
+          // Sem a lista ainda, nunca mostra o identificador cru; com falha, segue a regra da tela.
+          rotulo: `Residente: ${nomes[residenteId] || (!residentesCarregados ? 'carregando…' : erroResidentes ? residenteId : 'não encontrado')}`,
           onRemover: () => { setSucesso(''); filtros.definir('residente', '') },
         }] : []}
       >

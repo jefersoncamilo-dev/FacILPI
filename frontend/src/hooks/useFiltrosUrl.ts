@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useSearchParams } from 'react-router'
 
 /**
@@ -70,6 +70,19 @@ export function useAbaUrl<T extends string>(abas: readonly T[], param = 'aba') {
     },
     [setParams, padrao, param],
   )
+
+  // Aba inválida ou não permitida: a URL é corrigida sem nova entrada no histórico.
+  useEffect(() => {
+    if (!invalida) return
+    setParams(
+      atual => {
+        const p = new URLSearchParams(atual)
+        p.delete(param)
+        return p
+      },
+      { replace: true },
+    )
+  }, [invalida, setParams, param])
 
   return { ativa, trocar, invalida }
 }
