@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router'
 import { Documentos } from '../pages/Documentos'
@@ -726,15 +726,21 @@ describe('Prontuário — entrada de Documentos no contexto do residente', () =>
     )
   }
 
+  // UX-NAV-3: a entrada fica na aba Documentos da ficha.
+  async function abrirAbaDocumentos() {
+    fireEvent.click(await screen.findByRole('tab', { name: 'Documentos' }))
+    return screen.findByRole('link', { name: /Documentos do residente/ })
+  }
+
   it('32. o prontuário leva a Documentos já com o residente da rota', async () => {
     renderProntuario()
-    const link = await screen.findByRole('link', { name: 'Documentos' })
+    const link = await abrirAbaDocumentos()
     expect(link.getAttribute('href')).toBe('/documentos?residente=r1')
   })
 
   it('33. não duplica a listagem de documentos dentro do prontuário', async () => {
     renderProntuario()
-    await screen.findByRole('link', { name: 'Documentos' })
+    await abrirAbaDocumentos()
     // A integração é navegação: nenhuma consulta ao acervo é disparada aqui.
     expect(mockGet.mock.calls.map(c => c[0])).not.toContain('/documentos/')
   })

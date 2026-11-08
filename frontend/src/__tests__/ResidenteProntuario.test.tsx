@@ -64,7 +64,8 @@ describe('ResidenteProntuario', () => {
     mockGet.mockResolvedValueOnce({ data: { items: [evento()], next_cursor: null, has_more: false } } as any)
     renderTela()
     expect(await screen.findByText('Avaliação funcional')).toBeTruthy()
-    expect(screen.getByText('Hoje')).toBeTruthy()
+    // "Hoje" também é o nome de uma aba (UX-NAV-3); aqui é o título do grupo de datas.
+    expect(screen.getByRole('heading', { name: 'Hoje' })).toBeTruthy()
     expect(screen.getByText('Maria da Silva')).toBeTruthy()
   })
 
@@ -237,8 +238,13 @@ describe('ResidenteProntuario', () => {
       </MemoryRouter>,
     )
     const card = await screen.findByText('Maria da Silva')
-    mockGet.mockResolvedValueOnce({ data: RESIDENTE } as any)
-    mockGet.mockResolvedValueOnce({ data: { items: [], next_cursor: null, has_more: false } } as any)
+    // A ficha abre na aba Hoje (UX-NAV-3), que também consulta plantão e sinais:
+    // as respostas passam a ser por URL, não pela ordem das chamadas.
+    mockGet.mockImplementation(((url: string) => {
+      if (url === '/residentes/r1') return Promise.resolve({ data: RESIDENTE })
+      if (url === '/residentes/r1/prontuario') return Promise.resolve({ data: { items: [], next_cursor: null, has_more: false } })
+      return Promise.resolve({ data: [] })
+    }) as any)
     await user.click(card)
     expect(await screen.findByRole('heading', { name: 'Maria da Silva' })).toBeTruthy()
   })

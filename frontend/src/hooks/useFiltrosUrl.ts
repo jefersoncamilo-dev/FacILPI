@@ -49,12 +49,14 @@ export function useFiltrosUrl<K extends string>(chaves: readonly K[]) {
  * na primeira aba da lista (a padrão) e o parâmetro sai da URL sem criar
  * entrada no histórico.
  */
-export function useAbaUrl<T extends string>(abas: readonly T[], param = 'aba') {
+export function useAbaUrl<T extends string>(abas: readonly T[], param = 'aba', pronto = true) {
   const [params, setParams] = useSearchParams()
   const pedida = params.get(param)
   const padrao = abas[0]
   const ativa = (pedida && (abas as readonly string[]).includes(pedida) ? pedida : padrao) as T
-  const invalida = pedida !== null && ativa !== pedida
+  // Enquanto as permissões carregam, a lista de abas ainda não é a final:
+  // nada é corrigido para não apagar um `?aba=` que logo será válido.
+  const invalida = pronto && pedida !== null && ativa !== pedida
 
   const trocar = useCallback(
     (nova: T) => {
@@ -84,5 +86,5 @@ export function useAbaUrl<T extends string>(abas: readonly T[], param = 'aba') {
     )
   }, [invalida, setParams, param])
 
-  return { ativa, trocar, invalida }
+  return { ativa, trocar, invalida, pedida }
 }

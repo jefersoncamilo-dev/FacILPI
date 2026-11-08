@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router'
+import { Link, useParams } from 'react-router'
+import { ChevronDown, ChevronRight, FileText, Info, Pill, X, type LucideIcon } from 'lucide-react'
 import { api } from '../services/api'
 import {
   fimDoDiaISO,
@@ -20,6 +21,30 @@ import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { useContextoResidente } from '../hooks/useContextoResidente'
 import { PRONTUARIO_ORIGENS, type ProntuarioOrigem } from '../services/prontuario'
 import { cn } from '../lib/utils'
+import { AbasModulo, idAba, idPainel } from '../components/modulo/AbasModulo'
+import { useAbaUrl } from '../hooks/useFiltrosUrl'
+import { PainelHoje } from '../components/prontuario/PainelHoje'
+import { EvolucaoSinais } from '../components/prontuario/EvolucaoSinais'
+import { LinhaDoTempoCategoria } from '../components/prontuario/LinhaDoTempoCategoria'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
+
+// UX-NAV-3: as 7 abas da ficha, na ordem da rotina. Cada uma aparece só com
+// uma das chaves que a alimentam; a primeira permitida é a padrão. O backend
+// continua decidindo cada consulta.
+type AbaFicha = 'hoje' | 'resumo' | 'medicacao' | 'saude' | 'cuidados' | 'linha-do-tempo' | 'documentos'
+const ABAS_FICHA: { id: AbaFicha; rotulo: string; chaves: string[] | null }[] = [
+  { id: 'hoje', rotulo: 'Hoje', chaves: ['plantao:ler', 'sinais_vitais:ler'] },
+  { id: 'resumo', rotulo: 'Resumo', chaves: null },
+  { id: 'medicacao', rotulo: 'Medicação', chaves: ['prescricoes:ler', 'administracoes:ler'] },
+  { id: 'saude', rotulo: 'Saúde', chaves: ['sinais_vitais:ler', 'intercorrencias:ler', 'avaliacoes:ler'] },
+  { id: 'cuidados', rotulo: 'Cuidados e PAIS', chaves: ['planos_cuidados:ler', 'programacoes:ler', 'execucoes:ler', 'grau_dependencia:ler', 'avaliacoes:ler'] },
+  { id: 'linha-do-tempo', rotulo: 'Linha do tempo', chaves: null },
+  { id: 'documentos', rotulo: 'Documentos', chaves: ['documentos:ler'] },
+]
+
+export function abasPermitidas(pode: (chave?: string) => boolean) {
+  return ABAS_FICHA.filter(a => !a.chaves || a.chaves.some(c => pode(c)))
+}
 
 // UX-04 (#89): atalhos da visão longitudinal por origem, sobre os mesmos filtros
 // do endpoint (sem consulta nova). Só aparecem origens que a sessão pode ler.
@@ -55,17 +80,32 @@ function mensagemErro(status?: number): string {
 
 export function ResidenteProntuario() {
   const { id } = useParams<{ id: string }>()
-  const { pode } = usePermissoesOuPadrao()
+  const { pode, status: statusPermissoes } = usePermissoesOuPadrao()
   const contexto = useContextoResidente(id)
-  // M4 (#186): Resumo é a aba padrão; `?aba=linha-do-tempo` abre direto a linha do tempo.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const aba: 'resumo' | 'linha-do-tempo' = searchParams.get('aba') === 'linha-do-tempo' ? 'linha-do-tempo' : 'resumo'
-  function trocarAba(nova: 'resumo' | 'linha-do-tempo') {
-    const p = new URLSearchParams(searchParams)
-    if (nova === 'resumo') p.delete('aba')
-    else p.set('aba', nova)
-    setSearchParams(p, { replace: true })
+  // UX-NAV-3: aba na URL (`?aba=`). Inválida ou sem permissão cai na primeira
+  // permitida, sem entrada no histórico, com aviso dispensável.
+  const abas = abasPermitidas(pode)
+  const { ativa: aba, trocar: trocarAba, invalida, pedida } = useAbaUrl(
+    abas.map(a => a.id),
+    'aba',
+    statusPermissoes !== 'carregando',
+  )
+  const [aviso, setAviso] = useState('')
+  useEffect(() => {
+    if (!invalida || !pedida) return
+    const conhecida = ABAS_FICHA.find(a => a.id === pedida)
+    const destino = abas[0]?.rotulo ?? 'Resumo'
+    setAviso(conhecida
+      ? `${conhecida.rotulo} não está liberada para você. Mostrando a aba ${destino}.`
+      : `Não encontramos essa parte da ficha. Mostrando a aba ${destino}.`)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invalida, pedida])
+  function irPara(nova: AbaFicha) {
+    setAviso('')
+    trocarAba(nova)
   }
+  // Recarrega os painéis depois de um registro feito aqui.
+  const [versaoDados, setVersaoDados] = useState(0)
 
   const [residente, setResidente] = useState<ResidenteResumo | null>(null)
   const [residenteErro, setResidenteErro] = useState<string | null>(null)
@@ -204,61 +244,32 @@ export function ResidenteProntuario() {
           <ResidenteCabecalho residente={residente} contexto={contexto} />
 
           <div className="space-y-4 min-w-0">
-            {/* Duas acoes de registro convivem aqui. Empilham em 360 e ficam lado a
-                lado a partir de sm. UX-11 (#101): as duas sao acoes frequentes do
-                cuidador e ficam preenchidas — sinais vitais em verde (rotina),
-                intercorrencia em laranja (atencao). Estrutura do card (#34) mantida. */}
-            {/* UX-04: a ação só aparece para quem pode registrar; o 403 do backend
-                continua como defesa (semPermissao*) caso a permissão mude na sessão. */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              {pode('sinais_vitais:criar') && !semPermissaoSinais && (
-                <button
-                  type="button"
-                  onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}
-                  className="btn-primary w-full sm:w-auto"
-                >
-                  + Registrar sinais vitais
-                </button>
+            {/* UX-NAV-3: uma ação "Registrar" (o residente já vem fixo) em vez de
+                vários botões. Cada opção só aparece para quem pode registrar; o 403
+                do backend continua como defesa (semPermissao*). Saída (N2, rara e
+                irreversível) segue separada, por último. */}
+            <div className="flex flex-col gap-2 sm:flex-row">
+              {((pode('sinais_vitais:criar') && !semPermissaoSinais) || (pode('intercorrencias:criar') && !semPermissaoIntercorrencia)) && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="btn-primary inline-flex w-full items-center justify-center gap-2 sm:w-auto">
+                      + Registrar <ChevronDown className="size-4" aria-hidden="true" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {pode('sinais_vitais:criar') && !semPermissaoSinais && (
+                      <DropdownMenuItem onSelect={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoSinais(true) }}>
+                        Sinais vitais
+                      </DropdownMenuItem>
+                    )}
+                    {pode('intercorrencias:criar') && !semPermissaoIntercorrencia && (
+                      <DropdownMenuItem onSelect={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}>
+                        Intercorrência
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
-              {pode('intercorrencias:criar') && !semPermissaoIntercorrencia && (
-                <button
-                  type="button"
-                  onClick={() => { setSucessoSinais(''); setSucessoIntercorrencia(''); setRegistrandoIntercorrencia(true) }}
-                  className="btn-alerta w-full sm:w-auto"
-                >
-                  + Registrar intercorrência
-                </button>
-              )}
-              {/* D2: Documentos nao e origem da linha do tempo, entao a entrada
-                  aqui e navegacao com o residente ja no contexto — e nao uma
-                  segunda listagem embutida no Prontuario. O parametro `residente`
-                  e estado de UI; a consulta sai como `residente_id`. */}
-              {id && pode('documentos:ler') && (
-                <Link
-                  to={`/documentos?residente=${id}`}
-                  className="btn-secondary w-full sm:w-auto text-center inline-flex items-center justify-center"
-                >
-                  Documentos
-                </Link>
-              )}
-              {/* UX-06/UX-07: mesmo padrão — navegação com o residente no contexto. */}
-              {id && pode('avaliacoes:ler') && (
-                <Link
-                  to={`/avaliacoes?residente=${id}`}
-                  className="btn-secondary w-full sm:w-auto text-center inline-flex items-center justify-center"
-                >
-                  Avaliações
-                </Link>
-              )}
-              {id && pode('planos_cuidados:ler') && (
-                <Link
-                  to={`/plano?residente=${id}`}
-                  className="btn-secondary w-full sm:w-auto text-center inline-flex items-center justify-center"
-                >
-                  Plano de cuidados
-                </Link>
-              )}
-              {/* N2 (#171): ação rara e irreversível sem estorno; fica por último e só para residente ativo. */}
               {residente?.situacao === 'Ativo' && pode('residentes:registrar_saida') && (
                 <button
                   type="button"
@@ -300,32 +311,48 @@ export function ResidenteProntuario() {
               </div>
             )}
 
-            <div role="tablist" aria-label="Prontuário do residente" className="flex gap-2 border-b border-border">
-              {([['resumo', 'Resumo'], ['linha-do-tempo', 'Linha do tempo']] as const).map(([valor, rotulo]) => (
-                <button
-                  key={valor}
-                  type="button"
-                  role="tab"
-                  id={`aba-${valor}`}
-                  aria-selected={aba === valor}
-                  aria-controls={`painel-${valor}`}
-                  onClick={() => trocarAba(valor)}
-                  className={cn(
-                    'min-h-[44px] -mb-px border-b-2 px-3 text-sm font-medium transition-colors',
-                    aba === valor ? 'border-brand text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {rotulo}
+            {aviso && (
+              <div role="status" className="flex items-center gap-3 rounded-card border border-info bg-info-soft py-1 pl-4 pr-1 text-sm text-foreground">
+                <Info className="size-5 shrink-0 text-info" aria-hidden="true" />
+                <span className="flex-1 py-2 font-medium">{aviso}</span>
+                <button type="button" aria-label="Fechar aviso" onClick={() => setAviso('')}
+                  className="flex size-11 shrink-0 items-center justify-center rounded-lg hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <X className="size-5" aria-hidden="true" />
                 </button>
-              ))}
-            </div>
-
-            {aba === 'resumo' ? (
-              <div role="tabpanel" id="painel-resumo" aria-labelledby="aba-resumo">
-                {id && <ResumoResidente residenteId={id} />}
               </div>
+            )}
+
+            <AbasModulo abas={abas} ativa={aba} onTrocar={irPara} rotulo="Ficha do residente" prefixo="ficha" />
+
+            <div role="tabpanel" id={idPainel('ficha', aba)} aria-labelledby={idAba('ficha', aba)} className="space-y-4">
+            {!id ? null : aba === 'hoje' ? (
+              <PainelHoje residenteId={id} pode={pode} versao={versaoDados} />
+            ) : aba === 'resumo' ? (
+              <ResumoResidente residenteId={id} />
+            ) : aba === 'medicacao' ? (
+              <>
+                <AtalhoFicha to={`/residentes/${id}/medicacao`} icone={Pill} titulo="Prescrições e doses" texto="Abrir a medicação deste residente." />
+                <LinhaDoTempoCategoria residenteId={id} categoria="medicacao" titulo="Histórico de medicação" vazio="Nenhuma prescrição ou administração registrada." versao={versaoDados} />
+              </>
+            ) : aba === 'saude' ? (
+              <>
+                {pode('sinais_vitais:ler') && <EvolucaoSinais residenteId={id} versao={versaoDados} />}
+                <LinhaDoTempoCategoria residenteId={id} categoria="clinico" titulo="Avaliações, sinais e intercorrências" vazio="Nenhum registro de saúde ainda." versao={versaoDados} />
+              </>
+            ) : aba === 'cuidados' ? (
+              <>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {pode('planos_cuidados:ler') && <AtalhoFicha to={`/plano?residente=${id}`} icone={FileText} titulo="Plano de cuidados (PAIS)" texto="Objetivos, ações e revisões." />}
+                  {pode('avaliacoes:ler') && <AtalhoFicha to={`/avaliacoes?residente=${id}`} icone={FileText} titulo="Avaliações" texto="Avaliações e grau de dependência." />}
+                </div>
+                <LinhaDoTempoCategoria residenteId={id} categoria="assistencia" titulo="Histórico de cuidados" vazio="Nenhum cuidado, plano ou grau registrado." versao={versaoDados} />
+              </>
+            ) : aba === 'documentos' ? (
+              // D2: Documentos não é origem da linha do tempo; a entrada é navegação
+              // com o residente no contexto, não uma segunda listagem aqui.
+              <AtalhoFicha to={`/documentos?residente=${id}`} icone={FileText} titulo="Documentos do residente" texto="Ver, cadastrar e validar documentos." />
             ) : (
-              <div role="tabpanel" id="painel-linha-do-tempo" aria-labelledby="aba-linha-do-tempo" className="space-y-4">
+              <div className="space-y-4">
               <VisoesRapidas filtros={filtros} pode={pode} aoEscolher={aplicarFiltros} />
 
               <ProntuarioFiltros value={filtros} onChange={aplicarFiltros} />
@@ -364,6 +391,7 @@ export function ResidenteProntuario() {
               )}
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -375,6 +403,7 @@ export function ResidenteProntuario() {
           onRegistrado={() => {
             setRegistrandoSinais(false)
             setSucessoSinais('Sinais vitais registrados.')
+            setVersaoDados(v => v + 1)
             carregar(filtros)
           }}
           residenteFixo={{ id, nome: residente?.nome ?? '' }}
@@ -389,6 +418,7 @@ export function ResidenteProntuario() {
           onRegistrado={() => {
             setRegistrandoIntercorrencia(false)
             setSucessoIntercorrencia('Intercorrência registrada.')
+            setVersaoDados(v => v + 1)
             carregar(filtros)
           }}
           residenteFixo={{ id, nome: residente?.nome ?? '' }}
@@ -447,5 +477,21 @@ function VisoesRapidas({
         )
       })}
     </div>
+  )
+}
+
+/** Atalho da ficha para a tela do módulo, com o residente já no contexto. */
+function AtalhoFicha({ to, icone: Icone, titulo, texto }: { to: string; icone: LucideIcon; titulo: string; texto: string }) {
+  return (
+    <Link to={to} className="card flex min-h-[64px] items-center gap-3 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-soft text-primary" aria-hidden="true">
+        <Icone className="size-5" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block font-semibold text-foreground">{titulo}</span>
+        <span className="block text-sm text-muted-foreground">{texto}</span>
+      </span>
+      <ChevronRight className="size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+    </Link>
   )
 }

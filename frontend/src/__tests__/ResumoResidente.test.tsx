@@ -55,7 +55,7 @@ function renderTela(permissoes: string[], trocas: Record<string, unknown> = {}) 
   }) as any)
   return render(
     <PermissoesProvider>
-      <MemoryRouter initialEntries={['/residentes/r1']}>
+      <MemoryRouter initialEntries={['/residentes/r1?aba=resumo']}>
         <Routes>
           <Route path="/residentes/:id" element={<ResidenteProntuario />} />
         </Routes>
@@ -73,7 +73,7 @@ beforeEach(() => {
 })
 
 describe('M4 — Resumo do residente', () => {
-  it('Resumo é a aba padrão e mostra cada card com a sua fonte', async () => {
+  it('aba Resumo mostra cada card com a sua fonte', async () => {
     renderTela(TODAS)
     expect(screen.getByRole('tab', { name: 'Resumo' }).getAttribute('aria-selected')).toBe('true')
 
