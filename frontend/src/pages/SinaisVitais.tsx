@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { TriangleAlert } from 'lucide-react'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
 import { formatDateTime, mensagemDeErro } from '../services/api'
@@ -13,8 +13,27 @@ import {
   type SinalVital,
 } from '../services/sinaisVitais'
 import { RegistrarSinalVitalModal } from '../components/sinaisVitais/RegistrarSinalVitalModal'
+import { PaginaModulo, type LinkVerTambem } from '../components/modulo/PaginaModulo'
+import { AbasModulo, idAba, idPainel } from '../components/modulo/AbasModulo'
+import { BarraFiltros } from '../components/modulo/BarraFiltros'
+import { LinkResidente } from '../components/modulo/LinkResidente'
+import { useAbaUrl, useFiltrosUrl } from '../hooks/useFiltrosUrl'
 
 const TODOS = ''
+
+// UX-NAV-0 (piloto): "Todos" é a aba padrão para não esconder registros
+// antigos; "Hoje" recorta no próprio navegador, sem consulta nova.
+const ABAS = [
+  { id: 'todos', rotulo: 'Todos' },
+  { id: 'hoje', rotulo: 'Hoje' },
+] as const
+const IDS_ABAS = ABAS.map(a => a.id)
+const FILTROS = ['residente'] as const
+
+function ehHoje(iso: string, agora = new Date()): boolean {
+  const d = new Date(iso)
+  return d.getFullYear() === agora.getFullYear() && d.getMonth() === agora.getMonth() && d.getDate() === agora.getDate()
+}
 
 export function SinaisVitais() {
   const { pode } = usePermissoesOuPadrao()
@@ -27,7 +46,10 @@ export function SinaisVitais() {
   const [params, setParams] = useSearchParams()
   const [residentes, setResidentes] = useState<ResidenteResumo[]>([])
   const [erroResidentes, setErroResidentes] = useState(false)
-  const [residenteId, setResidenteId] = useState<string>(TODOS)
+  // UX-NAV-0: residente filtrado e aba ficam na URL (recarregar mantém).
+  const filtros = useFiltrosUrl(FILTROS)
+  const residenteId = filtros.valores.residente || TODOS
+  const { ativa: aba, trocar: trocarAba } = useAbaUrl(IDS_ABAS)
 
   const [modalAberto, setModalAberto] = useState(() => params.get('registrar') === '1')
   // UX-11 (#101): `?registrar=1` (ações rápidas do Início) abre o registro
@@ -81,21 +103,28 @@ export function SinaisVitais() {
   }
 
   const residenteSelecionado = residentes.find(r => r.id === residenteId) ?? null
+  const visiveis = aba === 'hoje' ? registros.filter(r => !!r.data && ehHoje(r.data)) : registros
+
+  const verTambem: LinkVerTambem[] = [
+    ...(residenteId !== TODOS ? [{ to: `/residentes/${residenteId}`, rotulo: 'Abrir prontuário' }] : []),
+    ...(pode('intercorrencias:ler') ? [{ to: '/intercorrencias', rotulo: 'Intercorrências' }] : []),
+  ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-titulo-tela text-brand-ink">Sinais Vitais</h1>
-          <p className="text-textMuted text-sm">Temperatura, pressão, frequências, saturação, glicemia e peso</p>
-        </div>
-        {/* UX-05: só para quem pode registrar; o 403 segue como defesa. */}
-        {pode('sinais_vitais:criar') && !semPermissaoCriar && (
+    <PaginaModulo
+      titulo="Sinais Vitais"
+      subtitulo="Temperatura, pressão, frequências, saturação, glicemia e peso"
+      voltarPara="/modulos/cuidado"
+      verTambem={verTambem}
+      acao={
+        // UX-05: só para quem pode registrar; o 403 segue como defesa.
+        pode('sinais_vitais:criar') && !semPermissaoCriar ? (
           <button onClick={() => { setSucesso(''); setModalAberto(true) }} className="btn-primary">
             + Registrar aferição
           </button>
-        )}
-      </div>
+        ) : undefined
+      }
+    >
 
       {semPermissaoCriar && (
         <div className="card border-l-4 border-l-warning py-3">
@@ -105,25 +134,29 @@ export function SinaisVitais() {
         </div>
       )}
 
-      <div className="card p-3 flex flex-col sm:flex-row sm:items-center gap-3">
+      <AbasModulo abas={ABAS} ativa={aba} onTrocar={trocarAba} rotulo="Sinais vitais" prefixo="sv" />
+
+      <BarraFiltros
+        onLimpar={() => { setSucesso(''); filtros.limpar() }}
+        chips={residenteId !== TODOS ? [{
+          chave: 'residente',
+          rotulo: `Residente: ${nomes[residenteId] || residenteId}`,
+          onRemover: () => { setSucesso(''); filtros.definir('residente', '') },
+        }] : []}
+      >
         <label className="text-sm font-medium whitespace-nowrap" htmlFor="sv-filtro-residente">Residente</label>
         <select
           id="sv-filtro-residente"
           className="input sm:flex-1"
           value={residenteId}
-          onChange={e => { setSucesso(''); setResidenteId(e.target.value) }}
+          onChange={e => { setSucesso(''); filtros.definir('residente', e.target.value) }}
         >
           <option value={TODOS}>Todos os residentes</option>
           {residentes.map(r => (
             <option key={r.id} value={r.id}>{r.nome}</option>
           ))}
         </select>
-        {residenteId !== TODOS && (
-          <Link to={`/residentes/${residenteId}`} className="btn-secondary text-sm whitespace-nowrap text-center">
-            Abrir prontuário
-          </Link>
-        )}
-      </div>
+      </BarraFiltros>
 
       {erroResidentes && (
         <div className="card border-l-4 border-l-warning py-3">
@@ -139,6 +172,7 @@ export function SinaisVitais() {
         </div>
       )}
 
+      <div role="tabpanel" id={idPainel('sv', aba)} aria-labelledby={idAba('sv', aba)} className="space-y-4">
       {registros.length >= SINAIS_VITAIS_LIMIT_PADRAO && !erro && (
         <div className="card border-l-4 border-l-warning py-3">
           <span className="text-sm text-textMuted">
@@ -157,25 +191,26 @@ export function SinaisVitais() {
           <p className="text-sm text-danger font-medium">{erro}</p>
           <button onClick={() => carregar(residenteId)} className="btn-primary mt-4 inline-flex">Tentar novamente</button>
         </div>
-      ) : registros.length === 0 ? (
+      ) : visiveis.length === 0 ? (
         <div className="card py-16 text-center text-textMuted">
-          <p className="font-medium">Nenhum sinal vital registrado</p>
+          <p className="font-medium">{aba === 'hoje' && registros.length > 0 ? 'Nenhuma aferição hoje' : 'Nenhum sinal vital registrado'}</p>
           <p className="text-sm mt-1">
-            {residenteId === TODOS
+            {aba === 'hoje' && registros.length > 0
+              ? 'Os registros anteriores estão na aba Todos.'
+              : residenteId === TODOS
               ? 'Registre a primeira aferição para começar o histórico.'
               : 'Este residente ainda não tem aferição registrada.'}
           </p>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {registros.map(registro => (
+          {visiveis.map(registro => (
             <article key={registro.id} className="card min-w-0">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-semibold truncate">{nomes[registro.residente_id] || registro.residente_id}</div>
-                  <div className="text-xs text-textMuted">{formatDateTime(registro.data)}</div>
-                </div>
-              </div>
+              <LinkResidente
+                id={registro.residente_id}
+                nome={nomes[registro.residente_id]}
+                detalhe={formatDateTime(registro.data)}
+              />
               <ul className="mt-3 flex flex-wrap gap-2">
                 {sinaisMedidos(registro).map(medido => (
                   <li key={medido.label} className="px-2.5 py-1 bg-muted rounded-full text-xs">
@@ -191,6 +226,7 @@ export function SinaisVitais() {
           ))}
         </div>
       )}
+      </div>
 
       <RegistrarSinalVitalModal
         open={modalAberto}
@@ -200,6 +236,6 @@ export function SinaisVitais() {
         residentes={residentes}
         onPermissaoNegada={() => setSemPermissaoCriar(true)}
       />
-    </div>
+    </PaginaModulo>
   )
 }
