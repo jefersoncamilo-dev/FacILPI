@@ -14,6 +14,11 @@ import { cn } from '../lib/utils'
 import { rotuloSituacaoResidente } from '../lib/rotulos'
 
 const FORM_VAZIO = { nome: '', data_nascimento: '', cpf: '', cns: '', sexo: 'M' }
+// UX-NAV-3b: o grau de dependência entra logo no cadastro, como grau OFICIAL
+// (POST /graus-dependencia/, origem "manual", confirmação humana e histórico).
+// Nunca o campo legado do residente. "Definir depois" não registra nada.
+const GRAU_VAZIO = { classificacao: '', justificativa: '', validade: '' }
+const GRAUS = ['Grau I', 'Grau II', 'Grau III'] as const
 
 /** Lista de residentes (UX-04 / #89). Estrutura do card: Issue #34; estados: PH-01. */
 export function Residentes() {
@@ -23,6 +28,9 @@ export function Residentes() {
   const [open, setOpen] = useAberturaPorParametro('novo', pode('residentes:criar'))
   const [form, setForm] = useState<any>(FORM_VAZIO)
   const [msg, setMsg] = useState('')
+  const [grau, setGrau] = useState(GRAU_VAZIO)
+  const [aviso, setAviso] = useState('')
+  const podeGrau = pode('grau_dependencia:criar')
   const [salvando, setSalvando] = useState(false)
   const [q, setQ] = useState('')
   const [situacao, setSituacao] = useState<string | null>(null)
@@ -59,6 +67,11 @@ export function Residentes() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setMsg('')
+    setAviso('')
+    if (podeGrau && grau.classificacao && !grau.justificativa.trim()) {
+      setMsg('Informe o motivo do grau de dependência escolhido.')
+      return
+    }
     setSalvando(true)
     try {
       const payload: any = { ...form }
@@ -67,9 +80,24 @@ export function Residentes() {
       if (payload.cns) payload.cns = payload.cns.replace(/\D/g, '')
       if (!payload.cpf) delete payload.cpf
       if (!payload.cns) delete payload.cns
-      await api.post('/residentes/', payload)
+      const { data: criado } = await api.post('/residentes/', payload)
+      if (podeGrau && grau.classificacao && criado?.id) {
+        try {
+          await api.post('/graus-dependencia/', {
+            residente_id: criado.id,
+            classificacao: grau.classificacao,
+            origem: 'manual',
+            justificativa: grau.justificativa.trim(),
+            ...(grau.validade ? { validade: grau.validade } : {}),
+          })
+        } catch (eGrau) {
+          // O residente já existe: não desfaz o cadastro, avisa e indica onde concluir.
+          setAviso(`${criado.nome ?? 'Residente'} foi cadastrado, mas o grau de dependência não foi registrado (${mensagemDeErro(eGrau, 'erro ao salvar')}). Registre o grau na ficha do residente.`)
+        }
+      }
       setOpen(false)
       setForm(FORM_VAZIO)
+      setGrau(GRAU_VAZIO)
       load()
     } catch (e: any) {
       setMsg(mensagemDeErro(e, 'Erro ao salvar'))
@@ -95,6 +123,7 @@ export function Residentes() {
 
   return (
     <div className="space-y-6">
+      {aviso && <Alert variant="warning">{aviso}</Alert>}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div className="space-y-1">
           <h1 className="font-display text-titulo-tela text-brand-ink">Residentes</h1>
@@ -230,13 +259,50 @@ export function Residentes() {
       </div>
       )}
 
-      <Dialog open={open} onOpenChange={aberto => { setOpen(aberto); if (!aberto) setMsg('') }}>
+      <Dialog open={open} onOpenChange={aberto => { setOpen(aberto); if (!aberto) { setMsg(''); setGrau(GRAU_VAZIO) } }}>
         <DialogContent title="Novo residente" description="Os dados completos e a admissão seguem depois, no próprio processo.">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="res-nome">Nome completo</Label>
               <Input id="res-nome" placeholder="Nome completo *" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} required />
             </div>
+            {podeGrau && (
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium text-foreground">Grau de dependência</legend>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup">
+                  {[...GRAUS, ''].map(valor => {
+                    const marcado = grau.classificacao === valor
+                    return (
+                      <label
+                        key={valor || 'depois'}
+                        className={cn(
+                          'flex min-h-[44px] cursor-pointer items-center justify-center rounded-lg border px-2 text-center text-sm font-semibold has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring',
+                          marcado ? 'border-brand bg-accent text-accent-foreground' : 'border-input bg-card text-muted-foreground',
+                        )}
+                      >
+                        <input type="radio" name="res-grau" value={valor} checked={marcado} className="sr-only"
+                          onChange={() => setGrau({ ...grau, classificacao: valor })} />
+                        {valor || 'Definir depois'}
+                      </label>
+                    )
+                  })}
+                </div>
+                {grau.classificacao && (
+                  <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                    <div className="space-y-2">
+                      <Label htmlFor="res-grau-motivo">Motivo do grau</Label>
+                      <Input id="res-grau-motivo" placeholder="Ex.: precisa de ajuda para banho e locomoção" value={grau.justificativa}
+                        onChange={e => setGrau({ ...grau, justificativa: e.target.value })} required />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="res-grau-validade">Válido até (opcional)</Label>
+                      <Input id="res-grau-validade" type="date" value={grau.validade} onChange={e => setGrau({ ...grau, validade: e.target.value })} />
+                    </div>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">Fica registrado como grau oficial, com você como responsável pela confirmação.</p>
+              </fieldset>
+            )}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <Label htmlFor="res-nascimento">Nascimento</Label>
