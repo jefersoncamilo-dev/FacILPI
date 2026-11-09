@@ -101,7 +101,7 @@ jobs:
 
   e2e:
     name: E2E (Playwright, Chromium)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Issue #222: so o fluxo critico e o cross-tenant. Meta abaixo de ~10 min;
     # o teto folgado so evita cancelar um runner lento no meio do fluxo.
     timeout-minutes: 20
