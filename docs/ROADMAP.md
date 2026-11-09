@@ -193,3 +193,11 @@ Autorização escrita do responsável, com exceção ao FEATURE_FREEZE e, para o
 - **Integrados:** Configurações (PR #260), Auditoria (PR #263), Relatórios (PR #265), Agenda, Multidisciplinar, PIA, Farmácia e estoque e Financeiro básico (PR #272, migration 035).
 - **Definições:** PIA é o plano global da vida do residente, separado do PAIS, que concentra a atenção à saúde. Financeiro é controle manual de mensalidades, sem gateway, dados fiscais ou envio de cobrança. Estoque não baixa com a dose.
 - **Adiado:** Portal da família, para a próxima versão; falta definir quem acessa e como autentica.
+
+## 22. UX-NAV-4 — aba Monitoramento da ficha (em revisão)
+
+Exceção ao FEATURE_FREEZE dada pelo responsável em 09/11/2026, só para a Issue #298 (PR #299).
+
+- **Escopo:** aba Monitoramento na ficha do residente, com um cartão por medida que já existe em `sinais_vitais` e a evolução da medida escolhida, período de 7 a 90 dias. Só frontend: nenhuma rota, migration ou permissão nova; a aba exige `sinais_vitais:ler`.
+- **Mantido do #286:** sem faixa normal, meta ou julgamento de valor; isso depende de decisão clínica registrada.
+- **Fora:** ingestão hídrica e adesão à medicação (não são campos de `sinais_vitais`) e filtro de data no servidor.

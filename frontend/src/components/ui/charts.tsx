@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { cn } from '../../lib/utils'
 
 /**
@@ -154,5 +155,105 @@ export function MiniBarras({ valores, rotulos, titulo, destaque }: {
           style={{ height: `${v === 0 ? 8 : Math.max(18, (v / max) * 100)}%` }} />
       ))}
     </div>
+  )
+}
+
+/** Uma série da evolução: pontos já ordenados por data. */
+export type SerieEvolucao = {
+  rotulo: string
+  pontos: { data: Date; valor: number }[]
+  /** Classe de traço/preenchimento do token, ex.: 'stroke-brand' + 'fill-brand'. */
+  traco: string
+  ponto: string
+  /** Codificação secundária (além da cor) para a segunda série. */
+  tracejado?: boolean
+}
+
+const fmtNum = (v: number) => String(Math.round(v * 10) / 10).replace('.', ',')
+const fmtData = (d: Date) => d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+const fmtDataHora = (d: Date) => d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+/**
+ * Evolução de uma medida no tempo (linha), um eixo só. Mostra valores e datas;
+ * NÃO marca faixa "normal" nem julga o valor — não há referência clínica
+ * cadastrada e essa leitura é da equipe. Cada ponto tem dica (title) com data e
+ * valor; o rótulo direto fica no último ponto; com 2 séries há legenda.
+ */
+export function LinhaEvolucao({ titulo, unidade, series, animar = false }: { titulo: string; unidade: string; series: SerieEvolucao[]; animar?: boolean }) {
+  // UX-NAV-4: `animar` revela as séries da esquerda para a direita (a classe
+  // só anima sem prefers-reduced-motion; ver index.css).
+  const clip = 'evolucao-' + useId().replace(/[^a-zA-Z0-9_-]/g, '')
+  const L = 320, A = 150, esq = 36, dir = 44, topo = 12, base = 24
+  const todos = series.flatMap(s => s.pontos)
+  if (todos.length === 0) return null
+  const tMin = Math.min(...todos.map(p => p.data.getTime()))
+  const tMax = Math.max(...todos.map(p => p.data.getTime()))
+  let vMin = Math.min(...todos.map(p => p.valor))
+  let vMax = Math.max(...todos.map(p => p.valor))
+  const folga = vMax === vMin ? Math.max(1, Math.abs(vMax) * 0.05) : (vMax - vMin) * 0.15
+  vMin -= folga
+  vMax += folga
+  const x = (t: number) => (tMax === tMin ? (esq + L - dir) / 2 : esq + ((t - tMin) / (tMax - tMin)) * (L - esq - dir))
+  const y = (v: number) => topo + (1 - (v - vMin) / (vMax - vMin)) * (A - topo - base)
+  const grade = [vMin + folga, (vMin + vMax) / 2, vMax - folga]
+  const ultimo = (s: SerieEvolucao) => s.pontos[s.pontos.length - 1]
+  const resumo = series
+    .map(s => `${s.rotulo}: ${s.pontos.length} registros, de ${fmtNum(Math.min(...s.pontos.map(p => p.valor)))} a ${fmtNum(Math.max(...s.pontos.map(p => p.valor)))} ${unidade}; último ${fmtNum(ultimo(s).valor)} ${unidade} em ${fmtDataHora(ultimo(s).data)}`)
+    .join('. ')
+
+  return (
+    <figure className="min-w-0">
+      <svg viewBox={`0 0 ${L} ${A}`} role="img" aria-label={`${titulo}. ${resumo}`} className="h-auto w-full overflow-visible">
+        {grade.map(v => (
+          <g key={v}>
+            <line x1={esq} x2={L - dir} y1={y(v)} y2={y(v)} className="stroke-border" strokeWidth="1" />
+            <text x={esq - 6} y={y(v) + 4} textAnchor="end" className="fill-muted-foreground text-[10px]">{fmtNum(v)}</text>
+          </g>
+        ))}
+        <text x={esq} y={A - 6} className="fill-muted-foreground text-[10px]">{fmtData(new Date(tMin))}</text>
+        {tMax !== tMin && <text x={L - dir} y={A - 6} textAnchor="end" className="fill-muted-foreground text-[10px]">{fmtData(new Date(tMax))}</text>}
+        {animar && (
+          <defs>
+            <clipPath id={clip}>
+              <rect x="0" y="0" width={L + 20} height={A} className="animar-crescer-x" style={{ transformBox: 'fill-box' }} />
+            </clipPath>
+          </defs>
+        )}
+        {series.map(s => (
+          <g key={s.rotulo} clipPath={animar ? `url(#${clip})` : undefined}>
+            {s.pontos.length > 1 && (
+              <polyline
+                fill="none"
+                strokeWidth="2"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                strokeDasharray={s.tracejado ? '6 4' : undefined}
+                className={s.traco}
+                points={s.pontos.map(p => `${x(p.data.getTime())},${y(p.valor)}`).join(' ')}
+              />
+            )}
+            {s.pontos.map(p => (
+              <circle key={p.data.getTime()} cx={x(p.data.getTime())} cy={y(p.valor)} r="4" strokeWidth="2" className={cn('stroke-card', s.ponto)}>
+                <title>{`${s.rotulo}: ${fmtNum(p.valor)} ${unidade} — ${fmtDataHora(p.data)}`}</title>
+              </circle>
+            ))}
+            {/* Rótulo direto só no último ponto: o valor mais recente. */}
+            <text x={x(ultimo(s).data.getTime()) + 8} y={y(ultimo(s).valor) + 4} className="fill-foreground text-[11px] font-semibold">
+              {fmtNum(ultimo(s).valor)}
+            </text>
+          </g>
+        ))}
+      </svg>
+      {series.length > 1 && (
+        <figcaption className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {series.map(s => (
+            <span key={s.rotulo} className="inline-flex items-center gap-1.5">
+              <svg width="18" height="6" aria-hidden="true"><line x1="0" x2="18" y1="3" y2="3" strokeWidth="2" strokeDasharray={s.tracejado ? '4 3' : undefined} className={s.traco} /></svg>
+              {s.rotulo}
+            </span>
+          ))}
+        </figcaption>
+      )}
+    </figure>
   )
 }

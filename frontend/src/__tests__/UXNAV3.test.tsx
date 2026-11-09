@@ -70,9 +70,10 @@ beforeEach(() => {
 })
 
 describe('UX-NAV-3 — abas da ficha', () => {
-  it('7 abas na ordem da rotina quando tudo é permitido', () => {
+  // UX-NAV-4 (#298) acrescenta Monitoramento depois de Saúde.
+  it('8 abas na ordem da rotina quando tudo é permitido', () => {
     expect(abasPermitidas(() => true).map(a => a.rotulo)).toEqual([
-      'Hoje', 'Resumo', 'Medicação', 'Saúde', 'Cuidados e PAIS', 'Linha do tempo', 'Documentos',
+      'Hoje', 'Resumo', 'Medicação', 'Saúde', 'Monitoramento', 'Cuidados e PAIS', 'Linha do tempo', 'Documentos',
     ])
   })
 
@@ -81,7 +82,7 @@ describe('UX-NAV-3 — abas da ficha', () => {
     expect(abasPermitidas(so('residentes:ler')).map(a => a.id)).toEqual(['resumo', 'linha-do-tempo'])
     expect(abasPermitidas(so('prescricoes:ler')).map(a => a.id)).toContain('medicacao')
     expect(abasPermitidas(so('documentos:ler')).map(a => a.id)).toContain('documentos')
-    expect(abasPermitidas(so('sinais_vitais:ler')).map(a => a.id)).toEqual(['hoje', 'resumo', 'saude', 'linha-do-tempo'])
+    expect(abasPermitidas(so('sinais_vitais:ler')).map(a => a.id)).toEqual(['hoje', 'resumo', 'saude', 'monitoramento', 'linha-do-tempo'])
   })
 
   it('abre na primeira aba permitida (Hoje)', async () => {

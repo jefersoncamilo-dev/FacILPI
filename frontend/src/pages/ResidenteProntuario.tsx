@@ -25,17 +25,20 @@ import { AbasModulo, idAba, idPainel } from '../components/modulo/AbasModulo'
 import { useAbaUrl } from '../hooks/useFiltrosUrl'
 import { PainelHoje } from '../components/prontuario/PainelHoje'
 import { LinhaDoTempoCategoria } from '../components/prontuario/LinhaDoTempoCategoria'
+import { MonitoramentoSinais } from '../components/prontuario/MonitoramentoSinais'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
 
 // UX-NAV-3: as 7 abas da ficha, na ordem da rotina. Cada uma aparece só com
 // uma das chaves que a alimentam; a primeira permitida é a padrão. O backend
 // continua decidindo cada consulta.
-type AbaFicha = 'hoje' | 'resumo' | 'medicacao' | 'saude' | 'cuidados' | 'linha-do-tempo' | 'documentos'
+type AbaFicha = 'hoje' | 'resumo' | 'medicacao' | 'saude' | 'monitoramento' | 'cuidados' | 'linha-do-tempo' | 'documentos'
 const ABAS_FICHA: { id: AbaFicha; rotulo: string; chaves: string[] | null }[] = [
   { id: 'hoje', rotulo: 'Hoje', chaves: ['plantao:ler', 'sinais_vitais:ler'] },
   { id: 'resumo', rotulo: 'Resumo', chaves: null },
   { id: 'medicacao', rotulo: 'Medicação', chaves: ['prescricoes:ler', 'administracoes:ler'] },
   { id: 'saude', rotulo: 'Saúde', chaves: ['sinais_vitais:ler', 'intercorrencias:ler', 'avaliacoes:ler'] },
+  // UX-NAV-4 (#298): evolução dos sinais vitais por medida.
+  { id: 'monitoramento', rotulo: 'Monitoramento', chaves: ['sinais_vitais:ler'] },
   { id: 'cuidados', rotulo: 'Cuidados e PAIS', chaves: ['planos_cuidados:ler', 'programacoes:ler', 'execucoes:ler', 'grau_dependencia:ler', 'avaliacoes:ler'] },
   { id: 'linha-do-tempo', rotulo: 'Linha do tempo', chaves: null },
   { id: 'documentos', rotulo: 'Documentos', chaves: ['documentos:ler'] },
@@ -340,6 +343,8 @@ export function ResidenteProntuario() {
               <>
                 <LinhaDoTempoCategoria residenteId={id} categoria="clinico" titulo="Avaliações, sinais e intercorrências" vazio="Nenhum registro de saúde ainda." versao={versaoDados} />
               </>
+            ) : aba === 'monitoramento' ? (
+              <MonitoramentoSinais residenteId={id} versao={versaoDados} />
             ) : aba === 'cuidados' ? (
               <>
                 <div className="grid gap-2 sm:grid-cols-2">
