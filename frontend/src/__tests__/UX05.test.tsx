@@ -58,11 +58,12 @@ beforeEach(() => {
 })
 
 describe('UX-05 — Meu Plantão', () => {
-  it('agrupa pela urgência: atrasadas, próximas e sem horário', async () => {
+  // UX-GRAU G3a: a dose em 1 h cai na faixa "Agora (próxima 1 h)".
+  it('agrupa pela urgência: atrasadas, agora (até 1 h) e sem horário', async () => {
     renderCom(<MeuPlantao />, TUDO)
     const atrasadas = await screen.findByRole('region', { name: 'Atrasadas' })
     expect(within(atrasadas).getByText('Banho assistido')).toBeTruthy()
-    expect(within(screen.getByRole('region', { name: 'Próximas' })).getByText('Dose prevista de medicação')).toBeTruthy()
+    expect(within(screen.getByRole('region', { name: 'Agora (próxima 1 h)' })).getByText('Dose prevista de medicação')).toBeTruthy()
     expect(within(screen.getByRole('region', { name: 'Intercorrências abertas' })).getByText('Intercorrência aberta: Queda sem lesão')).toBeTruthy()
   })
 

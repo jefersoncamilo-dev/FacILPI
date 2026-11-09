@@ -103,6 +103,25 @@ describe('Passagem de plantão — leitura do período', () => {
     expect(screen.queryByText('Antiga')).toBeNull()
   })
 
+  it('UX-GRAU G3a: sem intercorrência aberta, ordena sem grau, Grau III, II, I e mostra o círculo e o selo', async () => {
+    responde({
+      plantao: [
+        { origem: 'cuidado', registro_id: 'p1', residente_id: 'r1', descricao: 'Banho', previsto_em: em(-1 * H), grau: 'Grau I' },
+        { origem: 'cuidado', registro_id: 'p4', residente_id: 'r4', descricao: 'Banho', previsto_em: em(-2 * H), grau: 'Grau III' },
+        { origem: 'cuidado', registro_id: 'p2', residente_id: 'r2', descricao: 'Banho', previsto_em: em(-1 * H), grau: null },
+      ],
+      intercorrencias: [],
+    })
+    renderTela()
+    const residentes = within(await screen.findByRole('region', { name: 'Residentes com pontos de atenção' }))
+    await residentes.findByText('Davi Esteves')
+    const cartoes = residentes.getAllByRole('listitem').filter(li => li.parentElement?.parentElement?.getAttribute('aria-label') === 'Residentes com pontos de atenção')
+    expect(cartoes.map(c => within(c).getByRole('link').textContent)).toEqual(['Benedito Carvalho', 'Davi Esteves', 'Antônia Ribeiro'])
+    expect(within(cartoes[0]).getByText('Sem grau')).toBeTruthy()
+    expect(within(cartoes[1]).getByLabelText('Grau de dependência III')).toBeTruthy()
+    expect(cartoes[1].querySelector('[data-grau="Grau III"]')).not.toBeNull()
+  })
+
   it('intercorrência legada sem gravidade aparece como não informada, sem inventar valor', async () => {
     // Antes da C.4 a gravidade podia ficar vazia; a API devolve null como gravado.
     const { intercorrencias } = fixtures()

@@ -4,6 +4,7 @@ import { rotuloDoItem, type PlantaoItem } from '../../services/plantao'
 import { estaAtrasado, tempoDeAtraso } from './visoes'
 import { AvatarResidente } from '../residente/AvatarResidente'
 import { SeloGrau } from '../residente/SeloGrau'
+import { grauDaApi } from '../../lib/grau'
 
 const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
 const DIA = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit' })
@@ -67,14 +68,14 @@ export function ItemPlantao({
           </span>
         </button>
       )}
-      <AvatarResidente nome={residente} foto={fotoResidente} className="size-11 text-base" />
+      <AvatarResidente nome={residente} foto={fotoResidente} grau={grauDaApi(item.grau)} className="m-1 size-11 text-base" />
 
       {/* Linha 1: residente - leito. Linha 2: hora programada (pequena) - cuidado.
           Atraso = hora em laranja + ícone de alarme (não só cor); o tempo de atraso fica para leitor de tela. */}
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="truncate font-semibold leading-snug text-foreground">{residente}</span>
-          <SeloGrau classificacao={item.grau} />
+          <SeloGrau classificacao={grauDaApi(item.grau)} semGrau />
         </div>
         {item.local && <div className="truncate text-[11px] leading-tight text-muted-foreground">{item.local}</div>}
         <div className="mt-0.5 flex min-w-0 items-baseline gap-1 whitespace-nowrap text-xs leading-snug">

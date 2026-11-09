@@ -1,9 +1,12 @@
 import { rotuloDoItem, type PlantaoItem, type PlantaoOrigem } from '../../services/plantao'
+import { compararPorGrau, grauDaApi } from '../../lib/grau'
 
 /**
  * UX-01A.2 — formas de ler a MESMA fila do plantão. Tudo aqui é apresentação:
- * nenhum item é criado, escondido por regra clínica ou reordenado dentro do
- * grupo (vale a ordem da projeção oficial).
+ * nenhum item é criado ou escondido por regra clínica.
+ *
+ * UX-GRAU G3a — a ordem do trabalho é urgência, depois grau de dependência
+ * (sem grau, III, II, I), depois horário. Empate mantém a ordem da projeção.
  */
 export type Visao = 'horario' | 'cuidado' | 'residente'
 export type Situacao = 'todos' | 'pendentes' | 'atrasados'
@@ -77,6 +80,25 @@ function primeiroHorario(itens: PlantaoItem[]): number {
   return tempos.length ? Math.min(...tempos) : Number.POSITIVE_INFINITY
 }
 
+function horario(item: PlantaoItem): number {
+  return item.previsto_em ? new Date(item.previsto_em).getTime() : Number.POSITIVE_INFINITY
+}
+
+function comparar(a: number, b: number): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
+/** Urgência (atrasado primeiro), depois grau (sem grau, III, II, I), depois horário. */
+export function compararTarefas(a: PlantaoItem, b: PlantaoItem, agora: number): number {
+  return Number(estaAtrasado(b, agora)) - Number(estaAtrasado(a, agora))
+    || compararPorGrau(grauDaApi(a.grau), grauDaApi(b.grau))
+    || comparar(horario(a), horario(b))
+}
+
+function ordenar(itens: PlantaoItem[], agora: number): PlantaoItem[] {
+  return [...itens].sort((a, b) => compararTarefas(a, b, agora))
+}
+
 function agruparPor(itens: PlantaoItem[], chave: (i: PlantaoItem) => string, titulo: (i: PlantaoItem) => string): Grupo[] {
   const grupos = new Map<string, Grupo>()
   for (const item of itens) {
@@ -90,22 +112,30 @@ function agruparPor(itens: PlantaoItem[], chave: (i: PlantaoItem) => string, tit
 
 export function agrupar(itens: PlantaoItem[], visao: Visao, nomes: Record<string, string>, agora: number): Grupo[] {
   if (visao === 'horario') {
+    // Faixas de urgência: o que venceu, o que vence em até 1 h, intercorrência
+    // aberta (sem horário) e o resto. Dentro de cada faixa: grau, depois horário.
+    const agoraOuJa = (i: PlantaoItem) => !estaAtrasado(i, agora) && marcavelEmGrupo(i, agora)
     return [
       { chave: 'atrasadas', titulo: 'Atrasadas', itens: itens.filter(i => estaAtrasado(i, agora)) },
-      { chave: 'proximas', titulo: 'Próximas', itens: itens.filter(i => i.previsto_em && !estaAtrasado(i, agora)) },
+      { chave: 'agora', titulo: 'Agora (próxima 1 h)', itens: itens.filter(agoraOuJa) },
       { chave: 'sem-horario', titulo: 'Intercorrências abertas', itens: itens.filter(i => !i.previsto_em) },
-    ].filter(g => g.itens.length > 0)
+      { chave: 'proximas', titulo: 'Próximas', itens: itens.filter(i => i.previsto_em && !estaAtrasado(i, agora) && !agoraOuJa(i)) },
+    ].filter(g => g.itens.length > 0).map(g => ({ ...g, itens: ordenar(g.itens, agora) }))
   }
   if (visao === 'cuidado') {
     const titulo = (i: PlantaoItem) =>
       i.origem === 'cuidado' ? rotuloDoItem(i) : i.origem === 'medicacao' ? 'Medicação' : 'Intercorrências abertas'
     return agruparPor(itens, chaveDoCuidado, titulo)
+      .map(g => ({ ...g, itens: ordenar(g.itens, agora) }))
       .sort((a, b) => primeiroHorario(a.itens) - primeiroHorario(b.itens) || a.titulo.localeCompare(b.titulo, 'pt-BR'))
   }
-  // Por residente: quem tem algo atrasado primeiro, depois o horário mais cedo, depois o nome.
+  // Por residente: quem tem algo atrasado primeiro, depois o grau, depois o
+  // horário mais cedo, depois o nome. Dentro do residente, a ordem é a mesma.
   return agruparPor(itens, i => i.residente_id, i => nomes[i.residente_id] || i.residente_id)
+    .map(g => ({ ...g, itens: ordenar(g.itens, agora) }))
     .sort((a, b) =>
       Number(b.itens.some(i => estaAtrasado(i, agora))) - Number(a.itens.some(i => estaAtrasado(i, agora)))
+      || compararPorGrau(grauDaApi(a.itens[0].grau), grauDaApi(b.itens[0].grau))
       || primeiroHorario(a.itens) - primeiroHorario(b.itens)
       || a.titulo.localeCompare(b.titulo, 'pt-BR'))
 }
