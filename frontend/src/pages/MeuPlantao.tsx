@@ -359,7 +359,8 @@ export function MeuPlantao() {
       <div className="space-y-1">
         {/* O nome de quem está no plantão; sem vínculo de funcionário, o título da tela. */}
         <h1 className="truncate font-display text-titulo-tela text-brand-ink">{resumo?.funcionario_nome || 'Meu Plantão'}</h1>
-        <p className="text-xs text-muted-foreground sm:text-sm">
+        {/* UX-GRAU G3b: no celular, a explicação da janela padrão sai para a fila subir. */}
+        <p className={cn('text-xs text-muted-foreground sm:text-sm', !desde && 'max-sm:hidden')}>
           {desde
             ? <>Pendências desde {formatDateTime(desde)} e das próximas 24 horas — cuidados, doses e intercorrências abertas · <Link to="/plantao" className="font-medium text-primary hover:underline">voltar à fila padrão</Link></>
             : 'Atrasos das últimas 24 h e pendências das próximas 24 h'}
@@ -527,7 +528,7 @@ export function MeuPlantao() {
       ) : lista.length === 0 ? (
         <div className="card py-16 text-center text-muted-foreground">Nenhuma pendência neste filtro</div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           {/* UX-01A.2: mesma fila, três leituras. Por horário mantém a pergunta do
               turno (atrasadas, próximas, sem horário); por cuidado e por residente
               agrupam sem mudar a ordem oficial dentro do grupo. */}
@@ -538,7 +539,7 @@ export function MeuPlantao() {
             const todosMarcados = doAtalho.length > 0 && doAtalho.every(i => selecionados.has(chaveDoItem(i)))
             return (
               <section key={grupo.chave} aria-label={grupo.titulo} className="space-y-2">
-                <div className="flex min-h-[44px] items-center justify-between gap-2">
+                <div className={cn('flex items-center justify-between gap-2', selecionando ? 'min-h-[44px]' : 'min-h-7')}>
                   <h2 className="flex items-baseline gap-2">
                     <span className={visao === 'horario'
                       ? 'text-xs font-semibold uppercase tracking-wide text-muted-foreground'
