@@ -147,4 +147,19 @@ describe('Grau de dependência no card (UX-01E, decisão C)', () => {
     expect((await selo('III')).className).toMatch(/(^|\s)bg-grau-3-fundo\s.*\btext-grau-3-texto(\s|$)/)
     expect((await selo('II')).textContent).toBe('Grau II')
   })
+
+  // UX-GRAU G3a: círculo do grau na foto, "Sem grau" visível e quem não tem grau sobe na faixa.
+  it('círculo na foto, "Sem grau" no card e ordem sem grau → III → II → I na faixa', async () => {
+    responde([
+      { ...BANHO_1, grau: 'Grau I' },
+      { ...HIDRATACAO, residente_id: 'r3', grau: 'Grau III' },
+      { ...BANHO_2, grau: null },
+    ])
+    renderCom(['plantao:ler', 'execucoes:criar'])
+    const regiao = await screen.findByRole('region', { name: 'Agora (próxima 1 h)' })
+    await within(regiao).findByText('Sem grau')
+    const ordem = [...regiao.querySelectorAll('[data-acao-plantao]')].map(b => b.getAttribute('data-acao-plantao'))
+    expect(ordem).toEqual(['cuidado:b2', 'cuidado:h1', 'cuidado:b1'])
+    expect(document.querySelector('[data-grau="Grau III"]')?.className).toMatch(/(^|\s)ring-grau-3(\s|$)/)
+  })
 })

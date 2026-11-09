@@ -30,13 +30,43 @@ const FILA: PlantaoItem[] = [
 ]
 
 describe('UX-01A.2 — visões (puras)', () => {
-  it('por horário: Atrasadas, Próximas e sem horário, na ordem da projeção', () => {
+  // UX-GRAU G3a: faixas de urgência; sem grau informado, vale o horário e, no empate, a projeção.
+  it('por horário: Atrasadas, Agora (até 1 h), Intercorrências abertas e Próximas', () => {
     const grupos = agrupar(FILA, 'horario', NOMES, AGORA)
     expect(grupos.map(g => [g.titulo, g.itens.map(i => i.registro_id)])).toEqual([
       ['Atrasadas', ['a']],
-      ['Próximas', ['b', 'c', 'd', 'e']],
+      ['Agora (próxima 1 h)', ['b', 'c']],
       ['Intercorrências abertas', ['f']],
+      ['Próximas', ['d', 'e']],
     ])
+  })
+
+  it('UX-GRAU G3a: dentro da faixa, sem grau, Grau III, Grau II, Grau I e depois o horário', () => {
+    const g = (it: PlantaoItem, grau: string | null) => ({ ...it, grau })
+    const fila = [
+      g(item('i1', 'r1', 'Banho', hora('11:00')), 'Grau I'),     // atrasado há mais tempo, Grau I
+      g(item('i3', 'r2', 'Banho', hora('11:40')), 'Grau III'),
+      g(item('i2', 'r3', 'Banho', hora('11:50')), 'Grau II'),
+      g(item('s', 'r4', 'Banho', hora('11:55')), null),           // sem grau: topo
+      g(item('p3', 'r2', 'Banho', hora('12:40')), 'Grau III'),
+      g(item('p1', 'r1', 'Banho', hora('12:10')), 'Grau I'),
+      g(item('p3b', 'r5', 'Banho', hora('12:20')), 'Grau III'),
+    ]
+    const grupos = agrupar(fila, 'horario', {}, AGORA)
+    expect(grupos.map(gr => [gr.chave, gr.itens.map(i => i.registro_id)])).toEqual([
+      ['atrasadas', ['s', 'i3', 'i2', 'i1']],
+      ['agora', ['p3b', 'p3', 'p1']],
+    ])
+  })
+
+  it('UX-GRAU G3a: por residente, atraso primeiro e, depois, o grau antes do horário', () => {
+    const g = (it: PlantaoItem, grau: string | null) => ({ ...it, grau })
+    const fila = [
+      g(item('x1', 'r1', 'Banho', hora('13:00')), 'Grau I'),
+      g(item('x2', 'r2', 'Banho', hora('14:00')), 'Grau III'),
+      g(item('x3', 'r3', 'Banho', hora('11:00')), 'Grau I'),     // atrasado
+    ]
+    expect(agrupar(fila, 'residente', NOMES, AGORA).map(gr => gr.titulo)).toEqual(['Ana Reis', 'João Lima', 'Maria Souza'])
   })
 
   it('por cuidado: junta descrições iguais ignorando caixa/espaços/acentos', () => {

@@ -11,6 +11,9 @@ import { Alert, Badge, Skeleton } from '../components/ui/feedback'
 import { EmptyState, ErrorState } from '../components/ui/states'
 import { cn } from '../lib/utils'
 import { PassagensAReceber, PassarPlantao } from '../components/plantao/PassagemPersistida'
+import { AvatarResidente } from '../components/residente/AvatarResidente'
+import { SeloGrau } from '../components/residente/SeloGrau'
+import { compararPorGrau, grauDaApi, type GrauNaTela } from '../lib/grau'
 
 /**
  * Passagem de Plantão (UX-09 / #82). LEITURA das fontes governadas — nada aqui
@@ -40,6 +43,8 @@ interface PorResidente {
   encerradasNoPeriodo: Intercorrencia[]
   ausencia?: Ausencia
   retorno?: Ausencia
+  /** UX-GRAU: grau ativo que veio nos itens do plantão; undefined = não veio. */
+  grau?: GrauNaTela
 }
 
 export function PassagemPlantao() {
@@ -93,6 +98,7 @@ export function PassagemPlantao() {
       return mapa.get(rid)!
     }
     for (const item of plantao.dados) {
+      if (item.grau !== undefined) de(item.residente_id).grau = grauDaApi(item.grau)
       if (item.origem === 'intercorrencia') de(item.residente_id).abertas.push({ item, detalhe: detalhes.get(item.registro_id) })
       else if (ms(item.previsto_em) < instante) de(item.residente_id).pendentes.push(item)
       else de(item.residente_id).proximas += 1
@@ -109,6 +115,7 @@ export function PassagemPlantao() {
       .filter(r => r.pendentes.length || r.abertas.length || r.encerradasNoPeriodo.length || r.ausencia || r.retorno)
       .sort((a, b) => Number(b.abertas.length > 0) - Number(a.abertas.length > 0)
         || Number(b.pendentes.length > 0) - Number(a.pendentes.length > 0)
+        || compararPorGrau(a.grau, b.grau)
         || (nomes[a.residenteId] || '').localeCompare(nomes[b.residenteId] || ''))
     const intercorrenciasNoPeriodo = (intercorrencias?.dados || []).filter(i => ms(i.ocorrido_em) >= desde)
     const lista = intercorrencias?.dados || []
@@ -226,7 +233,11 @@ function CartaoResidente({ r, nome, janela }: { r: PorResidente; nome: string; j
   return (
     <li className="glass space-y-3 rounded-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Link to={`/residentes/${r.residenteId}`} className="font-medium text-foreground hover:text-primary hover:underline">{nome}</Link>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <AvatarResidente nome={nome} grau={r.grau} className="m-1 size-10 text-sm" />
+          <Link to={`/residentes/${r.residenteId}`} className="font-medium text-foreground hover:text-primary hover:underline">{nome}</Link>
+          <SeloGrau classificacao={r.grau} semGrau />
+        </div>
         <div className="flex flex-wrap gap-1.5">
           {r.abertas.length > 0 && <Badge variant="warning">{r.abertas.length} {r.abertas.length === 1 ? 'intercorrência aberta' : 'intercorrências abertas'}</Badge>}
           {r.ausencia && <Badge variant="neutral">{ROTULO_AUSENCIA[r.ausencia.tipo]}</Badge>}
