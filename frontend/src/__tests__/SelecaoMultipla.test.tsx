@@ -108,7 +108,8 @@ describe('UX-01B — seleção múltipla', () => {
     responde([BANHO_1, BANHO_2, HIDRATACAO])
     renderCom(TUDO)
 
-    await user.click(await screen.findByRole('button', { name: 'Por cuidado' }))
+    await user.click(await screen.findByRole('button', { name: /^Organizar/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Por cuidado' }))
     await user.click(screen.getByRole('button', { name: 'Selecionar' }))
     const banho = within(screen.getByRole('region', { name: 'Banho assistido' }))
     await user.click(banho.getByRole('button', { name: 'Marcar até 1 h (2)' }))
@@ -161,5 +162,44 @@ describe('Grau de dependência no card (UX-01E, decisão C)', () => {
     const ordem = [...regiao.querySelectorAll('[data-acao-plantao]')].map(b => b.getAttribute('data-acao-plantao'))
     expect(ordem).toEqual(['cuidado:b2', 'cuidado:h1', 'cuidado:b1'])
     expect(document.querySelector('[data-grau="Grau III"]')?.className).toMatch(/(^|\s)ring-grau-3(\s|$)/)
+  })
+})
+
+describe('UX-GRAU G3b — barra única e cartão novo', () => {
+  it('botão curto "Registrar" com o nome acessível completo; atraso em texto no cartão', async () => {
+    const atrasada = { ...DOSE, registro_id: 'd0', previsto_em: em(-35) }
+    responde([atrasada, BANHO_1])
+    renderCom(TUDO)
+    const dose = await screen.findByRole('button', { name: 'Registrar administração' })
+    expect(dose.textContent).toBe('Registrar')
+    expect(screen.getByRole('button', { name: 'Registrar' }).textContent).toBe('Registrar')
+    expect(within(screen.getByRole('region', { name: 'Atrasadas' })).getByText(/atrasado 3\d min/)).toBeTruthy()
+  })
+
+  it('"Mais ações" abre Feitos/Expirados do turno; sem a permissão, o item não aparece', async () => {
+    const user = userEvent.setup()
+    responde([BANHO_1])
+    const { unmount } = renderCom([...TUDO, 'execucoes:ler'])
+    await screen.findByRole('button', { name: 'Registrar' })
+    expect(screen.queryByRole('region', { name: 'Feitos e expirados do turno' })).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Feitos e expirados do turno' }))
+    expect(await screen.findByRole('region', { name: 'Feitos e expirados do turno' })).toBeTruthy()
+    unmount()
+
+    renderCom(TUDO)  // sem execucoes:ler, correção ou passagem: nada a oferecer
+    await screen.findByRole('button', { name: 'Registrar' })
+    expect(screen.queryByRole('button', { name: 'Mais ações' })).toBeNull()
+  })
+
+  it('Organizar: o menu mostra a visão escolhida marcada', async () => {
+    const user = userEvent.setup()
+    responde([BANHO_1, HIDRATACAO])
+    renderCom(TUDO)
+    await user.click(await screen.findByRole('button', { name: 'Organizar por horário' }))
+    expect((await screen.findByRole('menuitemradio', { name: 'Por horário' })).getAttribute('aria-checked')).toBe('true')
+    await user.click(screen.getByRole('menuitemradio', { name: 'Por residente' }))
+    expect(await screen.findByRole('region', { name: 'Maria Souza' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Organizar por residente' })).toBeTruthy()
   })
 })

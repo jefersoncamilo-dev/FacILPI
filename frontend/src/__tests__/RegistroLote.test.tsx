@@ -48,7 +48,8 @@ function responde(itens: unknown[]) {
 async function abrirLote(user: ReturnType<typeof userEvent.setup>) {
   mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['plantao:ler', 'execucoes:criar'] } } as any)
   render(<AuthProvider><MemoryRouter><PermissoesProvider><MeuPlantao /></PermissoesProvider></MemoryRouter></AuthProvider>)
-  await user.click(await screen.findByRole('button', { name: 'Por cuidado' }))
+  await user.click(await screen.findByRole('button', { name: /^Organizar/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Por cuidado' }))
   await user.click(await screen.findByRole('button', { name: 'Selecionar' }))
   await user.click(screen.getByRole('button', { name: 'Marcar até 1 h (3)' }))
   await user.click(screen.getByRole('button', { name: 'Registrar em lote (3)' }))
@@ -139,7 +140,8 @@ describe('UX-01C — atalho do grupo não pega cuidado de amanhã', () => {
     mockPermissoes.mockResolvedValue({ data: { scope: 'ilpi', permissoes: ['plantao:ler', 'execucoes:criar'] } } as any)
     render(<AuthProvider><MemoryRouter><PermissoesProvider><MeuPlantao /></PermissoesProvider></MemoryRouter></AuthProvider>)
 
-    await user.click(await screen.findByRole('button', { name: 'Por cuidado' }))
+    await user.click(await screen.findByRole('button', { name: /^Organizar/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Por cuidado' }))
     await user.click(await screen.findByRole('button', { name: 'Selecionar' }))
     await user.click(screen.getByRole('button', { name: 'Marcar até 1 h (2)' }))
     const caixa = (nome: RegExp) => screen.getByRole('checkbox', { name: nome })

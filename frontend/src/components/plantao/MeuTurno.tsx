@@ -19,6 +19,14 @@ type EstadoPassagem = 'sem_leitura' | 'consultando' | 'entregue' | 'nao_entregue
  * áreas responde; isso não abre nenhuma tela nova (RBAC continua no backend).
  * Sem `plantao:registrar`, o cartão não aparece.
  */
+const HORA = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' })
+
+/** Início de hoje só com a hora ("22:07"); de outro dia, data e hora. */
+function desdeCurto(iso: string): string {
+  const d = new Date(iso)
+  return d.toDateString() === new Date().toDateString() ? HORA.format(d) : formatDateTime(iso)
+}
+
 export function MeuTurno({ onMudou, atrasados }: {
   onMudou?: (atual: PlantaoAtual) => void
   /** M1 (#176): atrasados que o Meu Plantão já carregou; ausente quando não carregou. */
@@ -115,20 +123,21 @@ export function MeuTurno({ onMudou, atrasados }: {
   const semEscolhas = !plantao && (atual.escalas_pendentes ?? []).length === 0 && areas.length === 0 && turnos.length === 0
 
   return (
-    <section aria-label="Meu turno" className={cn('glass rounded-card', semEscolhas ? 'px-4 py-3' : 'p-4 sm:p-5')}>
+    <section aria-label="Meu turno" className={cn('glass rounded-card', semEscolhas || plantao ? 'px-4 py-3 sm:p-5' : 'p-4 sm:p-5')}>
       {plantao ? (
         // M1 (#176): a ação principal é passar o plantão (é ela que leva a informação adiante);
         // encerrar fica secundário e sempre confirma. Compacto no celular.
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        // UX-GRAU G3b: no celular, duas linhas curtas e os botões — a fila começa mais acima.
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="min-w-0 space-y-0.5 sm:space-y-1">
-            <p className="flex flex-wrap items-baseline gap-x-2 font-display text-base font-semibold text-foreground">
+            <p className="flex flex-wrap items-baseline gap-x-2 font-display text-sm font-semibold text-foreground sm:text-base">
               <span>Plantão em andamento{plantao.turno_nome ? ` · ${plantao.turno_nome}` : ''}</span>
-              <span className="flex items-center gap-1 text-sm font-normal text-muted-foreground">
-                <Clock className="size-4" aria-hidden="true" /> Desde {formatDateTime(plantao.inicio_em)}
+              <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground sm:text-sm">
+                <Clock className="size-3.5 sm:size-4" aria-hidden="true" /> Desde {desdeCurto(plantao.inicio_em)}
               </span>
             </p>
-            <p className="flex items-center gap-1.5 text-sm text-foreground">
-              <MapPin className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <p className="flex items-center gap-1.5 text-xs text-foreground sm:text-sm">
+              <MapPin className="size-3.5 shrink-0 text-muted-foreground sm:size-4" aria-hidden="true" />
               <span className="truncate">
                 {plantao.responsabilidades.length
                   ? `Responsável por: ${plantao.responsabilidades.map(r => r.area_nome).join(', ')}`
@@ -142,8 +151,8 @@ export function MeuTurno({ onMudou, atrasados }: {
                 <Link to="/passagem"><ArrowRightLeft aria-hidden="true" /> Passar plantão</Link>
               </Button>
             )}
-            <Button variant="ghost" onClick={() => pedirEncerramento(plantao.id)} disabled={salvando} className="min-h-[44px] shrink-0">
-              <LogOut aria-hidden="true" /> Encerrar plantão
+            <Button variant="ghost" onClick={() => pedirEncerramento(plantao.id)} disabled={salvando} className="min-h-[44px] shrink-0" aria-label="Encerrar plantão">
+              <LogOut aria-hidden="true" /> Encerrar<span className="max-[400px]:hidden"> plantão</span>
             </Button>
           </div>
         </div>

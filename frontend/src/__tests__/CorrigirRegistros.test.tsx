@@ -65,18 +65,24 @@ beforeEach(() => {
 
 describe('UX-01F — corrigir registros (decisão A)', () => {
   it('o cuidador registra, mas não vê a correção', async () => {
+    const user = userEvent.setup()
     responde([REALIZADO])
     renderCom(CUIDADOR)
     await waitFor(() => expect(mockPermissoes).toHaveBeenCalled())
     await screen.findByRole('heading', { level: 1 })
     expect(screen.queryByRole('button', { name: 'Corrigir registros' })).toBeNull()
+    // UX-GRAU G3b: a correção mora no "Mais ações" — e lá também não aparece.
+    const mais = screen.queryByRole('button', { name: 'Mais ações' })
+    if (mais) await user.click(mais)
+    expect(screen.queryByRole('menuitem', { name: 'Corrigir registros' })).toBeNull()
   })
 
   it('lista as últimas 24 h com o que foi feito e por quem; corrigido fica visível, sem novo Corrigir', async () => {
     const user = userEvent.setup()
     responde([REALIZADO, JA_CORRIGIDO])
     renderCom(ENFERMAGEM)
-    await user.click(await screen.findByRole('button', { name: 'Corrigir registros' }))
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Corrigir registros' }))
 
     expect(await dialogo().findByText(/Banho assistido/)).toBeTruthy()
     expect(dialogo().getAllByText('Registrado por Ana Cuidadora')).toHaveLength(2)
@@ -91,7 +97,8 @@ describe('UX-01F — corrigir registros (decisão A)', () => {
     const user = userEvent.setup()
     responde([REALIZADO])
     renderCom(ENFERMAGEM)
-    await user.click(await screen.findByRole('button', { name: 'Corrigir registros' }))
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Corrigir registros' }))
     await user.click(await dialogo().findByRole('button', { name: /^Corrigir — Maria Souza, Banho assistido/ }))
 
     await user.click(dialogo().getByRole('button', { name: 'Não realizado' }))
@@ -115,7 +122,8 @@ describe('UX-01F — corrigir registros (decisão A)', () => {
     const user = userEvent.setup()
     responde([REALIZADO])
     renderCom(ENFERMAGEM)
-    await user.click(await screen.findByRole('button', { name: 'Corrigir registros' }))
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Corrigir registros' }))
     await user.click(await dialogo().findByRole('button', { name: /^Corrigir — / }))
     await user.click(dialogo().getByRole('button', { name: 'Anular registro' }))
     await user.type(dialogo().getByLabelText(/Motivo da correção/), 'Residente errado')
@@ -132,7 +140,8 @@ describe('UX-01F — corrigir registros (decisão A)', () => {
     responde([REALIZADO])
     mockPost.mockRejectedValueOnce({ response: { status: 409, data: { detail: 'Execucao ja estornada' } } })
     renderCom(ENFERMAGEM)
-    await user.click(await screen.findByRole('button', { name: 'Corrigir registros' }))
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Corrigir registros' }))
     await user.click(await dialogo().findByRole('button', { name: /^Corrigir — / }))
     await user.click(dialogo().getByRole('button', { name: 'Realizado' }))
     await user.type(dialogo().getByLabelText(/Motivo da correção/), 'x')
