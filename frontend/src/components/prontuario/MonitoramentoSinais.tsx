@@ -195,7 +195,9 @@ export function MonitoramentoSinais({ residenteId, versao = 0 }: { residenteId: 
       <div id="monitoramento-detalhe" aria-live="polite" className="card min-w-0">
         {atual && (
           <div key={`${atual.id}-${periodo}`} className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
-            <div className="min-w-0">
+            {/* Altura do gráfico limitada no desktop: a proporção 320x150 em
+                largura total empurraria o painel para fora da tela. */}
+            <div className="min-w-0 lg:[&_figure>svg]:max-h-[260px]">
               <h3 className="mb-2 text-sm font-semibold text-foreground">
                 {atual.titulo} <span className="font-normal text-muted-foreground">({atual.unidade}) · últimos {periodo} dias</span>
               </h3>
