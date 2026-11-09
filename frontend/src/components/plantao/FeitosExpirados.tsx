@@ -16,10 +16,11 @@ type Aba = 'feitos' | 'expirados'
  * execuções de cuidado e os estados de alerta encerrados como expirados; não
  * registra, corrige nem encerra nada. Carrega só quando aberto.
  */
-export function FeitosExpirados({ nomes }: { nomes: Record<string, string> }) {
+export function FeitosExpirados({ nomes, iniciarAberto = false }: { nomes: Record<string, string>; iniciarAberto?: boolean }) {
   const { pode } = usePermissoesOuPadrao()
   const veExpirados = pode('alertas:ler')
-  const [aberto, setAberto] = useState(false)
+  // UX-GRAU G3b: aberto pelo menu "Mais ações" já mostra o histórico.
+  const [aberto, setAberto] = useState(iniciarAberto)
   const [aba, setAba] = useState<Aba>('feitos')
   const [desde, setDesde] = useState<string | null>(null)
   const [feitos, setFeitos] = useState<ExecucaoRegistrada[] | null>(null)

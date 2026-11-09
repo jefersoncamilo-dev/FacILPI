@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { ListChecks, TriangleAlert } from 'lucide-react'
+import { ArrowRightLeft, Check, ChevronDown, History, ListChecks, MoreHorizontal, Pencil, Pill, TriangleAlert } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../services/api'
 import { Modal } from '../components/Modal'
 import { usePermissoesOuPadrao } from '../context/PermissoesContext'
@@ -14,6 +14,7 @@ import { FiltrosPlantao } from '../components/plantao/FiltrosPlantao'
 import { CorrigirRegistros } from '../components/plantao/CorrigirRegistros'
 import { CorrigirDoses } from '../components/plantao/CorrigirDoses'
 import { FeitosExpirados } from '../components/plantao/FeitosExpirados'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../components/ui/dropdown-menu'
 import {
   FILTROS_PADRAO, SITUACOES, VISOES, agrupar, atendeSituacao, filtrar, marcavelEmGrupo,
   type Filtros, type Situacao, type Visao,
@@ -53,6 +54,9 @@ const ACAO_ORIGEM: Record<PlantaoOrigem, string> = {
 }
 
 const JANELA_ATRASO_MS = 24 * 60 * 60 * 1000
+
+// UX-GRAU G3b: botões da barra única da lista (mesma altura, cabem em 360 px).
+const BOTAO_BARRA = 'inline-flex min-h-[44px] min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 text-[13px] font-medium sm:px-3 sm:text-sm'
 
 const chaveDoItem = (item: PlantaoItem) => `${item.origem}:${item.registro_id}`
 
@@ -136,6 +140,10 @@ export function MeuPlantao() {
   const [form, setForm] = useState<FormAcao>(FORM_VAZIO)
   const [erroAcao, setErroAcao] = useState('')
   const [salvando, setSalvando] = useState(false)
+  // UX-GRAU G3b: o que mora no menu "Mais ações".
+  const [mostrarFeitos, setMostrarFeitos] = useState(false)
+  const [pedidoRegistros, setPedidoRegistros] = useState(0)
+  const [pedidoDoses, setPedidoDoses] = useState(0)
 
   // `silencioso`: recarga depois de um registro — sem trocar a lista pelo
   // "Carregando…", para não perder rolagem, filtro e posição na fila.
@@ -209,6 +217,12 @@ export function MeuPlantao() {
   const residentesDaFila = useMemo(() => [...new Set(itens.map(i => i.residente_id))]
     .map(id => ({ id, nome: nomes[id] || id }))
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')), [itens, nomes])
+
+  const podeVerFeitos = pode('execucoes:ler')
+  const podeCorrigirRegistros = pode('execucoes:corrigir') && pode('execucoes:ler')
+  const podeCorrigirDoses = pode('administracoes:corrigir') && pode('administracoes:ler')
+  const podePassagem = pode('passagem_plantao:ler') || pode('passagem_plantao:registrar')
+  const visaoAtual = VISOES.find(v => v.valor === visao) ?? VISOES[0]
 
   const elegivel = (item: PlantaoItem) => item.origem === 'cuidado' && pode(PERMISSAO_ACAO.cuidado)
   const haElegiveis = itens.some(elegivel)
@@ -360,85 +374,139 @@ export function MeuPlantao() {
       />
       {resumo && <MinhaArea resumo={resumo} podeAssumir={pode('alertas:assumir')} onMudou={aoMudarAlerta} />}
 
+      {/* UX-GRAU G3b: controles da lista em duas linhas — situação (chips) e uma
+          barra com Organizar, Filtros, Selecionar e "Mais ações". */}
       <div className="space-y-2">
-        <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Organizar por">
-          {VISOES.map(opcao => (
-            <button
-              key={opcao.valor}
-              aria-label={opcao.rotulo}
-              aria-pressed={visao === opcao.valor}
-              onClick={() => setVisao(opcao.valor)}
-              className={cn(
-                'min-h-[44px] rounded-md px-2 text-sm font-medium transition-colors',
-                visao === opcao.valor ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <span className="sm:hidden">{opcao.curto}</span>
-              <span className="max-sm:hidden">{opcao.rotulo}</span>
-            </button>
-          ))}
-        </div>
-        <div className="grid grid-cols-3 gap-1 rounded-lg bg-muted p-1" role="group" aria-label="Situação">
-            {SITUACOES.map(opcao => (
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5" role="group" aria-label="Situação">
+          {SITUACOES.map(opcao => {
+            const ativa = filtros.situacao === opcao.valor
+            return (
               <button
                 key={opcao.valor}
-                aria-pressed={filtros.situacao === opcao.valor}
+                type="button"
+                aria-pressed={ativa}
                 onClick={() => setFiltros({ ...filtros, situacao: opcao.valor })}
                 className={cn(
-                  'inline-flex min-h-[44px] items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-sm font-medium transition-colors',
-                  filtros.situacao === opcao.valor ? 'bg-card text-foreground shadow-xs' : 'text-muted-foreground hover:text-foreground',
+                  'inline-flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-sm font-medium transition-colors',
+                  ativa ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-foreground hover:bg-muted',
                 )}
               >
                 {opcao.rotulo}{' '}
                 <span className={cn(
                   'rounded-full px-1.5 text-xs tabular-nums',
-                  opcao.valor === 'atrasados' && contagens.atrasados > 0 ? 'bg-alerta-soft font-semibold text-alerta-forte' : 'bg-secondary/70 text-foreground',
+                  ativa ? 'bg-primary-foreground/20'
+                    : opcao.valor === 'atrasados' && contagens.atrasados > 0 ? 'bg-alerta-soft font-semibold text-alerta-forte' : 'bg-muted text-foreground',
                 )}>
                   {contagens[opcao.valor]}
                 </span>
               </button>
-            ))}
+            )
+          })}
         </div>
-        {/* Ações da lista: mesmo tamanho e estilo, lado a lado (Selecionar só se houver cuidado marcável). */}
-        <div className={cn('grid gap-2', haElegiveis && !carregando && !erro ? 'grid-cols-2' : 'grid-cols-1')}>
+
+        <div className="flex gap-1.5 sm:gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={`Organizar ${visaoAtual.rotulo.toLowerCase()}`}
+                className={cn(BOTAO_BARRA, 'flex-[1.15] border-border bg-card text-foreground hover:bg-muted')}
+              >
+                <span className="truncate">{visaoAtual.curto}</span>
+                <ChevronDown className="size-4 shrink-0" aria-hidden="true" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              {VISOES.map(opcao => (
+                <DropdownMenuItem
+                  key={opcao.valor}
+                  role="menuitemradio"
+                  aria-checked={visao === opcao.valor}
+                  onSelect={() => setVisao(opcao.valor)}
+                >
+                  <Check className={cn(visao === opcao.valor ? 'opacity-100' : 'opacity-0')} aria-hidden="true" />
+                  {opcao.rotulo}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <div className="flex min-w-0 flex-1 [&>button]:px-2 [&>button]:text-[13px] max-[400px]:[&_svg]:hidden sm:[&>button]:px-3 sm:[&>button]:text-sm">
+            <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
+          </div>
+
+          {/* Selecionar só se houver cuidado marcável. */}
           {haElegiveis && !carregando && !erro && (
             <button
               type="button"
               onClick={() => (selecionando ? sairDaSelecao() : setSelecionando(true))}
               aria-pressed={selecionando}
+              aria-label={selecionando ? 'Cancelar seleção' : 'Selecionar'}
               className={cn(
-                'inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-3 text-sm font-medium',
+                BOTAO_BARRA, 'flex-[1.15]',
                 selecionando ? 'border-primary bg-brand-soft text-primary' : 'border-border bg-card text-foreground hover:bg-muted',
               )}
             >
-              <ListChecks className="size-4" aria-hidden="true" />
-              {selecionando ? 'Cancelar seleção' : 'Selecionar'}
+              <ListChecks className="size-4 shrink-0 max-[400px]:hidden" aria-hidden="true" />
+              <span className="truncate">{selecionando ? 'Cancelar' : 'Selecionar'}</span>
             </button>
           )}
-          <FiltrosPlantao filtros={filtros} residentes={residentesDaFila} onMudar={setFiltros} />
+
+          {(podeVerFeitos || podeCorrigirRegistros || podeCorrigirDoses || podePassagem) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="Mais ações" className={cn(BOTAO_BARRA, 'w-11 shrink-0 border-border bg-card px-0 text-foreground hover:bg-muted')}>
+                  <MoreHorizontal className="size-5" aria-hidden="true" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {podeVerFeitos && (
+                  <DropdownMenuItem onSelect={() => setMostrarFeitos(m => !m)}>
+                    <History aria-hidden="true" /> {mostrarFeitos ? 'Ocultar feitos do turno' : 'Feitos e expirados do turno'}
+                  </DropdownMenuItem>
+                )}
+                {podeCorrigirRegistros && (
+                  <DropdownMenuItem onSelect={() => setPedidoRegistros(n => n + 1)}>
+                    <Pencil aria-hidden="true" /> Corrigir registros
+                  </DropdownMenuItem>
+                )}
+                {/* #11 (D2 = sim): estorno de dose só por Enfermagem e RT. */}
+                {podeCorrigirDoses && (
+                  <DropdownMenuItem onSelect={() => setPedidoDoses(n => n + 1)}>
+                    <Pill aria-hidden="true" /> Corrigir doses
+                  </DropdownMenuItem>
+                )}
+                {podePassagem && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/passagem"><ArrowRightLeft aria-hidden="true" /> Passagem de plantão</Link>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
-        {/* UX-01F (decisão A): só quem corrige (Enfermagem, RT, administrador) vê. */}
-        {((pode('execucoes:corrigir') && pode('execucoes:ler')) || (pode('administracoes:corrigir') && pode('administracoes:ler'))) && (
-          <div className="flex flex-wrap justify-end gap-x-4">
-            {pode('execucoes:corrigir') && pode('execucoes:ler') && (
-              <CorrigirRegistros
-                nomes={nomes}
-                onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
-              />
-            )}
-            {/* #11 (D2 = sim): estorno de dose só por Enfermagem e RT. */}
-            {pode('administracoes:corrigir') && pode('administracoes:ler') && (
-              <CorrigirDoses
-                nomes={nomes}
-                onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
-              />
-            )}
-          </div>
+
+        {/* UX-01F (decisão A): só quem corrige (Enfermagem, RT, administrador) abre. */}
+        {podeCorrigirRegistros && (
+          <CorrigirRegistros
+            nomes={nomes}
+            semGatilho
+            pedido={pedidoRegistros}
+            onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
+          />
+        )}
+        {podeCorrigirDoses && (
+          <CorrigirDoses
+            nomes={nomes}
+            semGatilho
+            pedido={pedidoDoses}
+            onCorrigido={mensagem => { setSucesso(mensagem); void carregar({ silencioso: true }) }}
+          />
         )}
       </div>
 
-      {/* G5 (#198): feitos e expirados do turno, só leitura. */}
-      {pode('execucoes:ler') && <FeitosExpirados nomes={nomes} />}
+      {/* G5 (#198): feitos e expirados do turno, só leitura; abre pelo "Mais ações". */}
+      {podeVerFeitos && mostrarFeitos && <FeitosExpirados nomes={nomes} iniciarAberto />}
 
       {sucesso && <Alert variant="success">{sucesso}</Alert>}
 

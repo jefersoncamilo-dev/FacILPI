@@ -66,10 +66,14 @@ beforeEach(() => {
 
 describe('#11 — corrigir doses (D2 = sim)', () => {
   it('sem administracoes:corrigir, não há "Corrigir doses"', async () => {
+    const user = userEvent.setup()
     responde([DADA])
     renderCom(SEM_CORRECAO)
     await waitFor(() => expect(mockPermissoes).toHaveBeenCalled())
-    await screen.findByRole('button', { name: 'Corrigir registros' })
+    // UX-GRAU G3b: as correções moram no "Mais ações".
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await screen.findByRole('menuitem', { name: 'Corrigir registros' })
+    expect(screen.queryByRole('menuitem', { name: 'Corrigir doses' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Corrigir doses' })).toBeNull()
   })
 
@@ -77,7 +81,8 @@ describe('#11 — corrigir doses (D2 = sim)', () => {
     const user = userEvent.setup()
     responde([DADA, JA_ESTORNADA])
     renderCom(ENFERMAGEM)
-    await user.click(await screen.findByRole('button', { name: 'Corrigir doses' }))
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Corrigir doses' }))
     expect(await dialogo().findByText(/Losartana 50 mg/)).toBeTruthy()
     expect(dialogo().getAllByText(/por Bia Enfermeira/).length).toBe(2)
     expect(dialogo().getByText('Corrigido: Residente errado')).toBeTruthy()
@@ -90,7 +95,8 @@ describe('#11 — corrigir doses (D2 = sim)', () => {
     const user = userEvent.setup()
     responde([DADA])
     renderCom(ENFERMAGEM)
-    await user.click(await screen.findByRole('button', { name: 'Corrigir doses' }))
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Corrigir doses' }))
     await user.click(await dialogo().findByRole('button', { name: /^Corrigir —/ }))
     await user.click(dialogo().getByRole('button', { name: 'Recusada' }))
     await user.type(dialogo().getByLabelText(/Motivo do resultado/), 'Recusou')
@@ -109,7 +115,8 @@ describe('#11 — corrigir doses (D2 = sim)', () => {
     const user = userEvent.setup()
     responde([DADA])
     renderCom(ENFERMAGEM)
-    await user.click(await screen.findByRole('button', { name: 'Corrigir doses' }))
+    await user.click(await screen.findByRole('button', { name: 'Mais ações' }))
+    await user.click(await screen.findByRole('menuitem', { name: 'Corrigir doses' }))
     await user.click(await dialogo().findByRole('button', { name: /^Corrigir —/ }))
     await user.click(dialogo().getByRole('button', { name: 'Anular registro' }))
     await user.type(dialogo().getByLabelText(/Motivo da correção/), 'Dose não existiu')

@@ -172,11 +172,13 @@ describe('UX-01A.2 — tela', () => {
     const { unmount } = renderTela()
     await screen.findByRole('region', { name: 'Próximas' })
 
-    await user.click(screen.getByRole('button', { name: 'Por cuidado' }))
+    // UX-GRAU G3b: a visão fica no menu "Organizar".
+    await user.click(screen.getByRole('button', { name: /^Organizar/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Por cuidado' }))
     const banho = screen.getByRole('region', { name: 'Banho' })
     expect(within(banho).getByText('2 pendentes')).toBeTruthy()
     expect(within(banho).getByText('João Lima')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Por cuidado' }).getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Organizar por cuidado' })).toBeTruthy()
 
     unmount()
     renderTela()
@@ -188,7 +190,8 @@ describe('UX-01A.2 — tela', () => {
     responde(TELA)
     renderTela()
     await screen.findByRole('region', { name: 'Próximas' })
-    await user.click(screen.getByRole('button', { name: 'Por residente' }))
+    await user.click(screen.getByRole('button', { name: /^Organizar/ }))
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Por residente' }))
     const maria = screen.getByRole('region', { name: 'Maria Souza' })
     expect(within(maria).getByText('2 pendentes')).toBeTruthy()
     expect(within(maria).getByText('Hidratação')).toBeTruthy()

@@ -142,8 +142,8 @@ export function MeuTurno({ onMudou, atrasados }: {
                 <Link to="/passagem"><ArrowRightLeft aria-hidden="true" /> Passar plantão</Link>
               </Button>
             )}
-            <Button variant="ghost" onClick={() => pedirEncerramento(plantao.id)} disabled={salvando} className="min-h-[44px] shrink-0">
-              <LogOut aria-hidden="true" /> Encerrar plantão
+            <Button variant="ghost" onClick={() => pedirEncerramento(plantao.id)} disabled={salvando} className="min-h-[44px] shrink-0" aria-label="Encerrar plantão">
+              <LogOut aria-hidden="true" /> Encerrar<span className="max-[400px]:hidden"> plantão</span>
             </Button>
           </div>
         </div>

@@ -13,13 +13,18 @@ function mesmoDia(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
 }
 
+/** UX-GRAU G3b: no botão, o verbo; o nome acessível continua completo ("Registrar administração"). */
+function rotuloVisivel(rotulo: string) {
+  return rotulo.startsWith('Registrar') ? 'Registrar' : rotulo
+}
+
 /**
- * Card compacto da fila do plantão (UX-01A.2/C):
- *   foto (ou iniciais) | residente                     | Registrar
- *                      | quarto/leito (bem pequeno)    |
- *                      | hora programada  cuidado      |
- * A hora é pequena e secundária; atraso = hora em laranja + ícone de alarme
- * (não só cor). Registrar continua o CTA principal (48px).
+ * Card da fila do plantão (UX-GRAU G3b):
+ *   hora  o que fazer (linha inteira, sem disputar espaço com o botão)
+ *   foto  residente                            | Registrar
+ *   (o)   [Grau] atrasado há … · quarto/leito  |
+ * A foto leva o círculo na cor do grau; o atraso aparece em texto, com ícone
+ * (não só cor), em laranja, para não se confundir com o vermelho do Grau III.
  */
 export function ItemPlantao({
   item,
@@ -42,68 +47,80 @@ export function ItemPlantao({
   const residente = nomeResidente || item.residente_id
   const cuidado = rotuloDoItem(item)
   const quando = previsto ? `${DIA.format(previsto)} ${HORA.format(previsto)}` : 'sem horário'
+  const grau = grauDaApi(item.grau)
+  const visivel = acao ? rotuloVisivel(acao.rotulo) : ''
 
   return (
     <div
       className={cn(
-        'glass flex items-center gap-2 rounded-card px-2.5 py-2.5',
+        'glass rounded-card px-3 py-2.5',
         selecao?.selecionado ? 'border-primary ring-2 ring-primary/30' : atrasado && 'border-l-4 border-l-alerta',
       )}
     >
-      {selecao && (
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={selecao.selecionado}
-          aria-label={`${cuidado} — ${residente}, ${quando}`}
-          onClick={selecao.onAlternar}
-          data-selecao-plantao={`${item.origem}:${item.registro_id}`}
-          className="-m-1 flex size-11 shrink-0 items-center justify-center rounded-lg"
-        >
-          <span className={cn(
-            'flex size-6 items-center justify-center rounded-md border-2',
-            selecao.selecionado ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card',
-          )}>
-            {selecao.selecionado && <Check className="size-4" aria-hidden="true" />}
+      {/* Linha 1: quando e o que fazer. */}
+      <div className="flex min-w-0 items-baseline gap-2">
+        {previsto ? (
+          <span className={cn('shrink-0 text-base font-semibold tabular-nums', atrasado ? 'text-alerta-forte' : 'text-foreground')}>
+            {HORA.format(previsto)}
+            {!mesmoDia(previsto, new Date(agora)) && <span className="ml-1 text-xs font-normal text-muted-foreground">{DIA.format(previsto)}</span>}
           </span>
-        </button>
-      )}
-      <AvatarResidente nome={residente} foto={fotoResidente} grau={grauDaApi(item.grau)} className="m-1 size-11 text-base" />
-
-      {/* Linha 1: residente - leito. Linha 2: hora programada (pequena) - cuidado.
-          Atraso = hora em laranja + ícone de alarme (não só cor); o tempo de atraso fica para leitor de tela. */}
-      <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-semibold leading-snug text-foreground">{residente}</span>
-          <SeloGrau classificacao={grauDaApi(item.grau)} semGrau />
-        </div>
-        {item.local && <div className="truncate text-[11px] leading-tight text-muted-foreground">{item.local}</div>}
-        <div className="mt-0.5 flex min-w-0 items-baseline gap-1 whitespace-nowrap text-xs leading-snug">
-          {previsto ? (
-            <span className={cn('inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums', atrasado ? 'font-semibold text-alerta-forte' : 'text-muted-foreground')}>
-              {atrasado && <AlarmClock className="size-3 self-center" aria-hidden="true" />}
-              {HORA.format(previsto)}
-              {!mesmoDia(previsto, new Date(agora)) && ` ${DIA.format(previsto)}`}
-              {atrasado && <span className="sr-only"> — atrasado {tempoDeAtraso(item.previsto_em!, agora)}</span>}
-            </span>
-          ) : (
-            <span className="inline-flex shrink-0 items-center text-alerta-forte">
-              <TriangleAlert className="size-3.5 self-center" aria-hidden="true" /><span className="sr-only">Sem horário</span>
-            </span>
-          )}
-          <span className="min-w-0 truncate text-muted-foreground">{cuidado}</span>
-        </div>
+        ) : (
+          <span className="inline-flex shrink-0 self-center text-alerta-forte">
+            <TriangleAlert className="size-4" aria-hidden="true" /><span className="sr-only">Sem horário</span>
+          </span>
+        )}
+        <span className="line-clamp-2 min-w-0 font-semibold leading-snug text-foreground">{cuidado}</span>
       </div>
 
-      {acao && !selecao && (
-        <button
-          data-acao-plantao={`${item.origem}:${item.registro_id}`}
-          onClick={acao.onClick}
-          className="btn-primary min-h-[48px] shrink-0 px-2.5 text-sm sm:px-4"
-        >
-          {acao.rotulo}
-        </button>
-      )}
+      {/* Linha 2: quem, grau, onde/atraso e a ação. */}
+      <div className="mt-1.5 flex items-center gap-2.5">
+        {selecao && (
+          <button
+            type="button"
+            role="checkbox"
+            aria-checked={selecao.selecionado}
+            aria-label={`${cuidado} — ${residente}, ${quando}`}
+            onClick={selecao.onAlternar}
+            data-selecao-plantao={`${item.origem}:${item.registro_id}`}
+            className="-m-1 flex size-11 shrink-0 items-center justify-center rounded-lg"
+          >
+            <span className={cn(
+              'flex size-6 items-center justify-center rounded-md border-2',
+              selecao.selecionado ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card',
+            )}>
+              {selecao.selecionado && <Check className="size-4" aria-hidden="true" />}
+            </span>
+          </button>
+        )}
+        <AvatarResidente nome={residente} foto={fotoResidente} grau={grau} className="m-1 size-10 text-sm" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-foreground">{residente}</div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+            <SeloGrau classificacao={grau} semGrau />
+            <span className="min-w-0 truncate">
+            {atrasado && (
+              <span className="mr-1 inline-flex items-center gap-0.5 font-semibold text-alerta-forte">
+                <AlarmClock className="size-3" aria-hidden="true" />
+                atrasado {tempoDeAtraso(item.previsto_em!, agora)}
+                {item.local && <span aria-hidden="true"> ·</span>}
+              </span>
+            )}
+            {item.local}
+            </span>
+          </div>
+        </div>
+
+        {acao && !selecao && (
+          <button
+            data-acao-plantao={`${item.origem}:${item.registro_id}`}
+            onClick={acao.onClick}
+            aria-label={visivel !== acao.rotulo ? acao.rotulo : undefined}
+            className="btn-primary min-h-[48px] shrink-0 px-4 text-sm"
+          >
+            {visivel}
+          </button>
+        )}
+      </div>
     </div>
   )
 }

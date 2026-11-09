@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { ArrowLeft, Pill } from 'lucide-react'
 import { formatDateTime, mensagemDeErro } from '../../services/api'
 import { Dialog, DialogContent } from '../ui/dialog'
@@ -32,9 +32,15 @@ const ESCOLHAS: { valor: Escolha; rotulo: string }[] = [
 export function CorrigirDoses({
   nomes,
   onCorrigido,
+  pedido = 0,
+  semGatilho = false,
 }: {
   nomes: Record<string, string>
   onCorrigido: (mensagem: string) => void
+  /** UX-GRAU G3b: aberto pelo menu "Mais ações" — cada novo valor (> 0) abre o diálogo. */
+  pedido?: number
+  /** Sem o link próprio: quem abre é o menu "Mais ações". */
+  semGatilho?: boolean
 }) {
   const [aberto, setAberto] = useState(false)
   const [registros, setRegistros] = useState<AdministracaoRegistrada[] | null>(null)
@@ -58,6 +64,10 @@ export function CorrigirDoses({
     void carregar()
   }
 
+  const abrirRef = useRef(abrir)
+  abrirRef.current = abrir
+  useEffect(() => { if (pedido > 0) abrirRef.current() }, [pedido])
+
   async function corrigido(mensagem: string) {
     setEmCorrecao(null)
     await carregar()
@@ -66,14 +76,14 @@ export function CorrigirDoses({
 
   return (
     <>
-      <button
+      {!semGatilho && <button
         type="button"
         onClick={abrir}
         aria-haspopup="dialog"
         className="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-primary hover:underline"
       >
         <Pill className="size-4" aria-hidden="true" /> Corrigir doses
-      </button>
+      </button>}
 
       <Dialog open={aberto} onOpenChange={setAberto}>
         {aberto && (
