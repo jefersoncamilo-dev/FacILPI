@@ -1640,3 +1640,13 @@ class PortalRecado(Base):
     autor_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     autor_nome: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)
+
+
+class PortalFamiliaConfig(Base):
+    # 037 (#303): o que o portal mostra, por ILPI. Sem linha = desligado e tudo bloqueado.
+    __tablename__ = "portal_familia_config"
+    ilpi_id: Mapped[str] = mapped_column(String(36), ForeignKey("instituicoes.id", ondelete="RESTRICT"), primary_key=True)
+    ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=sa.false())
+    categorias: Mapped[list] = mapped_column(sa.JSON, nullable=False, default=list)
+    atualizado_por: Mapped[str] = mapped_column(String(36), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime(), server_default=func.now(), nullable=False)

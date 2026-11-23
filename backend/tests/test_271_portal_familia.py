@@ -113,6 +113,12 @@ def test_familiar_ve_so_o_proprio_residente_e_nada_clinico(banco):
         assert (await client.post("/api/portal/recados", headers=c.ha, json={"residente_id": c.ra2, "texto": "Recado de outro"})).status_code == 201
         assert (await client.post("/api/portal/recados", headers=c.ha, json={"residente_id": c.rb, "texto": "x"})).status_code == 404
 
+        # #303: sem configuracao, o portal esta desligado e nada aparece.
+        corpo = (await client.get("/api/portal/resumo", headers=hf)).json()
+        assert corpo["portal_liberado"] is False and corpo["categorias"] == []
+        assert corpo["agenda"] is None and corpo["mensalidades"] is None and corpo["recados"] is None
+        assert (await client.put("/api/portal/config", headers=c.ha, json={
+            "ativo": True, "categorias": ["agenda", "mensalidades", "recados"]})).status_code == 200
         r = await client.get("/api/portal/resumo", headers=hf)
         assert r.status_code == 200, r.text
         corpo = r.json()
@@ -124,9 +130,11 @@ def test_familiar_ve_so_o_proprio_residente_e_nada_clinico(banco):
         # Papel sem grant clinico e sem acesso ao resto da API, nem de leitura.
         for rota in (f"/api/residentes/{c.ra}", "/api/residentes/", f"/api/residentes/{c.ra}/prontuario", "/api/agenda/",
                      "/api/financeiro/mensalidades", f"/api/pia/{c.ra}", "/api/dashboard/resumo", "/api/meu-plantao/",
-                     "/api/intercorrencias/", "/api/familiares/", f"/api/portal/recados/{c.ra}"):
+                     "/api/intercorrencias/", "/api/familiares/", f"/api/portal/recados/{c.ra}", "/api/portal/config",
+                     "/api/plantao/", "/api/sinais-vitais/", "/api/execucoes-cuidado/", "/api/administracoes/"):
             assert (await client.get(rota, headers=hf)).status_code == 403, rota
         assert (await client.post("/api/portal/recados", headers=hf, json={"residente_id": c.ra, "texto": "x"})).status_code == 403
+        assert (await client.put("/api/portal/config", headers=hf, json={"ativo": True, "categorias": ["medicacao"]})).status_code == 403
         perms = (await client.get("/api/auth/permissoes", headers=hf)).json()["permissoes"]
         assert perms == ["portal_familia:ler"]
     asyncio.run(_client(banco, op))

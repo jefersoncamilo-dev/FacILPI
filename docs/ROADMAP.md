@@ -201,3 +201,11 @@ Exceção ao FEATURE_FREEZE dada pelo responsável em 09/11/2026, só para a Iss
 - **Escopo:** aba Monitoramento na ficha do residente, com um cartão por medida que já existe em `sinais_vitais` e a evolução da medida escolhida, período de 7 a 90 dias. Só frontend: nenhuma rota, migration ou permissão nova; a aba exige `sinais_vitais:ler`.
 - **Mantido do #286:** sem faixa normal, meta ou julgamento de valor; isso depende de decisão clínica registrada.
 - **Fora:** ingestão hídrica e adesão à medicação (não são campos de `sinais_vitais`) e filtro de data no servidor.
+
+## 24. Portal Família configurável por ILPI (em revisão)
+
+Exceção ao FEATURE_FREEZE pedida pelo responsável em 22/11/2026, só para as Issues #302 e #303. O responsável decidiu implementar e escolher depois o que liberar.
+
+- **Escopo (#303):** migration 037 (`portal_familia_config`, uma linha por ILPI). Portal desligado e todas as categorias bloqueadas por padrão; a equipe com `portal_familia:publicar` liga e escolhe em Configurações. Categorias: remédios, alimentação, atividades, peso, recados, agenda, mensalidades. Cada acesso do familiar é auditado.
+- **Mudança:** portais liberados em #271 ficam desligados após a 037 até a equipe ligar.
+- **Pendente (decisão):** resumo escrito pela equipe, pressão "na meta" (exige meta clínica, ver #286), água, sono/humor/dor, agendar visita e mensagens.

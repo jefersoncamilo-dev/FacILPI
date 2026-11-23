@@ -4,6 +4,7 @@
   Liberar cria a conta do familiar com senha provisoria aleatoria, mostrada uma
   unica vez, e troca obrigatoria no primeiro acesso. Bloquear inativa o vinculo e
   revoga as sessoes: o proximo pedido de uma sessao aberta ja e recusado.
+- #303: o portal inteiro e cada categoria comecam bloqueados por ILPI (/portal/config).
 - O familiar so le o proprio residente vinculado: resumo do dia, agenda,
   mensalidades e recados. Nada do prontuario clinico. Nao envia nada.
 - Residente e tenant vem do vinculo da sessao, nunca de parametro.
@@ -187,19 +188,93 @@ class MensalidadePortal(BaseModel):
     pago_em: Optional[date] = None
 
 
+# ---------- Configuracao por ILPI (#303) ----------
+# Categorias que o familiar pode ver. Todas comecam BLOQUEADAS e o portal inteiro
+# comeca DESLIGADO por ILPI; quem decide o que liberar e a equipe (portal_familia:publicar).
+CATEGORIAS = ("medicacao", "alimentacao", "atividades", "bem_estar", "recados", "agenda", "mensalidades")
+JANELA_DIAS = 30
+
+
+class PortalConfig(BaseModel):
+    ativo: bool = False
+    categorias: list[str] = Field(default_factory=list)
+
+
+async def _config(db, ilpi_id) -> PortalConfig:
+    row = await db.get(m.PortalFamiliaConfig, ilpi_id, populate_existing=True)
+    if row is None:
+        return PortalConfig()
+    return PortalConfig(ativo=bool(row.ativo), categorias=[c for c in (row.categorias or []) if c in CATEGORIAS])
+
+
+@portal_router.get("/config", response_model=PortalConfig)
+async def ler_config(db: AsyncSession = Depends(get_db),
+                     context: SecurityContext = Depends(require_permission("portal_familia:publicar"))):
+    return await _config(db, context.ilpi_id)
+
+
+@portal_router.put("/config", response_model=PortalConfig)
+async def salvar_config(payload: PortalConfig, request: Request, db: AsyncSession = Depends(get_db),
+                        context: SecurityContext = Depends(require_permission("portal_familia:publicar"))):
+    invalidas = [c for c in payload.categorias if c not in CATEGORIAS]
+    if invalidas:
+        raise HTTPException(status_code=422, detail={"code": "CATEGORIA_INVALIDA",
+                                                     "message": f"Categoria desconhecida: {', '.join(invalidas)}"})
+    antes = await _config(db, context.ilpi_id)
+    row = await db.get(m.PortalFamiliaConfig, context.ilpi_id)
+    if row is None:
+        row = m.PortalFamiliaConfig(ilpi_id=context.ilpi_id)
+        db.add(row)
+    row.ativo = payload.ativo
+    row.categorias = [c for c in CATEGORIAS if c in set(payload.categorias)]
+    row.atualizado_por = context.user.id
+    row.updated_at = datetime.now(timezone.utc)
+    add_audit(db, acao="portal_familia.config", entidade="portal_familia_config", registro_id=context.ilpi_id,
+              usuario_id=context.user.id, ilpi_id=context.ilpi_id, valores_anteriores=antes.model_dump(),
+              valores_posteriores={"ativo": row.ativo, "categorias": row.categorias}, request=request)
+    await db.commit()
+    return await _config(db, context.ilpi_id)
+
+
+class Percentual(BaseModel):
+    # Contagens simples dos ultimos 30 dias; sem julgamento clinico.
+    feitos: int
+    total: int
+    percentual: Optional[int] = None
+
+
+class PontoPeso(BaseModel):
+    data: datetime
+    peso: float
+
+
 class PortalResumo(BaseModel):
     residente_nome: str
     familiar_nome: str
     hoje: date
-    compromissos_hoje: list[Compromisso]
-    recados_hoje: int
-    agenda: list[Compromisso]
-    mensalidades: list[MensalidadePortal]
-    recados: list[Recado]
+    portal_liberado: bool
+    categorias: list[str]
+    medicacao: Optional[Percentual] = None
+    alimentacao: Optional[Percentual] = None
+    atividades: Optional[Percentual] = None
+    peso: Optional[list[PontoPeso]] = None
+    compromissos_hoje: Optional[list[Compromisso]] = None
+    recados_hoje: Optional[int] = None
+    agenda: Optional[list[Compromisso]] = None
+    mensalidades: Optional[list[MensalidadePortal]] = None
+    recados: Optional[list[Recado]] = None
+
+
+def _pct(feitos: int, total: int) -> Percentual:
+    return Percentual(feitos=feitos, total=total, percentual=round(100 * feitos / total) if total else None)
+
+
+def _aware(v: datetime) -> datetime:
+    return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
 
 
 @portal_router.get("/resumo", response_model=PortalResumo)
-async def resumo_do_familiar(db: AsyncSession = Depends(get_db),
+async def resumo_do_familiar(request: Request, db: AsyncSession = Depends(get_db),
                              context: SecurityContext = Depends(require_permission("portal_familia:ler"))):
     familiar = await db.scalar(select(m.Familiar).where(
         m.Familiar.usuario_id == context.user.id, m.Familiar.ilpi_id == context.ilpi_id, m.Familiar.portal_ativo.is_(True)))
@@ -209,35 +284,71 @@ async def resumo_do_familiar(db: AsyncSession = Depends(get_db),
         m.Residente.id == familiar.residente_id, m.Residente.instituicao_id == context.ilpi_id))
     if residente is None:
         raise _404()
+    config = await _config(db, context.ilpi_id)
+    ver = set(config.categorias) if config.ativo else set()
+    # #303: todo acesso do familiar fica na auditoria, com as categorias mostradas.
+    add_audit(db, acao="portal_familia.acesso", entidade="residentes", registro_id=residente.id, usuario_id=context.user.id,
+              ilpi_id=context.ilpi_id, valores_posteriores={"familiar_id": familiar.id, "categorias": sorted(ver)},
+              request=request)
+    await db.commit()
     fuso = await db.scalar(select(m.Instituicao.fuso_horario).where(m.Instituicao.id == context.ilpi_id))
     tz = ZoneInfo(fuso or "America/Sao_Paulo")
-    hoje = datetime.now(tz).date()
+    agora = datetime.now(timezone.utc)
+    hoje = agora.astimezone(tz).date()
     inicio = datetime.combine(hoje, time.min, tz).astimezone(timezone.utc)
     amanha = inicio + timedelta(days=1)
+    desde = agora - timedelta(days=JANELA_DIAS)
+    resposta = PortalResumo(residente_nome=residente.nome_social or residente.nome, familiar_nome=familiar.nome,
+                            hoje=hoje, portal_liberado=config.ativo, categorias=sorted(ver))
+    rid, iid = residente.id, context.ilpi_id
 
-    eventos = (await db.scalars(select(m.AgendaEvento).where(
-        m.AgendaEvento.ilpi_id == context.ilpi_id, m.AgendaEvento.residente_id == residente.id,
-        m.AgendaEvento.situacao != "cancelado", m.AgendaEvento.inicio_em >= inicio,
-        m.AgendaEvento.inicio_em < inicio + timedelta(days=30),
-    ).order_by(m.AgendaEvento.inicio_em))).all()
-    agenda = [Compromisso(motivo=e.motivo, inicio_em=e.inicio_em, local=e.local, situacao=e.situacao) for e in eventos]
-    recados = (await db.scalars(select(m.PortalRecado).where(
-        m.PortalRecado.ilpi_id == context.ilpi_id, m.PortalRecado.residente_id == residente.id
-    ).order_by(m.PortalRecado.created_at.desc()).limit(50))).all()
-    mensalidades = (await db.scalars(select(m.Mensalidade).where(
-        m.Mensalidade.ilpi_id == context.ilpi_id, m.Mensalidade.residente_id == residente.id,
-        m.Mensalidade.situacao != "cancelada",
-    ).order_by(m.Mensalidade.vencimento.desc()).limit(24))).all()
-
-    def _aware(v: datetime) -> datetime:
-        return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
-
-    return PortalResumo(
-        residente_nome=residente.nome_social or residente.nome, familiar_nome=familiar.nome, hoje=hoje,
-        compromissos_hoje=[c for c in agenda if _aware(c.inicio_em) < amanha],
-        recados_hoje=sum(1 for r in recados if _aware(r.created_at) >= inicio),
-        agenda=agenda,
-        mensalidades=[MensalidadePortal(competencia=x.competencia, valor_centavos=x.valor_centavos, vencimento=x.vencimento,
-                                        situacao=x.situacao, pago_em=x.pago_em) for x in mensalidades],
-        recados=[_recado(r) for r in recados],
-    )
+    if "medicacao" in ver:
+        doses = (await db.execute(select(m.DosePrevista.id, m.Administracao.resultado).outerjoin(
+            m.Administracao, (m.Administracao.dose_prevista_id == m.DosePrevista.id)
+            & (m.Administracao.ilpi_id == m.DosePrevista.ilpi_id) & m.Administracao.estornado_em.is_(None)).where(
+            m.DosePrevista.ilpi_id == iid, m.DosePrevista.residente_id == rid, m.DosePrevista.situacao == "prevista",
+            m.DosePrevista.previsto_em >= desde, m.DosePrevista.previsto_em < agora))).all()
+        resposta.medicacao = _pct(sum(1 for _, r in doses if r == "administrada"), len(doses))
+    if "atividades" in ver or "alimentacao" in ver:
+        ocorr = (await db.execute(select(m.OcorrenciaCuidado.id, m.ExecucaoCuidado.resultado,
+                                         m.ExecucaoCuidado.percentual_consumido).outerjoin(
+            m.ExecucaoCuidado, (m.ExecucaoCuidado.ocorrencia_id == m.OcorrenciaCuidado.id)
+            & (m.ExecucaoCuidado.ilpi_id == m.OcorrenciaCuidado.ilpi_id) & m.ExecucaoCuidado.estornado_em.is_(None)).where(
+            m.OcorrenciaCuidado.ilpi_id == iid, m.OcorrenciaCuidado.residente_id == rid,
+            m.OcorrenciaCuidado.situacao == "prevista",
+            m.OcorrenciaCuidado.previsto_em >= desde, m.OcorrenciaCuidado.previsto_em < agora))).all()
+        if "atividades" in ver:
+            resposta.atividades = _pct(sum(1 for _, r, _p in ocorr if r == "executada"), len(ocorr))
+        if "alimentacao" in ver:
+            # G4: so execucoes com percentual de refeicao; media simples do quanto foi comido.
+            refeicoes = [p for _, _r, p in ocorr if p is not None]
+            resposta.alimentacao = Percentual(feitos=sum(refeicoes), total=100 * len(refeicoes),
+                                              percentual=round(sum(refeicoes) / len(refeicoes)) if refeicoes else None)
+    if "bem_estar" in ver:
+        resposta.peso = [PontoPeso(data=_aware(d), peso=p) for d, p in (await db.execute(
+            select(m.SinalVital.data, m.SinalVital.peso).where(
+                m.SinalVital.ilpi_id == iid, m.SinalVital.residente_id == rid, m.SinalVital.peso.is_not(None),
+                m.SinalVital.data >= desde).order_by(m.SinalVital.data))).all()]
+    if "agenda" in ver:
+        eventos = (await db.scalars(select(m.AgendaEvento).where(
+            m.AgendaEvento.ilpi_id == iid, m.AgendaEvento.residente_id == rid,
+            m.AgendaEvento.situacao != "cancelado", m.AgendaEvento.inicio_em >= inicio,
+            m.AgendaEvento.inicio_em < inicio + timedelta(days=30),
+        ).order_by(m.AgendaEvento.inicio_em))).all()
+        resposta.agenda = [Compromisso(motivo=e.motivo, inicio_em=e.inicio_em, local=e.local, situacao=e.situacao)
+                           for e in eventos]
+        resposta.compromissos_hoje = [c for c in resposta.agenda if _aware(c.inicio_em) < amanha]
+    if "recados" in ver:
+        recados = (await db.scalars(select(m.PortalRecado).where(
+            m.PortalRecado.ilpi_id == iid, m.PortalRecado.residente_id == rid
+        ).order_by(m.PortalRecado.created_at.desc()).limit(50))).all()
+        resposta.recados = [_recado(r) for r in recados]
+        resposta.recados_hoje = sum(1 for r in recados if _aware(r.created_at) >= inicio)
+    if "mensalidades" in ver:
+        mensalidades = (await db.scalars(select(m.Mensalidade).where(
+            m.Mensalidade.ilpi_id == iid, m.Mensalidade.residente_id == rid, m.Mensalidade.situacao != "cancelada",
+        ).order_by(m.Mensalidade.vencimento.desc()).limit(24))).all()
+        resposta.mensalidades = [MensalidadePortal(competencia=x.competencia, valor_centavos=x.valor_centavos,
+                                                   vencimento=x.vencimento, situacao=x.situacao, pago_em=x.pago_em)
+                                 for x in mensalidades]
+    return resposta
