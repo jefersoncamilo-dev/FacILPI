@@ -182,10 +182,13 @@ def test_demais_roteadores_da_factory_seguem_sem_o_parametro(d1_db):
                           main.app.openapi()["paths"][rota]["get"].get("parameters", [])}
             assert "residente_id" in parametros, f"{rota} deveria expor residente_id"
 
-        for rota in ("/api/residentes/", "/api/tarefas/", "/api/alertas/"):
+        for rota in ("/api/residentes/",):
             nomes = {p["name"] for p in
                      main.app.openapi()["paths"][rota]["get"].get("parameters", [])}
             assert "residente_id" not in nomes, f"{rota} nao deveria expor residente_id"
+        # #311: /tarefas e /alertas (CRUD legado) sairam do app e do OpenAPI.
+        for rota in ("/api/tarefas/", "/api/alertas/"):
+            assert rota not in main.app.openapi()["paths"], f"{rota} deveria ter sido removida"
 
         # E o parametro desconhecido continua IGNORADO, nao rejeitado: em
         # /residentes/ o usuario tem residentes:ler, entao 200 prova que o

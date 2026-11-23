@@ -574,21 +574,21 @@ def test_outros_modulos_clinicos_permanecem_fail_closed(familiares_db):
         await db.commit()
         headers = _auth_headers(user, scope="ilpi", ilpi_id=ilpi.id)
 
-        still_blocked = (
+        # #311: o CRUD legado /tarefas e /alertas foi REMOVIDO, nao apenas bloqueado.
+        # O contrato passa de "403 fail-closed" para "404 rota inexistente" (mesmo
+        # criterio da A3/#45): mudanca de contrato, nao afrouxamento de assercao.
+        rotas_removidas = (
             ("get", "/api/tarefas/", None),
             ("post", "/api/tarefas/", {"residente_id": _new_id(), "descricao": "X"}),
             ("get", "/api/alertas/", None),
         )
-        for method, route, payload in still_blocked:
+        for method, route, payload in rotas_removidas:
             request = getattr(client, method)
             kwargs = {"headers": headers}
             if payload is not None:
                 kwargs["json"] = payload
             response = await request(route, **kwargs)
-            assert response.status_code == 403, (method, route, response.text)
-            detail = response.json().get("detail")
-            assert isinstance(detail, dict), (method, route, response.text)
-            assert detail.get("code") == PERMISSION_CATALOG_PENDING, (method, route, response.text)
+            assert response.status_code == 404, (method, route, response.text)
 
         # Residentes segue protegido por RBAC próprio (sem wildcard via familiares).
         residentes_denied = await client.get("/api/residentes/", headers=headers)

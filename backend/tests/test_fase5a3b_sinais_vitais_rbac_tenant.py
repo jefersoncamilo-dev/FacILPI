@@ -54,7 +54,6 @@ from tests.sessao_teste import abrir_sessao, token_de
 from src.application.security import (  # noqa: E402
     AUTH_CONTEXT_REQUIRED,
     FIRST_PASSWORD_CHANGE_REQUIRED,
-    PERMISSION_CATALOG_PENDING,
     PERMISSION_DENIED,
     RESOURCE_NOT_FOUND,
 )
@@ -1203,19 +1202,21 @@ def test_41_outros_modulos_clinicos_continuam_fail_closed(sinais_db):
         )
         await db.commit()
         headers = _auth_headers(user, scope="ilpi", ilpi_id=ilpi.id)
-        still_blocked = (
+        # #311: o CRUD legado /tarefas e /alertas foi REMOVIDO, nao apenas bloqueado.
+        # O contrato passa de "403 fail-closed" para "404 rota inexistente" (mesmo
+        # criterio da A3/#45): mudanca de contrato, nao afrouxamento de assercao.
+        rotas_removidas = (
             ("get", "/api/tarefas/", None),
             ("post", "/api/tarefas/", {"residente_id": _new_id(), "descricao": "X"}),
             ("get", "/api/alertas/", None),
         )
-        for method, route, payload in still_blocked:
+        for method, route, payload in rotas_removidas:
             request = getattr(client, method)
             kwargs = {"headers": headers}
             if payload is not None:
                 kwargs["json"] = payload
             response = await request(route, **kwargs)
-            assert response.status_code == 403, (method, route, response.text)
-            assert _detail_code(response) == PERMISSION_CATALOG_PENDING, (method, route, response.text)
+            assert response.status_code == 404, (method, route, response.text)
     asyncio.run(_with_client(sinais_db, scenario))
 
 

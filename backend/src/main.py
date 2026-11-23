@@ -913,7 +913,9 @@ async def baixar_arquivo_documento(
     )
 
 
-tarefas_router = make_crud_router(m.Tarefa, s.TarefaCreate, s.TarefaUpdate, s.TarefaResponse, "/tarefas", ["tarefas"], fail_closed=True)
+# #311: o CRUD legado /tarefas (fail_closed desde a fase 2) foi removido. A tabela
+# `tarefas` fica no schema e no histórico de migrations; a rotina assistencial
+# (programação → ocorrência → execução) é a fonte vigente.
 # ===== Avaliacoes Router (F5A-3A1) =====
 
 avaliacoes_router = APIRouter(prefix="/avaliacoes", tags=["avaliacoes"])
@@ -1514,7 +1516,8 @@ async def close_intercorrencia(
     )
 
 
-alertas_router = make_crud_router(m.Alerta, s.AlertaCreate, s.AlertaCreate, s.AlertaResponse, "/alertas", ["alertas"], fail_closed=True)
+# #311: o CRUD legado /alertas (fail_closed desde a fase 2) foi removido. A tabela
+# `alertas` fica no schema; a Central de Alertas (/central-alertas) é a projeção vigente.
 
 # Include routers under /api
 app.include_router(configuracoes_router, prefix="/api")
@@ -1545,7 +1548,6 @@ app.include_router(medicamentos_router, prefix="/api")
 app.include_router(prescricoes_router, prefix="/api")
 app.include_router(doses_previstas_router, prefix="/api")
 app.include_router(administracoes_router, prefix="/api")
-app.include_router(tarefas_router, prefix="/api")
 app.include_router(avaliacoes_router, prefix="/api")
 app.include_router(graus_router, prefix="/api")
 app.include_router(planos_router, prefix="/api")
@@ -1557,7 +1559,6 @@ app.include_router(execucoes_router, prefix="/api")
 app.include_router(plantao_router, prefix="/api")
 app.include_router(sinais_router, prefix="/api")
 app.include_router(intercorrencias_router, prefix="/api")
-app.include_router(alertas_router, prefix="/api")
 app.include_router(quartos_leitos_router, prefix="/api")
 app.include_router(ausencias_router, prefix="/api")
 app.include_router(ocupacao_historico_router, prefix="/api")

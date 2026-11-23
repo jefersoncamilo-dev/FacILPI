@@ -94,10 +94,9 @@ def test_sem_permissao_contexto_e_rota_legada(alertas_db):
         assert (await client.get(URL, headers=h_sem)).status_code == 403
         _, gestor, h = await _gestor(db)
         assert (await client.get(URL, headers=_headers(gestor, scope="global"))).status_code == 403
-        # O CRUD legado da 001 continua fail_closed, mesmo para quem tem alertas:ler.
+        # #311: o CRUD legado da 001 foi removido; nem quem tem alertas:ler o alcanca.
         legado = await client.get("/api/alertas/", headers=h)
-        assert legado.status_code == 403
-        assert legado.json()["detail"]["code"] == "PERMISSION_CATALOG_PENDING"
+        assert legado.status_code == 404
         vazio = await _alertas(client, h)
         assert vazio["alertas"] == [] and vazio["contagem"] == {
             "critico": 0, "atencao": 0, "aviso": 0, "alerta": 0, "pendencia": 0, "informativo": 0, "atividade": 0,

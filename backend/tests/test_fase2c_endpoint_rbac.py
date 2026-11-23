@@ -459,9 +459,13 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
     # + autoria da sessão + histórico imutável (cobertura em
     # test_fase5a3b_sinais_vitais_rbac_tenant.py); removida desta lista
     # (sem PUT/DELETE: imutável, 405).
-    clinical_list_routes = (
-        "/api/tarefas/",
-        "/api/alertas/",
+    # #311: /tarefas e /alertas (CRUD legado) foram removidas; ver o bloco 404 abaixo.
+    removed_legacy_routes = (
+        ("get", "/api/tarefas/", None),
+        ("get", "/api/alertas/", None),
+        ("post", "/api/tarefas/", {"residente_id": _new_id(), "descricao": "Tarefa"}),
+        ("put", f"/api/tarefas/{_new_id()}", {"descricao": "Tarefa"}),
+        ("delete", f"/api/tarefas/{_new_id()}", None),
     )
     resident_id = _new_id()
     medication_id = _new_id()
@@ -471,9 +475,6 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
         # F5A-2B: GET/POST/PUT de familiares liberados via RBAC; DELETE segue fail-closed.
         ("delete", f"/api/familiares/{_new_id()}", None),
         # C5: medicamentos/prescricoes agora RBAC real (PERMISSION_DENIED, não CATALOG_PENDING) — removidos desta lista fail-closed.
-        ("post", "/api/tarefas/", {"residente_id": resident_id, "descricao": "Tarefa"}),
-        ("put", f"/api/tarefas/{_new_id()}", {"descricao": "Tarefa"}),
-        ("delete", f"/api/tarefas/{_new_id()}", None),
         # C.3: Sinais Vitais liberado via RBAC (GET/POST); PUT/DELETE inexistentes (405).
     )
 
@@ -491,13 +492,15 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
         health_response = await client.get("/api/health")
         assert health_response.status_code == 200
 
-        for route in clinical_list_routes:
-            missing_token = await client.get(route)
-            assert missing_token.status_code == 401
-
-            blocked = await client.get(route, headers=headers)
-            assert blocked.status_code == 403
-            assert _detail_code(blocked) == PERMISSION_CATALOG_PENDING
+        # #311: rota removida = 404, com ou sem token (mesmo criterio da A3/#45).
+        for method, route, payload in removed_legacy_routes:
+            request = getattr(client, method)
+            kwargs = {"headers": headers}
+            if payload is not None:
+                kwargs["json"] = payload
+            assert (await request(route, **kwargs)).status_code == 404, (method, route)
+            kwargs.pop("headers")
+            assert (await request(route, **kwargs)).status_code == 404, (method, route)
 
         for method, route, payload in clinical_mutations:
             request = getattr(client, method)
@@ -531,8 +534,7 @@ def test_clinical_routes_fail_closed_and_health_remains_public(endpoint_db):
                 "mensagem": "nao criar",
             },
         )
-        assert alert_payload_blocked.status_code == 403
-        assert _detail_code(alert_payload_blocked) == PERMISSION_CATALOG_PENDING
+        assert alert_payload_blocked.status_code == 404
         assert await _count(db, m.Alerta) == 0
 
     asyncio.run(_with_client(endpoint_db, scenario))

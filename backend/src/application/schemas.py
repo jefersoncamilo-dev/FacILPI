@@ -955,35 +955,6 @@ class C5AdministracaoResponse(BaseModel):
         return v
 
 
-# ---- Tarefa ----
-class TarefaCreate(BaseModel):
-    residente_id: str
-    plano_id: Optional[str] = None
-    descricao: str
-    horario_previsto: Optional[datetime] = None
-    prioridade: Optional[str] = "media"
-    responsavel: Optional[str] = None
-    situacao: Optional[str] = "Pendente"
-    justificativa: Optional[str] = None
-
-class TarefaUpdate(BaseModel):
-    descricao: Optional[str] = None
-    horario_previsto: Optional[datetime] = None
-    horario_realizado: Optional[datetime] = None
-    prioridade: Optional[str] = None
-    responsavel: Optional[str] = None
-    executor: Optional[str] = None
-    situacao: Optional[str] = None
-    justificativa: Optional[str] = None
-
-class TarefaResponse(TarefaCreate):
-    id: str
-    horario_realizado: Optional[datetime] = None
-    executor: Optional[str] = None
-    created_at: Optional[datetime] = None
-    class Config:
-        from_attributes = True
-
 # ---- Sinal Vital (C.3: registro mínimo seguro, histórico imutável) ----
 # Modelo colunar mantido (temperatura, pressao_*, frequencias, saturacao,
 # glicemia, peso). Unidades implícitas por campo. Correção = novo INSERT;
@@ -1118,24 +1089,6 @@ class IntercorrenciaResponse(BaseModel):
     autor_id: Optional[str] = None
     # Timestamp tecnico de criacao do registro.
     data: Optional[datetime] = None
-    class Config:
-        from_attributes = True
-
-# ---- Alerta ----
-class AlertaCreate(BaseModel):
-    instituicao_id: Optional[str] = None
-    residente_id: Optional[str] = None
-    origem: Optional[str] = None
-    tipo: str
-    gravidade: Optional[str] = None
-    mensagem: str
-    responsavel: Optional[str] = None
-    prazo: Optional[datetime] = None
-    situacao: Optional[str] = "Ativo"
-
-class AlertaResponse(AlertaCreate):
-    id: str
-    created_at: Optional[datetime] = None
     class Config:
         from_attributes = True
 
