@@ -35,3 +35,39 @@ def test_mais_de_um_worker_falha_no_boot(env, argv):
 def test_ambiente_do_processo_atual_sobe():
     # A suite roda em um processo; o guard nao pode derrubar o boot da app.
     assert_rate_limit_single_process()
+
+
+# #314: o guard roda no `lifespan` da app (antes `@app.on_event("startup")`).
+# Os testes acima provam a funcao; estes provam que o boot da app a chama.
+def _subir_app():
+    import asyncio
+    from src import main
+
+    async def subir():
+        async with main.app.router.lifespan_context(main.app):
+            pass
+
+    asyncio.run(subir())
+
+
+class _EngineProibido:
+    def begin(self):
+        raise AssertionError("create_all nao pode rodar sem ALLOW_CREATE_ALL")
+
+
+def test_lifespan_recusa_mais_de_um_worker(monkeypatch):
+    from src import main
+
+    monkeypatch.setenv("WEB_CONCURRENCY", "2")
+    monkeypatch.setattr(main, "engine", _EngineProibido())
+    with pytest.raises(RuntimeError, match="workers"):
+        _subir_app()
+
+
+def test_lifespan_sobe_com_um_worker_sem_create_all(monkeypatch):
+    from src import main
+
+    monkeypatch.delenv("WEB_CONCURRENCY", raising=False)
+    assert main.ALLOW_CREATE_ALL is False
+    monkeypatch.setattr(main, "engine", _EngineProibido())
+    _subir_app()
