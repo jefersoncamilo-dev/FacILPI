@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até a 035 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`; 035 dos complementares). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até a 037 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`; 035 dos complementares; 036 do portal da família, #271; 037 da configuração do portal por ILPI, #303). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -46,7 +46,9 @@ A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vincu
 - Percentual de refeição opcional 0/25/50/75/100 (D6, PR #220, migration 032).
 - Estorno de dose pela tela só por Enfermagem e RT, com motivo (D2, #11, PR #226, migration 033).
 - Escritas clínicas fora do `ilpi_admin` (D3 opção B, #15, PR #228, migration 034): relatório por ILPI, transição de 30 dias, bloqueio só da escrita clínica sem perfil clínico.
-- Complementares D5: Configurações (PR #260), Auditoria (PR #263), Relatórios (PR #265); Agenda, Multidisciplinar por área, PIA, Farmácia e estoque e Financeiro básico de mensalidades (PR #272, migration 035). Portal da família adiado para a próxima versão.
+- Complementares D5: Configurações (PR #260), Auditoria (PR #263), Relatórios (PR #265); Agenda, Multidisciplinar por área, PIA, Farmácia e estoque e Financeiro básico de mensalidades (PR #272, migration 035). Portal da família entrou depois, em #271 (migration 036) e #303 (abaixo).
+- Rotina da ILPI (UX-NAV-5, #302, PR #304, sem migration): tela `/rotina` com o mapa da rotina do turno (manhã 7h–13h, tarde 13h–19h, noite 19h–7h, no fuso da ILPI) de todos os residentes, via `GET /api/plantao/mapa`, projeção só de leitura sobre cuidados e doses. Exige `plantao:ler` e `residentes:ler`; doses só com `administracoes:ler`.
+- Portal da família configurável por ILPI (#303, PR #305, migration 037): o portal e todas as categorias (remédios, alimentação, atividades, peso, recados, agenda, mensalidades) começam bloqueados; quem tem `portal_familia:publicar` liga e libera em Configurações. Cada acesso do familiar é auditado. Depois da 037, os portais liberados em #271 ficam desligados até a equipe ligar. Continuam pendentes de decisão: resumo escrito pela equipe, pressão "na meta" (exige meta clínica), água, sono/humor/dor, visita e mensagens (#303 segue aberta).
 - Gráficos do Início (#275, PR #276, sem migration): pendências das próximas 12 horas por origem (colunas na hora cheia) e intercorrências por semana (8 ou 12 semanas, no fuso da ILPI) via `GET /api/dashboard/intercorrencias-semanais`, que exige `intercorrencias:ler` e conta pela data do evento em qualquer situação.
 - CI mais rápido (#184): o job SQLite caiu de cerca de 29 para cerca de 4 min.
 - Infraestrutura de testes backend protegida contra uso do banco oficial.
@@ -92,6 +94,7 @@ Uma promoção da `fase-3b` para a `main` exige:
 - Render: configurar o rewrite de `/api/*` e o `VITE_API_BASE_URL` (necessário para o cookie do #207).
 - Follow-ups: #163, #164, #165, #166, #173, tela de estorno da saída, fuso horário da grade de doses (M9), UUID em `Documentos.tsx`, validação visual do M1 e do M5.
 - Ordem dos complementares (D5) em `docs/ROADMAP.md` §20.
+- Homologação: aplicar as migrations 036 e 037 em ordem, só por decisão humana (a 037 desliga os portais de #271 até a equipe ligar).
 
 ### Passagem de Plantão
 Persistida desde a Fase 4 (027) como registro do que foi comunicado, não fonte clínica: consome fontes oficiais/projeções sem duplicá-las. Não integra o Prontuário longitudinal (decisão do M20).
