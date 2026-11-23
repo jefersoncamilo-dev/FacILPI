@@ -266,56 +266,56 @@ O código tem **poucos marcadores** `TODO/FIXME` (nenhum encontrado em `backend/
 ```mermaid
 graph TD
     subgraph Clientes
-        U1[Equipe da ILPI<br/>navegador / celular]
-        U2[Familiar<br/>Portal]
-        U3[Superusuário<br/>da plataforma]
+        U1["Equipe da ILPI<br/>navegador / celular"]
+        U2["Familiar<br/>Portal"]
+        U3["Superusuário<br/>da plataforma"]
     end
 
     subgraph Edge
-        CADDY[Caddy<br/>TLS + CSP + roteamento]
+        CADDY["Caddy<br/>TLS + CSP + roteamento"]
     end
 
     subgraph Frontend["Frontend — React + Vite"]
-        APP[App.tsx / React Router 7]
-        CTX[AuthContext<br/>PermissoesContext]
-        SHELL[Shell: menu por permissão,<br/>busca, sino, emergência]
-        PAGES[32 telas]
-        SVC[services/api.ts<br/>axios + cookie + CSRF]
+        APP["App.tsx / React Router 7"]
+        CTX["AuthContext<br/>PermissoesContext"]
+        SHELL["Shell: menu por permissão,<br/>busca, sino, emergência"]
+        PAGES["31 telas"]
+        SVC["services/api.ts<br/>axios + cookie + CSRF"]
     end
 
     subgraph Backend["Backend — FastAPI /api"]
-        AUTH[Auth / sessão<br/>JWT cookie, refresh, CSRF, rate limit]
-        SEC[SecurityContext<br/>tenant + perfil + RBAC]
+        AUTH["Auth / sessão<br/>JWT cookie, refresh, CSRF, rate limit"]
+        SEC["SecurityContext<br/>tenant + perfil + RBAC"]
         subgraph Dominios
-            PLAT[Plataforma e onboarding]
-            EQ[Usuários, funcionários,<br/>perfis, matriz]
-            RES[Residentes, familiares,<br/>documentos, saída]
-            ADM[Admissão]
-            LEITO[Quartos, leitos, ausências]
-            CLIN[Avaliações, grau,<br/>sinais, intercorrências]
-            PAIS[PAIS]
-            ROT[Rotina assistencial]
-            MED[Medicação]
-            OPS[Escala e plantões]
-            PASS[Passagem de plantão]
-            COMP[Agenda, multidisciplinar,<br/>PIA, estoque, financeiro]
-            INST[Configurações, relatórios]
+            PLAT["Plataforma e onboarding"]
+            EQ["Usuários, funcionários,<br/>perfis, matriz"]
+            RES["Residentes, familiares,<br/>documentos, saída"]
+            ADM["Admissão"]
+            LEITO["Quartos, leitos, ausências"]
+            CLIN["Avaliações, grau,<br/>sinais, intercorrências"]
+            PAIS["PAIS"]
+            ROT["Rotina assistencial"]
+            MED["Medicação"]
+            OPS["Escala e plantões"]
+            PASS["Passagem de plantão"]
+            COMP["Agenda, multidisciplinar,<br/>PIA, estoque, financeiro"]
+            INST["Configurações, relatórios"]
         end
         subgraph Projecoes["Projeções somente leitura"]
-            PRONT[Prontuário]
-            MEU[Meu Plantão]
-            ALERT[Central de Alertas]
-            DASH[Dashboard]
-            MAPA[Rotina da ILPI / mapa]
-            PORTAL[Portal da Família]
+            PRONT["Prontuário"]
+            MEU["Meu Plantão"]
+            ALERT["Central de Alertas"]
+            DASH["Dashboard"]
+            MAPA["Rotina da ILPI / mapa"]
+            PORTAL["Portal da Família"]
         end
-        AUD[Auditoria]
+        AUD["Auditoria"]
     end
 
     subgraph Dados
-        DB[(PostgreSQL 16 / SQLite<br/>56 tabelas, Alembic 001–037)]
-        FILES[(UPLOAD_ROOT<br/>arquivos de documentos)]
-        BKP[(Backup off-host<br/>age + Backblaze B2)]
+        DB[("PostgreSQL 16 / SQLite<br/>56 tabelas, Alembic 001–037")]
+        FILES[("UPLOAD_ROOT<br/>arquivos de documentos")]
+        BKP[("Backup off-host<br/>age + Backblaze B2")]
     end
 
     U1 --> CADDY
@@ -324,7 +324,7 @@ graph TD
     CADDY -->|"/*"| APP
     CADDY -->|"/api/*"| AUTH
     APP --> CTX --> SHELL --> PAGES --> SVC
-    SVC -->|HTTPS JSON| AUTH
+    SVC -->|"HTTPS JSON"| AUTH
     AUTH --> SEC
     SEC --> Dominios
     SEC --> Projecoes
@@ -336,69 +336,69 @@ graph TD
     ADM --> RES
     RES --> LEITO
     Dominios --> AUD
-    Projecoes -. lê .-> DB
+    Projecoes -.->|"lê"| DB
     Dominios --> DB
     RES --> FILES
     AUD --> DB
-    DB -. pg_dump .-> BKP
+    DB -.->|"pg_dump"| BKP
 ```
 
 ### 3.2 Fluxograma das funcionalidades atuais — uso real hoje
 
 ```mermaid
 flowchart TD
-    START([Acesso ao FacILPI]) --> LOGIN[/login: usuário e senha/]
-    LOGIN --> RL{Rate limit e<br/>bloqueio por falhas}
-    RL -->|bloqueado| LOGIN
-    RL -->|ok| PRIM{Senha temporária?}
-    PRIM -->|sim| TROCA[/primeiro-acesso: trocar senha/]
-    PRIM -->|não| TIPO
-    TROCA --> TIPO{Tipo de sessão}
+    START(["Acesso ao FacILPI"]) --> LOGIN["/login: usuário e senha"]
+    LOGIN --> RL{"Rate limit e<br/>bloqueio por falhas"}
+    RL -->|"bloqueado"| LOGIN
+    RL -->|"ok"| PRIM{"Senha temporária?"}
+    PRIM -->|"sim"| TROCA["/primeiro-acesso: trocar senha"]
+    PRIM -->|"não"| TIPO
+    TROCA --> TIPO{"Tipo de sessão"}
 
-    TIPO -->|Superusuário| PLAT[/platform: criar ILPI rascunho/]
-    PLAT --> GESTOR[Criar primeiro gestor<br/>credencial temporária]
-    GESTOR --> ATIVA[Ativar ILPI]
+    TIPO -->|"Superusuário"| PLAT["/platform: criar ILPI rascunho"]
+    PLAT --> GESTOR["Criar primeiro gestor<br/>credencial temporária"]
+    GESTOR --> ATIVA["Ativar ILPI"]
 
-    TIPO -->|Familiar| PORTAL[/portal: resumo 30 dias<br/>só categorias liberadas/]
+    TIPO -->|"Familiar"| PORTAL["/portal: resumo 30 dias<br/>só categorias liberadas"]
 
-    TIPO -->|Equipe| CTXSEL{Mais de um vínculo?}
-    CTXSEL -->|sim| PICK[Escolher ILPI e perfil]
-    CTXSEL -->|não| HOME
-    PICK --> HOME[Início / Dashboard<br/>menu filtrado por permissão]
+    TIPO -->|"Equipe"| CTXSEL{"Mais de um vínculo?"}
+    CTXSEL -->|"sim"| PICK["Escolher ILPI e perfil"]
+    CTXSEL -->|"não"| HOME
+    PICK --> HOME["Início / Dashboard<br/>menu filtrado por permissão"]
 
-    HOME --> CONF[Gestor: Configurações,<br/>Equipe, perfis, Escala]
-    CONF --> ESTR[Quartos e leitos,<br/>áreas e turnos]
+    HOME --> CONF["Gestor: Configurações,<br/>Equipe, perfis, Escala"]
+    CONF --> ESTR["Quartos e leitos,<br/>áreas e turnos"]
 
-    HOME --> ADMS[Admissão do residente<br/>etapas, contrato, documentos, avaliações]
-    ADMS -->|concluir| ATIVO[Residente Ativo<br/>alocado em leito]
-    ATIVO --> AVAL[Avaliação e grau de dependência]
-    AVAL --> PAIS[PAIS: necessidades, metas,<br/>intervenções → aprovar → ativar]
-    PAIS --> PROG[Programações de cuidado]
-    ATIVO --> PRESC[Medicamento → prescrição<br/>→ doses previstas]
+    HOME --> ADMS["Admissão do residente<br/>etapas, contrato, documentos, avaliações"]
+    ADMS -->|"concluir"| ATIVO["Residente Ativo<br/>alocado em leito"]
+    ATIVO --> AVAL["Avaliação e grau de dependência"]
+    AVAL --> PAIS["PAIS: necessidades, metas,<br/>intervenções → aprovar → ativar"]
+    PAIS --> PROG["Programações de cuidado"]
+    ATIVO --> PRESC["Medicamento → prescrição<br/>→ doses previstas"]
 
-    HOME --> PLANT[Meu Plantão: iniciar plantão]
+    HOME --> PLANT["Meu Plantão: iniciar plantão"]
     PROG --> FILA
     PRESC --> FILA
-    PLANT --> FILA[Fila do turno:<br/>cuidados e doses da minha área]
-    FILA --> REG[Registrar cuidado / administrar dose<br/>individual ou em lote, ditado]
-    REG --> CORR{Erro?}
-    CORR -->|Enfermagem/RT| ESTORNO[Estorno com motivo]
-    CORR -->|não| CLIN
-    FILA --> CLIN[Sinais vitais e intercorrências]
-    CLIN --> ALERTAS[Central de Alertas<br/>assumir → atender → resolve na origem]
+    PLANT --> FILA["Fila do turno:<br/>cuidados e doses da minha área"]
+    FILA --> REG["Registrar cuidado / administrar dose<br/>individual ou em lote, ditado"]
+    REG --> CORR{"Erro?"}
+    CORR -->|"Enfermagem/RT"| ESTORNO["Estorno com motivo"]
+    CORR -->|"não"| CLIN
+    FILA --> CLIN["Sinais vitais e intercorrências"]
+    CLIN --> ALERTAS["Central de Alertas<br/>assumir → atender → resolve na origem"]
     ALERTAS --> FILA
-    FILA --> PASSA[Passar plantão:<br/>prévia do servidor + observações]
-    PASSA --> ENCERRA[Encerrar plantão]
-    ENCERRA --> RECEBE[Próximo turno recebe a passagem]
+    FILA --> PASSA["Passar plantão:<br/>prévia do servidor + observações"]
+    PASSA --> ENCERRA["Encerrar plantão"]
+    ENCERRA --> RECEBE["Próximo turno recebe a passagem"]
     RECEBE --> PLANT
 
-    ATIVO --> PRONT[Prontuário: resumo, hoje,<br/>linha do tempo]
-    ATIVO --> COMPL[Agenda, multidisciplinar, PIA,<br/>estoque, mensalidades]
-    ATIVO --> SAIDA[Saída: óbito, transferência,<br/>desligamento, retorno à família]
-    COMPL --> PORTALCFG[Liberar categorias<br/>do Portal da Família]
+    ATIVO --> PRONT["Prontuário: resumo, hoje,<br/>linha do tempo"]
+    ATIVO --> COMPL["Agenda, multidisciplinar, PIA,<br/>estoque, mensalidades"]
+    ATIVO --> SAIDA["Saída: óbito, transferência,<br/>desligamento, retorno à família"]
+    COMPL --> PORTALCFG["Liberar categorias<br/>do Portal da Família"]
     PORTALCFG --> PORTAL
 
-    HOME --> GEST[Relatórios e Auditoria]
+    HOME --> GEST["Relatórios e Auditoria"]
 ```
 
 ---
