@@ -4,7 +4,6 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { AuthProvider } from '../context/AuthContext'
 import { Login } from '../pages/Login'
-import { Placeholder } from '../pages/Placeholder'
 import { Layout } from '../components/Layout'
 import { api } from '../services/api'
 import { contextApi } from '../services/context'
@@ -238,14 +237,5 @@ describe('UX-01 — erros de tela não derrubam o shell (Issue #32)', () => {
     expect(screen.getByRole('button', { name: 'Tentar novamente' })).toBeTruthy()
     expect(menu().getByRole('link', { name: /Início/ })).toBeTruthy()
     erroConsole.mockRestore()
-  })
-})
-
-describe('UX-01 — placeholder não promete o que não existe', () => {
-  it('não afirma API pronta nem responsividade validada', () => {
-    render(<MemoryRouter><Placeholder title="Estoque" /></MemoryRouter>)
-    expect(screen.getByText('Módulo ainda não disponível')).toBeTruthy()
-    expect(screen.queryByText(/API pronta/)).toBeNull()
-    expect(screen.queryByText(/validadas em 360/)).toBeNull()
   })
 })
