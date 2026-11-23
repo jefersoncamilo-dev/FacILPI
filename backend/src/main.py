@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import false, select, func, update
 from sqlalchemy.exc import IntegrityError, OperationalError
 import pathlib
+from contextlib import asynccontextmanager
 
 from .infrastructure.database import get_db, Base, engine, DATABASE_URL
 from .infrastructure import models as m
@@ -108,7 +109,23 @@ allow_origins = resolve_cors_origins(os.environ, ENVIRONMENT)
 # Docs desligadas em pilot/production: não vazam dado, mas entregam o mapa das
 # rotas de auth, reset de senha e bootstrap. Só as ROTAS somem — `app.openapi()`
 # continua funcionando.
-app = FastAPI(title="FáciLPI API", version="1.0.0", **docs_urls_for(ENVIRONMENT))
+# J: Alembic é única fonte oficial; create_all desabilitado por padrão
+ALLOW_CREATE_ALL = os.getenv("ALLOW_CREATE_ALL", "false").lower() == "true"
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    # #314: substitui @app.on_event("startup") (depreciado) sem mudar ordem nem condições.
+    # #211: falha cedo se houver mais de 1 worker com rate limit em memoria.
+    assert_rate_limit_single_process()
+    if ALLOW_CREATE_ALL:
+        # Permitido apenas em testes descartáveis explicitamente configurados
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    yield
+
+
+app = FastAPI(title="FáciLPI API", version="1.0.0", lifespan=lifespan, **docs_urls_for(ENVIRONMENT))
 
 app.add_middleware(
     CORSMiddleware,
@@ -1577,16 +1594,3 @@ app.include_router(meu_plantao_router, prefix="/api")
 @app.get("/")
 async def root():
     return {"message": "FáciLPI API — veja /docs e /api/health"}
-
-# J: Alembic é única fonte oficial; create_all desabilitado por padrão
-ALLOW_CREATE_ALL = os.getenv("ALLOW_CREATE_ALL", "false").lower() == "true"
-
-@app.on_event("startup")
-async def on_startup():
-    # #211: falha cedo se houver mais de 1 worker com rate limit em memoria.
-    assert_rate_limit_single_process()
-    if not ALLOW_CREATE_ALL:
-        return
-    # Permitido apenas em testes descartáveis explicitamente configurados
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
