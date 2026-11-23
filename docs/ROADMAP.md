@@ -209,3 +209,10 @@ Exceção ao FEATURE_FREEZE pedida pelo responsável em 22/11/2026, só para as 
 - **Escopo (#302):** tela `/rotina` com o mapa da rotina do turno de todos os residentes. `GET /api/plantao/mapa` é projeção só de leitura sobre ocorrências/execuções de cuidado e doses/administrações; nenhuma tabela, migration ou permissão nova. Exige `plantao:ler` e `residentes:ler`; doses só com `administracoes:ler` (#131).
 - **Turnos:** manhã 7h–13h, tarde 13h–19h, noite 19h–7h, no fuso da ILPI. Faixas fixas até existir definição de turno no produto.
 - **Situação da célula:** execução vigente executada/administrada = concluído; recusada/omitida = com ressalva; sem registro e já passou = atrasado; sem registro = pendente; ocorrência/dose cancelada = não se aplica.
+## 24. Portal Família configurável por ILPI (em revisão)
+
+Exceção ao FEATURE_FREEZE pedida pelo responsável em 22/11/2026, só para as Issues #302 e #303. O responsável decidiu implementar e escolher depois o que liberar.
+
+- **Escopo (#303):** migration 037 (`portal_familia_config`, uma linha por ILPI). Portal desligado e todas as categorias bloqueadas por padrão; a equipe com `portal_familia:publicar` liga e escolhe em Configurações. Categorias: remédios, alimentação, atividades, peso, recados, agenda, mensalidades. Cada acesso do familiar é auditado.
+- **Mudança:** portais liberados em #271 ficam desligados após a 037 até a equipe ligar.
+- **Pendente (decisão):** resumo escrito pela equipe, pressão "na meta" (exige meta clínica, ver #286), água, sono/humor/dor, agendar visita e mensagens.

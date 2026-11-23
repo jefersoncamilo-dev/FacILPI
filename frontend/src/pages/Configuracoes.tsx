@@ -7,6 +7,7 @@ import { Button } from '../components/ui/button'
 import { Input, Label } from '../components/ui/input'
 import { Alert, Skeleton } from '../components/ui/feedback'
 import { EmptyState } from '../components/ui/states'
+import { PortalFamiliaConfig } from '../components/portal/PortalFamiliaConfig'
 
 const CAMPOS: { chave: keyof Dados; rotulo: string; tipo?: string }[] = [
   { chave: 'nome_fantasia', rotulo: 'Nome fantasia' },
@@ -85,6 +86,7 @@ export function Configuracoes() {
         ))}
         {editavel && <div className="md:col-span-2"><Button type="submit" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button></div>}
       </form>
+      {pode('portal_familia:publicar') && <PortalFamiliaConfig />}
     </div>
   )
 }

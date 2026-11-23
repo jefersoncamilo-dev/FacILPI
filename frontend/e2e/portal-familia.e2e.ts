@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { randomBytes } from 'node:crypto'
 import { entrar, seed } from './apoio'
 
-// #271: a equipe libera o portal, o familiar entra com a senha provisória,
+// #271/#303: a equipe libera o portal e o liga na ILPI, o familiar entra com a senha provisória,
 // troca no primeiro acesso e só vê o portal do próprio residente.
 test.use({ viewport: { width: 390, height: 844 } })
 const API = 'http://127.0.0.1:8000/api'
@@ -23,6 +23,11 @@ test('familiar entra no portal e não alcança o resto do sistema', async ({ bro
   await expect(equipe.getByTestId('senha-provisoria')).toBeVisible()
   const senha = (await equipe.getByTestId('senha-provisoria').textContent())!.trim()
   expect(senha.length).toBeGreaterThanOrEqual(12)
+  // #303: o portal começa desligado e tudo bloqueado; a equipe liga e libera os recados.
+  const config = await equipe.request.put(`${API}/portal/config`, {
+    headers: { 'X-CSRF-Token': csrf }, data: { ativo: true, categorias: ['recados'] },
+  })
+  expect(config.ok(), await config.text()).toBe(true)
   await equipe.close()
 
   const contexto = await browser.newContext({ viewport: { width: 390, height: 844 } })
