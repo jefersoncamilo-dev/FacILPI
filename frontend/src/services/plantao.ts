@@ -259,3 +259,34 @@ export async function getResidentesResumo(): Promise<ResidenteResumo[]> {
   const { data } = await api.get<ResidenteResumo[]>('/residentes/')
   return data
 }
+
+// ---- UX-NAV-5 (#302): mapa da rotina do turno (somente leitura) ----
+
+export type Turno = 'manha' | 'tarde' | 'noite'
+export type SituacaoMapa = 'concluido' | 'ressalva' | 'pendente' | 'atrasado' | 'nao_se_aplica'
+
+export interface MapaItem {
+  origem: 'cuidado' | 'medicacao'
+  registro_id: string
+  residente_id: string
+  descricao: string
+  previsto_em: string
+  situacao: SituacaoMapa
+}
+
+export interface MapaRotina {
+  dia: string
+  turno: Turno
+  inicio: string
+  fim: string
+  fuso: string
+  agora: string
+  ve_medicacao: boolean
+  residentes: { id: string; nome: string; ala: string | null; local: string | null }[]
+  itens: MapaItem[]
+}
+
+export async function getMapaRotina(params: { dia?: string; turno: Turno }): Promise<MapaRotina> {
+  const { data } = await api.get<MapaRotina>('/plantao/mapa', { params })
+  return data
+}
