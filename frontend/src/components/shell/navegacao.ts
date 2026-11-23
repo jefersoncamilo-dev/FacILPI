@@ -15,6 +15,7 @@ import {
   HeartPulse,
   History,
   LayoutDashboard,
+  LayoutGrid,
   NotebookPen,
   Package,
   Pill,
@@ -132,6 +133,7 @@ export const MODULOS: ModuloNav[] = [
       { id: 'sinais', secao: 'No turno', label: 'Sinais Vitais', icon: HeartPulse, status: 'ativo', to: '/sinais', permissao: 'sinais_vitais:ler', descricao: 'Aferições e histórico por residente.' },
       { id: 'intercorrencias', secao: 'No turno', label: 'Intercorrências', icon: TriangleAlert, status: 'ativo', to: '/intercorrencias', permissao: 'intercorrencias:ler', descricao: 'Ocorrências registradas e acompanhamento.' },
       // G8: mesma chave do backend (#125); todo template com plantao:ler também tem esta.
+      { id: 'rotina', secao: 'No turno', label: 'Rotina da ILPI', icon: LayoutGrid, status: 'ativo', to: '/rotina', permissao: 'plantao:ler', descricao: 'Rotina do turno de todos os residentes.' },
       { id: 'passagem', secao: 'No turno', label: 'Passagem de Plantão', icon: ArrowLeftRight, status: 'ativo', to: '/passagem', permissao: 'passagem_plantao:ler', descricao: 'Resumo do turno para quem assume.' },
       { id: 'agenda', secao: 'No turno', label: 'Agenda', icon: CalendarClock, status: 'ativo', to: '/agenda', permissao: 'agenda:ler', descricao: 'Consultas e compromissos dos residentes.' },
       { id: 'avaliacoes', secao: 'Planejamento', label: 'Avaliações', icon: ClipboardCheck, status: 'ativo', to: '/avaliacoes', permissao: 'avaliacoes:ler', descricao: 'Avaliações e grau de dependência.' },

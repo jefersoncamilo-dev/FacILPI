@@ -112,7 +112,7 @@ describe('UX-00C — hub do módulo', () => {
   it('hub antigo de Multidisciplinar abre Cuidado, sem áreas sem permissão', async () => {
     comPermissoes(TODAS)
     renderEm('/modulos/multidisciplinar')
-    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais', '/intercorrencias', '/passagem', '/avaliacoes', '/plano'])
+    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais', '/intercorrencias', '/rotina', '/passagem', '/avaliacoes', '/plano'])
     for (const area of ['Fisioterapia', 'Nutrição', 'Psicologia', 'Serviço Social', 'Enfermagem']) {
       expect(screen.queryByText(area)).toBeNull()
     }
@@ -144,7 +144,7 @@ describe('UX-00C — sidebar híbrida', () => {
     renderEm('/')
 
     await user.click(await menu().findByRole('link', { name: 'Cuidado' }))
-    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais', '/intercorrencias', '/passagem', '/avaliacoes', '/plano'])
+    expect(await cardsDoHub('Cuidado')).toEqual(['/sinais', '/intercorrencias', '/rotina', '/passagem', '/avaliacoes', '/plano'])
     expect(menu().getByRole('button', { name: 'Submenu de Cuidado' }).getAttribute('aria-expanded')).toBe('true')
     expect(menu().getByRole('link', { name: 'Cuidado' }).getAttribute('aria-current')).toBe('page')
   })

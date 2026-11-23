@@ -1810,3 +1810,32 @@ class TransicaoClinicaIlpi(BaseModel):
     em_carencia: bool
     perfil_clinico_atribuido: bool
     escritas_que_o_administrador_perde: list[str]
+
+
+# UX-NAV-5 (#302): mapa da rotina do turno (projeção de leitura).
+class MapaResidente(BaseModel):
+    id: str
+    nome: str
+    ala: Optional[str] = None
+    local: Optional[str] = None
+
+
+class MapaItem(BaseModel):
+    origem: Literal["cuidado", "medicacao"]
+    registro_id: str
+    residente_id: str
+    descricao: str
+    previsto_em: datetime
+    situacao: Literal["concluido", "ressalva", "pendente", "atrasado", "nao_se_aplica"]
+
+
+class MapaRotina(BaseModel):
+    dia: date
+    turno: Literal["manha", "tarde", "noite"]
+    inicio: datetime
+    fim: datetime
+    fuso: str
+    agora: datetime
+    ve_medicacao: bool
+    residentes: list[MapaResidente]
+    itens: list[MapaItem]
