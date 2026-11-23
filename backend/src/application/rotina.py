@@ -12,7 +12,7 @@ hardcoded (pendente/atrasada nunca persistem). Tarefa legada intocada.
 """
 
 from contextlib import asynccontextmanager
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -689,3 +689,86 @@ async def meu_plantao(a_partir_de: AwareDatetime | None = None, ate: AwareDateti
         item["local"] = leitos.get(item["residente_id"])
         item["grau"] = graus.get(item["residente_id"])
     return items
+
+
+# UX-NAV-5 (#302): mapa da rotina de todos os residentes num turno.
+# PROJEÇÃO só de leitura sobre as fontes que já existem (ocorrências/execuções de
+# cuidado e doses/administrações); nada é gravado, nada é duplicado.
+TURNOS = {"manha": (7, 13), "tarde": (13, 19), "noite": (19, 31)}  # noite: 19h até 7h do dia seguinte
+
+
+def _situacao_mapa(cancelada, resultado, positivo, previsto_em, now):
+    if cancelada:
+        return "nao_se_aplica"
+    if resultado is not None:
+        return "concluido" if resultado == positivo else "ressalva"
+    return "atrasado" if previsto_em < now else "pendente"
+
+
+@plantao_router.get("/mapa", response_model=s.MapaRotina)
+async def mapa_rotina(dia: date | None = None, turno: str = Query("manha", pattern="^(manha|tarde|noite)$"),
+    db: AsyncSession = Depends(get_db), context: SecurityContext = Depends(require_permission("plantao:ler")),
+    request: Request = None):
+    permissoes = set(await allowed_permission_keys(db, context))
+    if "residentes:ler" not in permissoes:
+        raise HTTPException(status_code=403, detail={"code": "PERMISSION_DENIED", "message": "Permissão não autorizada"})
+    if request is not None:
+        await garantir_horizonte(db, context, request)
+    instituicao = await db.get(m.Instituicao, context.ilpi_id)
+    try:
+        zona = ZoneInfo((instituicao.fuso_horario if instituicao else None) or "America/Sao_Paulo")
+    except Exception:
+        zona = ZoneInfo("America/Sao_Paulo")
+    now = _now()
+    dia = dia or now.astimezone(zona).date()
+    h_ini, h_fim = TURNOS[turno]
+    meia_noite = datetime.combine(dia, time(0), tzinfo=zona)
+    inicio = (meia_noite + timedelta(hours=h_ini)).astimezone(timezone.utc)
+    fim = (meia_noite + timedelta(hours=h_fim)).astimezone(timezone.utc)
+
+    residentes = (await db.execute(select(m.Residente.id, m.Residente.nome).where(
+        m.Residente.instituicao_id == context.ilpi_id, m.Residente.situacao.not_in(SITUACOES_SAIDA),
+    ).order_by(m.Residente.nome, m.Residente.id))).all()
+    ids = [r.id for r in residentes]
+    leitos = {row.residente_atual_id: row for row in (await db.execute(
+        select(m.QuartoLeito.residente_atual_id, m.QuartoLeito.unidade, m.QuartoLeito.quarto, m.QuartoLeito.leito).where(
+            m.QuartoLeito.instituicao_id == context.ilpi_id, m.QuartoLeito.residente_atual_id.in_(ids)))).all()} if ids else {}
+
+    itens: list[dict] = []
+    if ids:
+        rows = (await db.execute(select(m.OcorrenciaCuidado, m.ExecucaoCuidado.resultado, m.PaisIntervencao.descricao).outerjoin(
+            m.ExecucaoCuidado, (m.ExecucaoCuidado.ocorrencia_id == m.OcorrenciaCuidado.id)
+            & (m.ExecucaoCuidado.ilpi_id == m.OcorrenciaCuidado.ilpi_id) & m.ExecucaoCuidado.estornado_em.is_(None),
+        ).outerjoin(m.PaisIntervencao, (m.PaisIntervencao.id == m.OcorrenciaCuidado.intervencao_id)
+                    & (m.PaisIntervencao.ilpi_id == m.OcorrenciaCuidado.ilpi_id)).where(
+            m.OcorrenciaCuidado.ilpi_id == context.ilpi_id, m.OcorrenciaCuidado.residente_id.in_(ids),
+            m.OcorrenciaCuidado.previsto_em >= inicio, m.OcorrenciaCuidado.previsto_em < fim,
+        ))).all()
+        for oc, resultado, descricao in rows:
+            itens.append({"origem": "cuidado", "registro_id": oc.id, "residente_id": oc.residente_id,
+                          "descricao": descricao or "Cuidado programado", "previsto_em": _utc(oc.previsto_em),
+                          "situacao": _situacao_mapa(oc.situacao == "cancelada", resultado, "executada", _utc(oc.previsto_em), now)})
+        # #131: doses só para quem lê medicação.
+        if "administracoes:ler" in permissoes:
+            rows = (await db.execute(select(m.DosePrevista, m.Administracao.resultado).outerjoin(
+                m.Administracao, (m.Administracao.dose_prevista_id == m.DosePrevista.id)
+                & (m.Administracao.ilpi_id == m.DosePrevista.ilpi_id) & m.Administracao.estornado_em.is_(None),
+            ).where(
+                m.DosePrevista.ilpi_id == context.ilpi_id, m.DosePrevista.residente_id.in_(ids),
+                m.DosePrevista.previsto_em >= inicio, m.DosePrevista.previsto_em < fim,
+            ))).all()
+            for dose, resultado in rows:
+                itens.append({"origem": "medicacao", "registro_id": dose.id, "residente_id": dose.residente_id,
+                              "descricao": "Medicação", "previsto_em": _utc(dose.previsto_em),
+                              "situacao": _situacao_mapa(dose.situacao == "cancelada", resultado, "administrada", _utc(dose.previsto_em), now)})
+    itens.sort(key=lambda i: (i["previsto_em"], i["registro_id"]))
+    return {
+        "dia": dia, "turno": turno, "inicio": inicio, "fim": fim, "fuso": str(zona.key), "agora": now,
+        "ve_medicacao": "administracoes:ler" in permissoes,
+        "residentes": [{
+            "id": r.id, "nome": r.nome,
+            "ala": leitos[r.id].unidade if r.id in leitos else None,
+            "local": local_do_leito(leitos[r.id].unidade, leitos[r.id].quarto, leitos[r.id].leito) if r.id in leitos else None,
+        } for r in residentes],
+        "itens": itens,
+    }

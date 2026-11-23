@@ -201,3 +201,11 @@ Exceção ao FEATURE_FREEZE dada pelo responsável em 09/11/2026, só para a Iss
 - **Escopo:** aba Monitoramento na ficha do residente, com um cartão por medida que já existe em `sinais_vitais` e a evolução da medida escolhida, período de 7 a 90 dias. Só frontend: nenhuma rota, migration ou permissão nova; a aba exige `sinais_vitais:ler`.
 - **Mantido do #286:** sem faixa normal, meta ou julgamento de valor; isso depende de decisão clínica registrada.
 - **Fora:** ingestão hídrica e adesão à medicação (não são campos de `sinais_vitais`) e filtro de data no servidor.
+
+## 23. UX-NAV-5 — Rotina da ILPI (em revisão)
+
+Exceção ao FEATURE_FREEZE pedida pelo responsável em 22/11/2026, só para as Issues #302 e #303.
+
+- **Escopo (#302):** tela `/rotina` com o mapa da rotina do turno de todos os residentes. `GET /api/plantao/mapa` é projeção só de leitura sobre ocorrências/execuções de cuidado e doses/administrações; nenhuma tabela, migration ou permissão nova. Exige `plantao:ler` e `residentes:ler`; doses só com `administracoes:ler` (#131).
+- **Turnos:** manhã 7h–13h, tarde 13h–19h, noite 19h–7h, no fuso da ILPI. Faixas fixas até existir definição de turno no produto.
+- **Situação da célula:** execução vigente executada/administrada = concluído; recusada/omitida = com ressalva; sem registro e já passou = atrasado; sem registro = pendente; ocorrência/dose cancelada = não se aplica.

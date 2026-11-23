@@ -40,7 +40,7 @@ describe('UX-00A — modelo de navegação', () => {
       '/', '/admissoes', '/agenda', '/alertas', '/auditoria', '/avaliacoes', '/configuracoes', '/cuidados', '/documentos', '/equipe', '/escala', '/estoque', '/financeiro',
       '/intercorrencias', '/medicacao',
       '/multidisciplinar/enfermagem', '/multidisciplinar/fisioterapia', '/multidisciplinar/nutricao', '/multidisciplinar/psicologia', '/multidisciplinar/servico_social',
-      '/passagem', '/pia', '/plano', '/plantao', '/quartos', '/relatorios', '/residentes', '/sinais',
+      '/passagem', '/pia', '/plano', '/plantao', '/quartos', '/relatorios', '/residentes', '/rotina', '/sinais',
     ])
   })
 

@@ -19,6 +19,7 @@ import { AdmissaoDetalhe } from './pages/AdmissaoDetalhe'
 import { QuartosLeitos } from './pages/QuartosLeitos'
 import { Avaliacoes } from './pages/Avaliacoes'
 import { PassagemPlantao } from './pages/PassagemPlantao'
+import { RotinaIlpi } from './pages/RotinaIlpi'
 import { Pais } from './pages/Pais'
 import { PaisDetalhe } from './pages/PaisDetalhe'
 import { Cuidados } from './pages/Cuidados'
@@ -74,6 +75,7 @@ export default function App() {
           <Route path="/intercorrencias" element={<Protected><Intercorrencias /></Protected>} />
           <Route path="/documentos" element={<Protected><Documentos /></Protected>} />
           <Route path="/passagem" element={<Protected><PassagemPlantao /></Protected>} />
+          <Route path="/rotina" element={<Protected><RotinaIlpi /></Protected>} />
           <Route path="/quartos" element={<Protected><QuartosLeitos /></Protected>} />
           <Route path="/equipe" element={<Protected><Equipe /></Protected>} />
           <Route path="/alertas" element={<Protected><Alertas /></Protected>} />
