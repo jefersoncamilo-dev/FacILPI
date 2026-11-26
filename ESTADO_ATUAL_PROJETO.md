@@ -240,6 +240,8 @@ erDiagram
 
 ### 2.4 Incompleto, legado ou sem tela
 
+> Seção atualizada com a `main` em `b52f455` (Merge do PR #317). As demais seções continuam retratando `b6a0c57`.
+
 O código tem **poucos marcadores** `TODO/FIXME` (nenhum encontrado em `backend/src` e `frontend/src`). As lacunas aparecem como funcionalidades sem tela, itens declarados como futuros ou código legado:
 
 | Item | Evidência no código | Situação | Issue |
@@ -247,15 +249,19 @@ O código tem **poucos marcadores** `TODO/FIXME` (nenhum encontrado em `backend/
 | **Estoque do Residente** | `navegacao.ts:121` — `status: 'futuro'`, `permissaoPlanejada: 'estoque_residente:ler'` | Declarado no menu como futuro; sem rota, tela ou API | [#309](https://github.com/jefersoncamilo-dev/FacILPI/issues/309) |
 | **Estorno da saída do residente** | `POST /residentes/{id}/saida/estornar` existe; nenhum serviço do frontend o chama | Só API | [#308](https://github.com/jefersoncamilo-dev/FacILPI/issues/308) |
 | **Matriz de permissões** | `/matriz/perfis`, `/atribuicoes`, `/revogacoes` existem; frontend não consome | Só API (a tela de Equipe usa `/perfis` e `/usuarios`) | [#310](https://github.com/jefersoncamilo-dev/FacILPI/issues/310) |
-| **Tarefas** (`/tarefas`, tabela `tarefas`) | CRUD genérico `fail_closed` em `main.py:916`; sem tela | Legado da fase inicial; substituído pela rotina assistencial | [#311](https://github.com/jefersoncamilo-dev/FacILPI/issues/311) |
-| **Alertas CRUD** (`/alertas`, tabela `alertas`) | CRUD genérico `fail_closed` em `main.py:1517`; frontend usa `/central-alertas` | Legado; a Central de Alertas é a projeção vigente | [#311](https://github.com/jefersoncamilo-dev/FacILPI/issues/311) |
 | **`/auth/register`** | Responde 410 | Cadastro aberto desativado de propósito | — (intencional) |
-| **`pages/Placeholder.tsx`** | Componente definido; nenhuma rota de `App.tsx` o usa | Sem uso em rota; só `__tests__/UX01.test.tsx` o importa | [#312](https://github.com/jefersoncamilo-dev/FacILPI/issues/312) |
 | **Portal da Família — bloco "Em breve"** | `PortalFamilia.tsx:87` — aparece quando nenhuma categoria foi liberada | Comportamento esperado, não lacuna; outras categorias (resumo escrito, água, sono/humor/dor, visita, mensagens) não existem no código | categorias pendentes em [#303](https://github.com/jefersoncamilo-dev/FacILPI/issues/303) |
-| **Emergência** | `Emergencia.tsx:21` — contatos/encaminhamento "entram aqui quando existirem" | Parcial: só o que já existe é exibido | — (sem escopo definido) |
-| **Rate limit em memória** | `assert_rate_limit_single_process` | Funcional, mas limita o backend a 1 worker | [#313](https://github.com/jefersoncamilo-dev/FacILPI/issues/313) |
-| **`@app.on_event("startup")`** | `main.py:1584` | API depreciada no FastAPI (funciona; candidata a `lifespan`) | [#314](https://github.com/jefersoncamilo-dev/FacILPI/issues/314) |
+| **Emergência** | `components/shell/Emergencia.tsx:21` — contatos/encaminhamento "entram aqui quando existirem" | Parcial: só o que já existe é exibido | — (sem escopo definido) |
+| **Rate limit em memória** | `assert_rate_limit_single_process`, chamado no `lifespan` de `main.py` | Funcional, mas limita o backend a 1 worker | [#313](https://github.com/jefersoncamilo-dev/FacILPI/issues/313) |
 | **Integrações externas** | Nenhum cliente HTTP de terceiros no backend | Não implementado (sem e-mail, SMS, pagamento, IA) | — (sem pendência concreta) |
+
+**Resolvidos desde a primeira versão deste relatório** (Issues fechadas em 23/11/2026):
+
+| Item | O que mudou | Issue / PR |
+|---|---|---|
+| **Rotas legadas `/tarefas` e `/alertas`** (CRUD genérico `fail_closed`) | Rotas e schemas removidos; agora respondem 404. As tabelas `tarefas` e `alertas` continuam no banco e nas migrations | [#311](https://github.com/jefersoncamilo-dev/FacILPI/issues/311) / PR #317 |
+| **`pages/Placeholder.tsx`** | Componente sem rota removido, com o teste que o importava em `UX01.test.tsx` | [#312](https://github.com/jefersoncamilo-dev/FacILPI/issues/312) / PR #315 |
+| **`@app.on_event("startup")`** | Trocado por `lifespan`, com o mesmo guard de 1 worker e o `create_all` só com `ALLOW_CREATE_ALL` | [#314](https://github.com/jefersoncamilo-dev/FacILPI/issues/314) / PR #316 |
 
 ---
 
