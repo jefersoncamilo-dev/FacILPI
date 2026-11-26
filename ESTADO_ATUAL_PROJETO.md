@@ -25,12 +25,12 @@ FacILPI/
 │   │   ├── domain/          # validators.py (validações de domínio puras)
 │   │   ├── infrastructure/  # models.py (ORM), database.py (engine), db_guard.py (proteção do banco oficial)
 │   │   └── scripts/         # bootstrap.py (criação do primeiro superusuário)
-│   ├── tests/               # ~100 arquivos pytest (852 funções de teste) + seeds E2E e guards
+│   ├── tests/               # ~100 arquivos pytest (854 funções de teste) + seeds E2E e guards
 │   └── requirements*.txt, constraints.txt, alembic.ini
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx          # Roteamento (React Router 7)
-│   │   ├── pages/           # 32 telas
+│   │   ├── pages/           # 31 telas, todas roteadas
 │   │   ├── components/      # shell, plantao, prontuario, equipe, documentos, platform, ui (shadcn-like) ...
 │   │   ├── context/         # AuthContext, PermissoesContext
 │   │   ├── hooks/           # useCentralAlertas, useEquipe, useFiltrosUrl, useGrausAtivos ...
