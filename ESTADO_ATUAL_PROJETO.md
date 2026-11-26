@@ -157,7 +157,7 @@ FacILPI/
 | Dashboard | `/dashboard` | `GET /resumo`, `GET /intercorrencias-semanais` | `dashboard.py` |
 | Complementares | `/agenda`, `/multidisciplinar/{area}`, `/pia`, `/estoque`, `/financeiro/mensalidades` | Agenda, atendimentos multidisciplinares, PIA versionado, estoque com movimentos, mensalidades | `complementares.py` |
 | Instituição | `/configuracoes`, `/auditoria`, `/relatorios` | Configuração da ILPI; consulta de auditoria; relatório-resumo | `configuracoes.py`, `auditoria.py`, `relatorios.py` |
-| Legado | `/tarefas`, `/alertas` | CRUD genérico `fail_closed` (ver §2.4) | `main.py` |
+| Legado (removido) | `/tarefas`, `/alertas` | Rotas removidas em #311 e agora respondem 404; as tabelas continuam no banco (ver §2.4) | — |
 
 **Regras transversais implementadas**
 
@@ -411,14 +411,16 @@ flowchart TD
 
 ## 4. Números de referência
 
+> Recontado na `main` em `8dd062c` (Merge do PR #318), com o mesmo método da primeira versão.
+
 | Indicador | Valor |
 |---|---|
 | Arquivos versionados | 469 |
 | Linhas Python em `backend/src` + migrations | ~23,8 mil |
 | Migrations Alembic | 37 (001 → 037) |
 | Tabelas ORM | 56 |
-| Routers registrados em `/api` | ~55 |
-| Telas (`pages/`) | 32 (31 roteadas + `Placeholder` sem uso) |
-| Funções de teste backend (pytest) | 852 |
-| Casos de teste frontend (Vitest + Playwright) | ~670 |
+| Routers registrados em `/api` | ~53 (2 rotas legadas removidas em #311) |
+| Telas (`pages/`) | 31, todas roteadas (`Placeholder` removido em #312) |
+| Funções de teste backend (pytest) | 854 |
+| Casos de teste frontend (Vitest + Playwright) | ~660 |
 | Jobs de CI | 4 (frontend, backend-sqlite, backend-postgres, e2e) |
