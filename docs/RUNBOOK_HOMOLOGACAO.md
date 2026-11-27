@@ -12,14 +12,20 @@ tokens ficam nas CLIs autenticadas (`neonctl`, `render`) e no painel do Render.
 | Frontend (`facilpi-web`) | Render, static site | `main`, deploy automático |
 | Banco | Neon, projeto `facilpi-pilot`, branch `production` | migrations manuais |
 
-**Regra:** só a `main` publica. Merge na `fase-3b/funcionarios-usuarios-vinculos`
-não vai para o ar; promover para a `main` (PR com CI verde + autorização) **é** a
+**Regra:** só a `main` publica. Desde 23/11/2026 os PRs vão direto para a `main`
+(a antiga linha integrada `fase-3b/funcionarios-usuarios-vinculos` foi removida em
+27/11/2026), então o merge de um PR que mude `backend/` ou `frontend/` **é** a
 decisão de publicar. Até 16/10/2026 os dois serviços publicavam a `fase-3b`, e
 uma migration podia chegar ao ar depois do código que dependia dela.
 
+> Os passos abaixo nasceram para o PR de promoção `fase-3b` → `main` (critério
+> D4, `docs/PROJECT_STATUS.md`). Com o merge direto na `main`, ainda não foi
+> decidido se valem para todo PR ou só para o que fecha uma versão. O passo 3
+> vale para qualquer PR com migration, porque o merge já publica o código.
+
 ## Publicar uma versão
 
-1. **PR de promoção** `fase-3b` → `main`, com CI verde. Não fazer o merge ainda.
+1. **PR para a `main`**, com CI verde. Não fazer o merge ainda.
 2. **Backup:** criar a branch do Neon a partir da `production`, sem compute:
    ```bash
    neonctl branches create --project-id <projeto> --name backup-pre-<versao> --parent production --no-compute
@@ -29,7 +35,7 @@ uma migration podia chegar ao ar depois do código que dependia dela.
    `production` com a connection string vinda da `neonctl`, sem exibi-la. Depois,
    `alembic current` deve mostrar o head novo. Sem migration nova, só conferir que
    `current` é o head do repositório.
-4. **Merge** do PR de promoção (autorização explícita) e **tag** anotada na `main`.
+4. **Merge** do PR (autorização explícita) e **tag** anotada na `main`.
 5. **Conferir o deploy:** `render deploys list <serviço>` deve mostrar o commit do
    merge como `live`. Cada serviço tem diretório raiz (`backend/` na API,
    `frontend/` no site) e só publica quando algo dentro dele mudou; versão só de
