@@ -4,7 +4,7 @@
 
 ## Base integrada de referência
 
-A linha integrada utilizada pelo projeto é `fase-3b/funcionarios-usuarios-vinculos`, com a cadeia Alembic chegando até a 037 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`; 035 dos complementares; 036 do portal da família, #271; 037 da configuração do portal por ILPI, #303). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
+A linha integrada do projeto é a `main` (antes era `fase-3b/funcionarios-usuarios-vinculos`, removida em 27/11/2026), com a cadeia Alembic chegando até a 037 (021–027 vieram da Central de Alertas e da Camada Operacional, Fases 1–5; 028 do estado "expirado sem registro", #132; 029 da autoria por usuário; 030 da saída do residente; 031 dos grants de medicação; 032 do percentual de refeição; 033 do estorno de dose; 034 da transição do `ilpi_admin`; 035 dos complementares; 036 do portal da família, #271; 037 da configuração do portal por ILPI, #303). A 029 foi para a `main` na v0.6.0 (PR #160); a aplicação na homologação está pendente de confirmação humana (`docs/RUNBOOK_HOMOLOGACAO.md`). O estado pode avançar; consulte GitHub antes de iniciar trabalho.
 
 ## Capacidades integradas confirmadas na linha de referência
 
@@ -78,12 +78,14 @@ Também integrado: ditado por voz no aparelho (UX-01D, #144). Correção de regi
 - **`ilpi_admin`:** escritas clínicas retiradas com transição de 30 dias (D3, PR #228, migration 034).
 - **Borda (SEC-02):** o IP real do cliente já chega ao backend atrás do Caddy (`FORWARDED_ALLOW_IPS` restrito à rede `edge_api`, ENV-1/HIGH-1), e o uvicorn roda com 1 worker — o rate limit de login em memória vale para o processo inteiro; com mais workers ele precisaria de armazenamento compartilhado. A CSP está no `docker/Caddyfile`, medida contra o build de produção. Desde o #207 o access token vai em cookie HttpOnly `SameSite=Strict` (mesma origem: Caddy na VPS, rewrite de `/api/*` no Render), com CSRF double-submit (`csrf_token` + `X-CSRF-Token`) e logout que revoga a família e apaga os cookies; o `localStorage` guarda só as claims, sem assinatura. O Bearer continua aceito na transição.
 - **Dependências:** vulnerabilidades restantes do `npm audit` exigem Tailwind 4 (React Router 7 integrado no PR #218).
-- **Branches:** a `main` foi promovida a partir da linha integrada pelo PR #160 (20/10/2026, v0.6.0), com conteúdo igual ao da `fase-3b`. A `fase-3b` continua sendo a linha integrada; a `main` só avança por promoção.
+- **Branches:** até novembro de 2026 a `fase-3b` era a linha integrada e a `main` avançava por PRs de promoção (#155, #160, #256, #261, #274, #280). Desde 23/11/2026 (PR #307) os PRs vão direto para a `main`; a `fase-3b` foi removida em 27/11/2026, sem nenhum commit fora da `main`. Como a homologação publica a `main` automaticamente, todo merge na `main` vai para o ar (`docs/RUNBOOK_HOMOLOGACAO.md`).
 
 - **Alerta de quem saiu:** o estado aberto de um alerta de residente que saiu fecha como "resolvido pela fonte"; o encerramento próprio `saida` é o #173 (exige migration 031).
 
 ### Critério de promoção para a `main` (decisão D4, 20/10/2026)
-Uma promoção da `fase-3b` para a `main` exige:
+> Registrado como foi decidido, quando a `main` só recebia promoções da `fase-3b`. Com a integração direta na `main`, a forma de aplicar este critério a cada merge ainda não foi decidida.
+
+Uma promoção da `fase-3b` para a `main` exigia:
 1. os três jobs de CI verdes (Frontend, Backend SQLite, Backend PostgreSQL);
 2. homologação com contas sintéticas;
 3. migrations aplicadas em ordem no ambiente de homologação, por decisão humana;

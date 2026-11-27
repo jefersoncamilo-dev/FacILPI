@@ -1,17 +1,15 @@
 name: CI
 
-# O fluxo do projeto integra em fase-3b/funcionarios-usuarios-vinculos, nao em main:
-# um gatilho so em main nao rodaria em nenhum PR do fluxo atual. O filtro de
-# pull_request e pela branch de DESTINO, que e o comportamento desejado aqui.
+# Desde 23/11/2026 os PRs integram direto em main; a antiga linha integrada
+# fase-3b/funcionarios-usuarios-vinculos foi removida em 27/11/2026, sem commits
+# fora de main. O filtro de pull_request e pela branch de DESTINO.
 on:
   pull_request:
     branches:
       - main
-      - fase-3b/funcionarios-usuarios-vinculos
   push:
     branches:
       - main
-      - fase-3b/funcionarios-usuarios-vinculos
 
 permissions:
   contents: read
